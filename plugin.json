@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "dwitbuk",
+  "version": "1.0.0",
+  "engines": {
+    "python": ">=3.9"
+  },
+  "roles": {
+    "eyes": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "{host}"
+    ]
+  },
+  "description": "The reviewer of the LLM-development era.",
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/codex.json"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "dwitbuk",
+  "version": "1.0.0",
+  "engines": {
+    "python": ">=3.11"
+  },
+  "roles": {
+    "eyes": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "{host}"
+    ]
+  },
+  "description": "The reviewer of the LLM-development era.",
+  "author": {
+    "name": "guineeeeeeeeeeeeeeeeeeeeeeeerm"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "dwitbuk",
+    "shortDescription": "The reviewer of the LLM-development era.",
+    "longDescription": "The reviewer of the LLM-development era. Nobody reads pull requests; what a person can still read is the record of the procedure. dwitbuk reads runs, gates, delegations, non-claims and the tree, and writes findings a human can dispose of. It never fixes; it finds — and it says when an earlier finding was never disposed of.",
+    "developerName": "guineeeeeeeeeeeeeeeeeeeeeeeerm",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Use dwitbuk on this project."
+  }
+}

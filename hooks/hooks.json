@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_eyes.py\"",
+            "timeout": 300,
+            "statusMessage": "dwitbuk \u2014 eyes on what this session changed"
+          }
+        ]
+      }
+    ]
+  }
+}
