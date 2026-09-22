@@ -117,7 +117,7 @@ def codex(packet, schema_doc, args):
     schema = Path(args.response).with_suffix(".schema.json")
     schema.write_text(json.dumps(schema_doc), encoding="utf-8")
     last = Path(args.response).with_suffix(".last.txt")   # codex's raw last message; the response file is written once, whole, by main
-    cmd = [shutil.which("codex") or "codex", "exec", "--json", "-C", packet["target"], "-s", os.environ.get("AGENT_CODEX_SANDBOX", "read-only"), "--skip-git-repo-check", "--output-schema", str(schema), "-o", str(last)]
+    cmd = [shutil.which("codex") or "codex", "exec", "--json", "-C", packet["target"], "-s", os.environ.get("AGENT_CODEX_SANDBOX", "read-only"), "--skip-git-repo-check", "--output-schema", str(schema), "-o", str(last)]   # no turn budget on Codex: `codex exec` has no turn limit to give (unknown -c keys are accepted silently, so none is pretended); the session ends on its own
     if args.model:
         cmd += ["-m", args.model]
     if args.effort:

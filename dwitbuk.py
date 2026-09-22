@@ -207,14 +207,16 @@ def cmd_review(args):
     #    a disposition is carried as `undisposed` so it cannot vanish silently. Older reviews are history — and only
     #    objections are debt: an observation that stops recurring simply stops; review-debt is recomputed each review.
     if prior:
-        last = {(f["kind"], f["where"]): f for f in prior[-1].get("findings", [])}
+        # a finding's identity is kind + where + its text: several stage-findings share one `where` (one quibble round), and
+        # with (kind, where) alone only one of them inherited its disposition — the others came back as new debt
+        last = {identity(f): f for f in prior[-1].get("findings", [])}
         for f in findings:
-            old = last.pop((f["kind"], f["where"]), None)
+            old = last.pop(identity(f), None)
             if old:
                 f["first-seen"] = old.get("first-seen", prior[-1]["id"])
                 if old.get("disposition"):
                     f["disposition"] = old["disposition"]
-        for (kind, where), old in last.items():
+        for (kind, where, _), old in last.items():
             if layer(old) != "objection" or kind == "review-debt":
                 continue
             if not old.get("disposition") and kind != "undisposed":
@@ -248,6 +250,13 @@ def lock_commit(target):
     """The commit that first added hunsu.lock.json — where a project's record begins; None without git or a lock."""
     out = git(target, "log", "--diff-filter=A", "--format=%h", "--", "hunsu.lock.json") or ""
     return out.strip().splitlines()[-1] if out.strip() else None
+
+
+def identity(f):
+    """What makes a finding the same finding across reviews: its kind, where, and its text with the numbers that change
+    between reviews (counts, `[xN]`, "since <rev>") struck — a reworded finding is a different one."""
+    text = re.sub(r"\[x\d+\]|\b\d+ file\(s\)|since [0-9a-f]{7,}|\(first seen [^)]*\)", "", f.get("text", "")).strip()
+    return (f.get("kind"), f.get("where"), text)
 
 
 def cmd_dispose(args):
@@ -386,8 +395,8 @@ def cmd_eyes(args):
             kept.append({"kind": "contradiction", "where": f["where"], "text": "%s: %s — record: \u201c%s\u201d — tree: \u201c%s\u201d" % (f["kind"], f["why"], f["record_quote"], f["tree_quote"]),
                          "by": args.by})
     r = prior[-1]
-    have = {(f["kind"], f["where"]) for f in r["findings"]}
-    kept = [f for f in kept if (f["kind"], f["where"]) not in have]
+    have = {identity(f) for f in r["findings"]}
+    kept = [f for f in kept if identity(f) not in have]
     r["findings"] += kept
     save(os.path.join(target, REVIEWS, r["id"] + ".json"), r)
     for f in kept:
