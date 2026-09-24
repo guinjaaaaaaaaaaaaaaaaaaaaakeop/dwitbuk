@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py\"",
+            "timeout": 10,
+            "statusMessage": "dwitbuk — anything left undisposed?"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",
@@ -8,7 +21,7 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop_eyes.py\"",
             "timeout": 300,
-            "statusMessage": "dwitbuk \u2014 eyes on what this session changed"
+            "statusMessage": "dwitbuk — eyes on what this session changed"
           }
         ]
       }

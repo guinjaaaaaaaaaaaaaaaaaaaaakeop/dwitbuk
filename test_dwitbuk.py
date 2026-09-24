@@ -322,6 +322,33 @@ def test_runs_are_read_from_one_file_per_task_and_session_tasks_define_themselve
         assert kinds(pj.latest()) == {"no-reporters": 1}
 
 
+def test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else():
+    """Reviews are placed by the runner now (chongdae's `reviewer` role at a run's end), so nobody asks for them; what still
+    needs a person is the disposition. The SessionStart hook says how many objections of the latest review are undisposed —
+    a fact with the review's id, silent when there is nothing, silent in a worker session, never blocking."""
+    hook = os.path.join(HERE, "hooks", "session_start.py")
+    def run_hook(cwd, **env):
+        done = subprocess.run([sys.executable, hook], input=json.dumps({"cwd": cwd}), capture_output=True, text=True, encoding="utf-8", env=dict(os.environ, **env))
+        return done.returncode, done.stdout
+    with Project() as pj:
+        assert run_hook(pj.dir) == (0, ""), "no reviews: silent"
+        pj.reporter([{"kind": "outside-run", "where": "b.py", "files": ["b.py"], "text": "changed"},
+                     {"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"},
+                     {"kind": "delegated", "where": "run-1/T", "text": "gate passed by delegation: ok"}])
+        assert run("review", "--target", pj.dir)[0] == 0
+        code, out = run_hook(pj.dir)
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert code == 0 and ctx.startswith("dwitbuk: 2 undisposed objection(s) in review-") and "left-open 1, outside-run 1" in ctx and "follow" in ctx, ctx   # the observation is not counted
+        assert run_hook(pj.dir, AGENT_WORKER="1") == (0, ""), "a worker session: silent"
+        r = dwitbuk.reviews(pj.dir)[-1]
+        objections = [i for i, f in enumerate(r["findings"]) if dwitbuk.layer(f) == "objection"]
+        assert run("dispose", "%s/%d" % (r["id"], objections[0]), "--as", "accepted", "--why", "yes", "--by", "kim", "--target", pj.dir)[0] == 0
+        code, out = run_hook(pj.dir)
+        assert "1 undisposed objection(s)" in json.loads(out)["hookSpecificOutput"]["additionalContext"], out
+        assert run("dispose", "%s/%d" % (r["id"], objections[1]), "--as", "dismissed", "--why", "no", "--by", "kim", "--target", pj.dir)[0] == 0
+        assert run_hook(pj.dir) == (0, ""), "everything disposed: silent"
+
+
 def test_stop_hook_steps_aside_inside_a_worker_session_and_without_the_switch():
     with Project() as pj:
         write(os.path.join(pj.dir, "a.py"), "x = 2\n")   # dirty
