@@ -1,6 +1,7 @@
 """Stop hook — the eyes placed by the environment: when a session tries to end, read what it changed.
 
-On only when the lock says so (hunsu.json `settings: {"dwitbuk": {"stop-eyes": true}}`, carried into hunsu.lock.json) — a model
+On only when the project says so (hunsu.json `settings: {"dwitbuk": {"stop-eyes": true}}`, read where it is written; a lock
+that carries it, from before, still counts) — a model
 call per stop is the team's decision, not the plugin's. Then: nothing dirty -> exit 0; else pack the dirty files as a diff, the plan
 (or nothing) as the contract, lens `fresh`, run the eyes worker, and if it finds anything, refuse the stop (exit 2) with the findings
 on stderr — the session reads them and answers before it ends. Findings also land in the latest review when there is one.
@@ -27,8 +28,10 @@ def main():
     if payload.get("stop_hook_active") or os.environ.get("AGENT_WORKER"):
         return 0   # the second stop of a turn, or a worker session (the eyes, a judge, a builder): the eyes speak once, and never inside themselves
     cwd = payload.get("cwd") or os.getcwd()
-    lock = dwitbuk.load(os.path.join(cwd, "hunsu.lock.json"))
-    if not ((lock.get("settings") or {}).get("dwitbuk") or {}).get("stop-eyes"):
+    # a product's settings are read from the manifest, where a person writes them: a switch works as soon as it is written,
+    # also while a working source is tried with `hunsu dev` (when `hunsu lock` rightly refuses)
+    on = lambda doc: ((doc.get("settings") or {}).get("dwitbuk") or {}).get("stop-eyes")
+    if not (on(dwitbuk.load(os.path.join(cwd, "hunsu.json"))) or on(dwitbuk.load(os.path.join(cwd, "hunsu.lock.json")))):
         return 0
     dirty = [l[3:].strip().replace("\\", "/") for l in (dwitbuk.git(cwd, "status", "--porcelain", "--untracked-files=all", "--", ".") or "").splitlines() if len(l) > 3]
     prefix = (dwitbuk.git(cwd, "rev-parse", "--show-prefix") or "").strip().replace("\\", "/")

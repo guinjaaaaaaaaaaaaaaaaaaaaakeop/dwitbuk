@@ -329,8 +329,8 @@ def test_stop_hook_steps_aside_inside_a_worker_session_and_without_the_switch():
         def run_hook(payload, **env):
             done = subprocess.run([sys.executable, hook], input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8", env=dict(os.environ, **env))
             return done.returncode, done.stdout + done.stderr
-        assert run_hook({"cwd": pj.dir})[0] == 0, "no switch in the lock: nothing runs"
-        write(os.path.join(pj.dir, "hunsu.lock.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+        assert run_hook({"cwd": pj.dir})[0] == 0, "no switch in the project: nothing runs"
+        write(os.path.join(pj.dir, "hunsu.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})   # read where a person writes it
         assert run_hook({"cwd": pj.dir}, AGENT_WORKER="1")[0] == 0, "inside a worker session: nothing runs"
         assert run_hook({"cwd": pj.dir, "stop_hook_active": True})[0] == 0, "the second stop of a turn: nothing runs"
         assert not os.path.exists(os.path.join(pj.dir, ".dwitbuk")), "and no scratch was written"
