@@ -167,7 +167,8 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         second = pj.latest()
         assert second["id"] != first["id"] and second["since"] == first["head"]
         by_kind = {f["kind"]: f for f in second["findings"]}
-        assert by_kind["unattributed"]["first-seen"] == first["id"] and by_kind["delegated"]["layer"] == "observation"
+        assert by_kind["unattributed"]["first-seen"] == first["id"]
+        assert "delegated" not in by_kind and by_kind["unchanged"]["layer"] == "observation" and by_kind["unchanged"]["seen-in"] == first["id"], by_kind.keys()   # the observation is on record in the first review; counted here
         assert "outside-run" not in by_kind and "undisposed" not in by_kind, by_kind.keys()
         # the previous review still held an open objection (unattributed): the new review accuses itself of the debt
         assert by_kind["review-debt"]["layer"] == "objection" and first["id"] in by_kind["review-debt"]["text"] and "1 undisposed objection" in by_kind["review-debt"]["text"], by_kind["review-debt"]
@@ -228,6 +229,36 @@ def test_layers_are_fail_closed_and_a_reporter_may_mark_its_own_kind_information
         fyi = next(i for i, f in enumerate(r["findings"]) if f["kind"] == "fyi")
         code, out = run("dispose", "%s/%d" % (r["id"], fyi), "--as", "accepted", "--why", "x", "--by", "kim", "--target", pj.dir)
         assert code != 0 and "an observation is a fact, not a charge" in out, out
+
+
+def test_an_observation_is_written_once_and_counted_after_that():
+    """Measured on a site: 120 relations confirmed by delegation came back as 120 `delegated` observations in every review,
+    58 KB of a 96 KB file, forever. An observation is a fact; once a review holds it in full, later reviews count it in one
+    `unchanged` line that names that review — and still recognize it as the same fact three reviews on. A changed text is
+    a new fact, written in full again. Objections are untouched: they inherit and become `undisposed` as before."""
+    import time
+    with Project() as pj:
+        obs = [{"kind": "delegated", "where": "R-1 a realizes c", "text": "re-confirmed by delegation: plan-07"},
+               {"kind": "delegated", "where": "R-2 b realizes c", "text": "re-confirmed by delegation: plan-07"}]
+        pj.reporter(obs + [{"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"}])
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        first = pj.latest()
+        assert kinds(first) == {"delegated": 2, "left-open": 1}, kinds(first)
+        time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
+        second = pj.latest()
+        assert kinds(second) == {"unchanged": 1, "left-open": 1, "review-debt": 1}, kinds(second)
+        u = next(f for f in second["findings"] if f["kind"] == "unchanged")
+        assert u["layer"] == "observation" and u["seen-in"] == first["id"] and u["count"] == 2 and "delegated 2" in u["text"], u
+        assert next(f for f in second["findings"] if f["kind"] == "left-open")["first-seen"] == first["id"]
+        time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
+        third = pj.latest()   # two reviews on: still one line, still pointing at the review that holds them
+        assert kinds(third)["unchanged"] == 1 and next(f for f in third["findings"] if f["kind"] == "unchanged")["seen-in"] == first["id"], third["findings"]
+        # one fact changes: it is written in full again; the other stays counted
+        pj.reporter([dict(obs[0], text="re-confirmed by delegation: plan-09"), obs[1], {"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"}])
+        time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
+        fourth = pj.latest()
+        assert kinds(fourth)["delegated"] == 1 and next(f for f in fourth["findings"] if f["kind"] == "unchanged")["count"] == 1, kinds(fourth)
+        assert run("follow", "--target", pj.dir)[0] == 1, "the objection is still debt; observations never were"
 
 
 def test_review_debt_does_not_fire_when_the_previous_review_is_clean():

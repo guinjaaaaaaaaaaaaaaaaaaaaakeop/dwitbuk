@@ -19,6 +19,7 @@ A review is a record like a run: `reviews/<id>.json`, committed. dwitbuk finds; 
 (chongdae `report`, mangsang `impact --findings`, hunsu `check --findings` …), declared as `reporters` in hunsu.json and locked.
 dwitbuk never reads a product's directory to compute findings. Kinds it adds itself:
   undisposed    a finding from an earlier review with no disposition yet
+  unchanged     observations an earlier review holds in full (`seen-in`), counted here instead of written again
   contradiction late eyes: the record says one thing, the tree or the plan another — quoted from both sides
   anomaly       late eyes: what a stranger would question in the tree, with a tree quote only
   no-reporters  nothing is declared: the review is late eyes and dispositions only, and says so
@@ -210,12 +211,26 @@ def cmd_review(args):
         # a finding's identity is kind + where + its text: several stage-findings share one `where` (one quibble round), and
         # with (kind, where) alone only one of them inherited its disposition — the others came back as new debt
         last = {identity(f): f for f in prior[-1].get("findings", [])}
+        carried = carried_observations(prior)
+        kept, unchanged = [], {}
         for f in findings:
             old = last.pop(identity(f), None)
             if old:
                 f["first-seen"] = old.get("first-seen", prior[-1]["id"])
                 if old.get("disposition"):
                     f["disposition"] = old["disposition"]
+            # an observation is a fact of the record; written in full once, it is counted after that, with the review that
+            # holds it — a site's 120 relations confirmed by delegation were 58 KB of every review, forever
+            written_in = prior[-1]["id"] if old else carried.get(identity(f), (None, None))[1]
+            if written_in and layer(f) == "observation" and f.get("kind") != "unchanged":
+                unchanged.setdefault(written_in, {})[f["kind"]] = unchanged.get(written_in, {}).get(f["kind"], 0) + 1
+                continue
+            kept.append(f)
+        findings[:] = kept
+        for rid_, kinds_ in sorted(unchanged.items()):
+            n = sum(kinds_.values())
+            findings.append({"kind": "unchanged", "layer": "observation", "where": rid_, "seen-in": rid_, "count": n,
+                             "text": "%d observation(s) written in %s and unchanged since (%s)" % (n, rid_, ", ".join("%s %d" % kv for kv in sorted(kinds_.items())))})
         for (kind, where, _), old in last.items():
             if layer(old) != "objection" or kind == "review-debt":
                 continue
@@ -244,6 +259,26 @@ def cmd_review(args):
     print("%s: %d objection(s) (%s), %d observation(s) since %s"
           % (rid, sum(counts.values()), ", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none", len(obs), base or "the beginning"))
     return 0
+
+
+def carried_observations(prior):
+    """identity -> (finding, the review that holds it in full), for every observation the latest review stands on: its own,
+    and — following each `unchanged` line's `seen-in` back — those an earlier review wrote in full and later reviews only
+    counted. So an observation is written once, however many reviews follow, and still recognized as the same fact."""
+    by_id = {r.get("id"): r for r in prior}
+    out, seen, queue = {}, set(), [prior[-1]]
+    while queue:
+        r = queue.pop(0)
+        if r.get("id") in seen:
+            continue
+        seen.add(r.get("id"))
+        for f in r.get("findings", []):
+            if f.get("kind") == "unchanged":
+                if f.get("seen-in") in by_id:
+                    queue.append(by_id[f["seen-in"]])
+            elif layer(f) == "observation":
+                out.setdefault(identity(f), (f, r.get("id")))
+    return out
 
 
 def lock_commit(target):
