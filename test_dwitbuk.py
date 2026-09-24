@@ -86,6 +86,33 @@ class Skip(Exception):
 def stream(*events):
     return "".join(json.dumps(e) + "\n" for e in events)
 
+def test_a_reporters_plugin_is_the_copy_from_the_marketplace_the_project_declares():
+    """Matched by name alone, the first install record belonged to another project, and a review ran its 1.1.0 reporters."""
+    home = tempfile.mkdtemp(prefix="dwitbuk-home-")
+    old = os.environ.get("HUNSU_CLAUDE_DIR")
+    try:
+        with Project() as p:
+            os.environ["HUNSU_CLAUDE_DIR"] = home
+            write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {
+                "mangsang@other": [{"scope": "project", "projectPath": "/elsewhere", "installPath": "/cache/other/1.1.0"}],
+                "mangsang@mangsang": [{"scope": "project", "projectPath": "/third", "installPath": "/cache/mangsang/1.4.0"},
+                                      {"scope": "project", "projectPath": p.dir, "installPath": "/cache/mangsang/1.5.0"}]}})
+            write(os.path.join(p.dir, "hunsu.json"), {"plugins": {"mangsang": {"marketplace": "mangsang"}}})
+            assert dwitbuk.plugin_root(p.dir, "mangsang") == "/cache/mangsang/1.5.0"
+            write(os.path.join(p.dir, "hunsu.json"), {"plugins": {"mangsang": {"marketplace": "absent"}}})
+            try:
+                dwitbuk.plugin_root(p.dir, "mangsang")
+                raise AssertionError("a declared marketplace with no install here must stop, not fall back to another copy")
+            except SystemExit as err:
+                assert "not installed for it here" in str(err)
+    finally:
+        if old is None:
+            os.environ.pop("HUNSU_CLAUDE_DIR", None)
+        else:
+            os.environ["HUNSU_CLAUDE_DIR"] = old
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_kind():
     with Project() as pj:
         # no reporters declared: the review says so, and computes nothing from any product's directory

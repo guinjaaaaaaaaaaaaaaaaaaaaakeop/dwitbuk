@@ -88,7 +88,23 @@ def plugin_root(target, name):
         root = links[name]
         return os.path.join(root, name) if os.path.isdir(os.path.join(root, name)) else root
     home = os.environ.get("HUNSU_CLAUDE_DIR") or os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    for key, entries in load(os.path.join(home, "plugins", "installed_plugins.json")).get("plugins", {}).items():
+    installed = load(os.path.join(home, "plugins", "installed_plugins.json")).get("plugins", {})
+    # the copy this project runs: from the marketplace its manifest declares (or the one `hunsu dev` put it in development
+    # from) — matched by name alone, the first record belonged to whichever project installed it first, and a review once
+    # ran another project's 1.1.0 reporters that way
+    market = load(os.path.join(target, "hunsu.local.json")).get("dev", {}).get(name) \
+        or (load(os.path.join(target, "hunsu.json")).get("plugins", {}).get(name) or {}).get("marketplace")
+    if market:
+        src = (load(os.path.join(home, "plugins", "known_marketplaces.json")).get(market) or {}).get("source") or {}
+        if src.get("source") == "directory" and os.path.isdir(os.path.join(src.get("path", ""), name)):
+            return os.path.join(src["path"], name)   # a directory marketplace is loaded in place by the host: the source, not a snapshot
+        entries = installed.get("%s@%s" % (name, market)) or []
+        want = os.path.realpath(target)
+        mine = [e for e in entries if e.get("scope") == "user" or (e.get("projectPath") and os.path.realpath(e["projectPath"]) == want)]
+        if mine:
+            return install_entry(mine, target).get("installPath")
+        raise SystemExit("plugin %s@%s is declared for this project but not installed for it here — `hunsu install`" % (name, market))
+    for key, entries in installed.items():
         if key.split("@")[0] == name and entries:
             return install_entry(entries, target).get("installPath")
     raise SystemExit("plugin %r is not linked (hunsu.local.json) or installed here" % name)

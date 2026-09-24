@@ -46,7 +46,7 @@ From reporters, in their own words: chongdae's `outside-run` (grouped per direct
 
 - `--max-turns` bounds the Claude host only; `codex exec` has no turn limit to give, so a Codex eyes session ends when it ends.
 
-- The engine never computes findings from another product's directory; it runs the reporters the lock declares and keeps what answers in the type. It reads run records only to pack them for the eyes.
+- The engine never computes findings from another product's directory; it runs the reporters the lock declares and keeps what answers in the type. A reporter's `{plugin:NAME}` is the copy this project runs: a `hunsu.local.json` link, else the install from the marketplace `hunsu.json` declares for it (a directory marketplace in place) — never the first install record with that name, which on a machine with several projects is another project's older copy (a site's first review ran 1.1.0 reporters that way and reported 65 false `broken`/`drift`). It reads run records only to pack them for the eyes.
 - The engine reads records and git, never code for meaning. Meaning is read by late eyes — a fresh session with Read/Grep/Glob only, a fixed answer schema, and the rule that a finding without a quote from each side is dropped on consume. The reader is a model on the person's own host account.
 - "Same kind of non-claim" is the first clause of the sentence, not a judgment.
 
