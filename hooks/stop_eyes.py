@@ -30,8 +30,11 @@ def main():
     cwd = payload.get("cwd") or os.getcwd()
     # a product's settings are read from the manifest, where a person writes them: a switch works as soon as it is written,
     # also while a working source is tried with `hunsu dev` (when `hunsu lock` rightly refuses)
-    on = lambda doc: ((doc.get("settings") or {}).get("dwitbuk") or {}).get("stop-eyes")
-    if not (on(dwitbuk.load(os.path.join(cwd, "hunsu.json"))) or on(dwitbuk.load(os.path.join(cwd, "hunsu.lock.json")))):
+    # (hunsu.json, this machine's overlay in hunsu.local.json on top; a lock that carries it, from before, still counts)
+    mine = lambda doc: ((doc.get("settings") or {}).get("dwitbuk") or {})
+    conf = {**mine(dwitbuk.load(os.path.join(cwd, "hunsu.lock.json"))), **mine(dwitbuk.load(os.path.join(cwd, "hunsu.json"))),
+            **mine(dwitbuk.load(os.path.join(cwd, "hunsu.local.json")))}
+    if not conf.get("stop-eyes"):
         return 0
     dirty = [l[3:].strip().replace("\\", "/") for l in (dwitbuk.git(cwd, "status", "--porcelain", "--untracked-files=all", "--", ".") or "").splitlines() if len(l) > 3]
     prefix = (dwitbuk.git(cwd, "rev-parse", "--show-prefix") or "").strip().replace("\\", "/")
