@@ -43,6 +43,15 @@ RUNS = ".chongdae"
 OBSERVATION_KINDS = {"delegated"}   # facts of the record, not charges: nobody should dispose them
 
 
+def record_paths(target):
+    """What the eyes leave out of a diff — the products' records and the environment: `record-paths` in hunsu.lock.json (each
+    plugin's `records`), else the siblings' names as they were before the lock carried them; always chongdae's runs (dwitbuk
+    reads them for its packets), its own reviews, and hunsu's files."""
+    declared = load(os.path.join(target, "hunsu.lock.json")).get("record-paths")
+    others = sorted({p for ps in declared.values() for p in ps}) if isinstance(declared, dict) else [".mangsang/", ".dwitbuk/"]
+    return tuple(sorted(set(others) | {RUNS + "/", REVIEWS + "/", "hunsu", ".claude/"}))
+
+
 def layer(f):
     """An explicit layer wins (a reporter may mark its own kind informational); by kind, `delegated` is an observation;
     everything else — unknown kinds included — is an objection. Fail closed: a kind nobody classified is a charge."""
@@ -355,7 +364,7 @@ def verify_packet(request):
     """A chongdae build request (stage verify) -> the eyes packet for a verdict. The contract, what the task touched (as a diff), the
     builder's own report. The reader is told what decides: a sentence the code contradicts, or a claim no check could have decided."""
     target = request["target"]
-    touched = [t for t in request.get("touched") or [] if not t.startswith((RUNS + "/", REVIEWS + "/"))]
+    touched = [t for t in request.get("touched") or [] if not t.startswith(record_paths(target))]
     diff = ""
     for path in touched:
         d = git(target, "diff", "HEAD", "--", path)
@@ -388,7 +397,7 @@ def cmd_eyes(args):
         prior = reviews(target)
         base = args.since or (prior[-1]["since"] if prior else None)   # what the latest review covered
         head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
-        left_out = [RUNS, REVIEWS, ".mangsang", "hunsu*", ".claude"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
+        left_out = [p.rstrip("/") + ("*" if not p.endswith("/") else "") if p == "hunsu" else p.rstrip("/") for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
         excl = ["--", "."] + [":!" + x for x in left_out]
         diff = (git(target, "diff", base, *excl) if base else git(target, "diff", *excl)) or ""
         names = [n.strip().replace("\\", "/") for n in ((git(target, "diff", "--name-only", base, "--", ".") if base else "") or "").splitlines()]

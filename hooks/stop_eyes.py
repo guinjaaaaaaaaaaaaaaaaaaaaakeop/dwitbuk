@@ -39,7 +39,7 @@ def main():
     dirty = [l[3:].strip().replace("\\", "/") for l in (dwitbuk.git(cwd, "status", "--porcelain", "--untracked-files=all", "--", ".") or "").splitlines() if len(l) > 3]
     prefix = (dwitbuk.git(cwd, "rev-parse", "--show-prefix") or "").strip().replace("\\", "/")
     dirty = [p[len(prefix):] if prefix and p.startswith(prefix) else p for p in dirty]
-    left_out = (dwitbuk.RUNS + "/", dwitbuk.REVIEWS + "/", ".mangsang/", ".dwitbuk/", "hunsu")   # records, machine state, the environment — and this hook's own scratch
+    left_out = tuple(p for p in dwitbuk.record_paths(cwd) if p != "mangsang/")   # records, machine state, the environment — and this hook's own scratch; mangsang/ relations stay in: a confirmed quote is a claim about the tree
     dirty = [p for p in dirty if not p.startswith(left_out) and not p.endswith(".local.json")]
     if not dirty:
         return 0

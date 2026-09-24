@@ -469,3 +469,16 @@ def test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring():
         assert "domain" not in plain and "refactoring" not in plain["instructions"]
         ref = dwitbuk.verify_packet(dict(req, domain="refactor"))
         assert ref["domain"] == "refactor" and "This slice is a refactoring" in ref["instructions"] and "docstring" in ref["instructions"], ref["instructions"][-400:]
+
+
+def test_the_eyes_leave_out_the_records_the_lock_declares():
+    """The verify packet's `touched` and the late eyes' diff left out `.chongdae/`, `reviews/`, `.mangsang/` by name; now the
+    lock's `record-paths` says which paths are records — mangsang's relations stay in a late-eyes diff on purpose (a
+    confirmed quote is a claim about the tree), and without a lock the old names stand."""
+    with Project() as pj:
+        assert dwitbuk.record_paths(pj.dir) == (".chongdae/", ".claude/", ".dwitbuk/", ".mangsang/", "hunsu", "reviews/"), dwitbuk.record_paths(pj.dir)
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": [".alpha/", "alpha.json"], "mangsang": ["mangsang/", ".mangsang/"]}})
+        assert dwitbuk.record_paths(pj.dir) == (".alpha/", ".chongdae/", ".claude/", ".mangsang/", "alpha.json", "hunsu", "mangsang/", "reviews/"), dwitbuk.record_paths(pj.dir)
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": ["a.py", ".alpha/x.json", "alpha.json", ".chongdae/run-1/tasks/T.json", "mangsang/relations/R-1.json"]}
+        assert dwitbuk.verify_packet(req)["touched"] == ["a.py"], dwitbuk.verify_packet(req)["touched"]

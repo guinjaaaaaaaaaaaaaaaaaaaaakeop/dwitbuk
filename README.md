@@ -138,6 +138,10 @@ worker never ran.
 - `eyes_worker.py` starts its host session through `hostcall.py` — one host call for every worker of this family (hunsu's judge, mangsang's judge, dwitbuk's eyes,
   hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The umbrella checkout's `tools/same-file.py` says when the copies drift.
 
+- **What the eyes leave out of a diff** — the products' records and the environment — comes from the lock's `record-paths`
+  (each plugin's `records` declaration); without it, the names as they were. mangsang's `mangsang/` stays in a late-eyes
+  diff on purpose: a confirmed quote is a claim about the tree. dwitbuk declares `records: ["reviews/", ".dwitbuk/"]`.
+
 ## Versioning
 
 Semver, and a version names one content: every change to the source — code, skill or command text, hooks, this README
