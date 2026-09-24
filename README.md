@@ -135,6 +135,9 @@ worker never ran.
   consume. The reader is a model on the person's own host account.
 - "Same kind of non-claim" is the first clause of the sentence, not a judgment.
 
+- `eyes_worker.py` starts its host session through `hostcall.py` — one host call for every worker of this family (hunsu's judge, mangsang's judge, dwitbuk's eyes,
+  hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The umbrella checkout's `tools/same-file.py` says when the copies drift.
+
 ## Versioning
 
 Semver, and a version names one content: every change to the source — code, skill or command text, hooks, this README
