@@ -458,3 +458,14 @@ if __name__ == "__main__":
                 print("FAIL", name, "--", "%s: %s" % (type(err).__name__, err))
     print("all passed" if not failed else "%d failed" % failed)
     sys.exit(1 if failed else 0)
+
+
+def test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring():
+    """A refactoring's eyes accepted a split that lost eleven docstrings: the contract said tests and bytes, nothing about words.
+    The packet now carries the request's domain, and for `refactor` the instructions say what else to reject."""
+    with Project() as pj:
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [], "touched": []}
+        plain = dwitbuk.verify_packet(req)
+        assert "domain" not in plain and "refactoring" not in plain["instructions"]
+        ref = dwitbuk.verify_packet(dict(req, domain="refactor"))
+        assert ref["domain"] == "refactor" and "This slice is a refactoring" in ref["instructions"] and "docstring" in ref["instructions"], ref["instructions"][-400:]

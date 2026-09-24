@@ -363,17 +363,22 @@ def verify_packet(request):
             diff += d
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:
             diff += "+++ %s (new file)\n" % path + io.open(os.path.join(target, path), encoding="utf-8", errors="replace").read() + "\n"
+    domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
-            "attempts": request.get("attempts", []), "kinds": EYES_KINDS,
+            "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
             "instructions": ("You are the verifier of one slice, before its gate. The checks passed; that is a premise, not a verdict. Read the contract "
                              "sections against the diff (Read the touched files and the tests under target when the diff is not enough). "
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
                              "decided by the check cited (a test that does not exercise the sentence, a key that selects nothing). "
                              "`touched` is what the builder changed; `touched_since` changed after it answered (a person's plan edits, say) and is not the builder's — do not hold the builder's report to it. "
                              "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file. "
-                             "No quote from both sides, no finding — and no finding means accept. Do not review style. Change no files.")}
+                             "No quote from both sides, no finding — and no finding means accept. Do not review style. Change no files."
+                             + (" This slice is a refactoring: placement may change, behavior and explanation may not. Also reject when a docstring, a comment or a "
+                                "public name that the diff removes does not reappear where its code went (record_quote: the removed text from the diff's `-` lines; "
+                                "tree_quote: the new place, or the `+` lines that lack it), or when a moved function's body differs from the original beyond the move."
+                                if domain == "refactor" else ""))}
 
 
 def cmd_eyes(args):

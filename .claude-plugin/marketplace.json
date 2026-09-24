@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "dwitbuk on its own: `claude plugin marketplace add guinjaaaaaaaaaaaaaaaaaaaaakeop/dwitbuk` then `claude plugin install dwitbuk@dwitbuk`.",
-    "version": "1.4.1"
+    "version": "1.4.2"
   },
   "plugins": [
     {
       "name": "dwitbuk",
       "source": "./",
-      "version": "1.4.1",
+      "version": "1.4.2",
       "description": "The reviewer of the LLM-development era."
     }
   ]
