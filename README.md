@@ -88,7 +88,9 @@ quoting both the record and the tree survive
 | `reviews/<id>.json` | yes | a review: `since`, `head`, `reporters` it collected from, findings (kind, where, text, source, first-seen, disposition) |
 
 The latest review is the open set. A finding seen again — the same kind, `where` and text, the changing counts struck
-— inherits its disposition; an objection that stops recurring without one is carried as `undisposed`; an observation
+— inherits its disposition, from whichever earlier review answered it; an objection that stops recurring without one is
+carried as `undisposed` (naming the charge it carries). One charge is answered once: disposing any copy of it — the
+finding, the same finding in a later review, its `undisposed` carry — answers every copy in every review; an observation
 that stops recurring simply stops. An observation is written in full once: the reviews after it count it in one
 `unchanged` line naming the review that holds it (`seen-in`), and read that review to recognize it again — so a
 project's hundred delegated relations are on record once, not in every review (they were 58 KB of every 96 KB review
@@ -111,8 +113,8 @@ sides), `delegation-stamp` (one reason stamped on 3+ judgments); mangsang's `sta
 --findings` reporter `cq-failed`, `cq-unanswerable`, `cq-unquestioned`; hunsu's `drift`, `unreviewed`. dwitbuk's own:
 `undisposed`, `unchanged` (observations an earlier review holds in full, counted), `contradiction` and `anomaly` (late
 eyes), `no-reporters`, `reporter-failed`, and `review-debt` — when the previous review still holds undisposed
-objections, the new review emits one objection naming that review and the count; no gate, no block, the debt just
-re-accuses itself in every later review until the objections are disposed.
+objections, the new review says so in one observation naming that review and the count; no gate, no block. The charges
+themselves are carried one by one, so the debt line is a count of them, not one more thing to dispose.
 
 `eyes_worker.py --prompt-only --request <file> --response <file>` prints the exact prompt a call would send (the
 skill/eyes text, the request, the answer schema) and exits — for a session that dispatches its host's own subagent

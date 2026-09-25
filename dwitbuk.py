@@ -40,7 +40,8 @@ import sys
 
 REVIEWS = "reviews"
 RUNS = ".chongdae"
-OBSERVATION_KINDS = {"delegated"}   # facts of the record, not charges: nobody should dispose them
+OBSERVATION_KINDS = {"delegated", "review-debt"}   # facts of the record, not charges: nobody should dispose them. The debt is
+# a count of charges the latest review already carries one by one: disposing it as well was the same charge answered twice
 
 
 def record_paths(target):
@@ -221,13 +222,13 @@ def cmd_review(args):
     for f in findings:
         f["layer"] = layer(f)   # observation: a fact of the record; objection: a charge to dispose. Fail closed on unknown kinds.
 
-    # review-debt: the previous review still holds undisposed objections — the new review accuses itself of the debt.
-    # No gate, no block; the record just refuses to let the debt look settled.
+    # review-debt: the previous review still holds undisposed objections — said once, as a fact; the charges themselves are
+    # carried below, each once. No gate, no block; the record just refuses to let the debt look settled.
     if prior:
         owed = sum(1 for f in prior[-1].get("findings", []) if layer(f) == "objection" and not f.get("disposition"))
         if owed:
-            findings.append({"kind": "review-debt", "where": prior[-1]["id"], "source": "dwitbuk", "layer": "objection",
-                             "text": "previous review %s still has %d undisposed objection(s)" % (prior[-1]["id"], owed)})
+            findings.append({"kind": "review-debt", "where": prior[-1]["id"], "source": "dwitbuk", "layer": "observation",
+                             "text": "previous review %s still has %d undisposed objection(s), carried here" % (prior[-1]["id"], owed)})
 
     # 5. the latest review is the open set. A finding seen again inherits its disposition; one that stopped recurring without
     #    a disposition is carried as `undisposed` so it cannot vanish silently. Older reviews are history — and only
@@ -236,6 +237,7 @@ def cmd_review(args):
         # a finding's identity is kind + where + its text: several stage-findings share one `where` (one quibble round), and
         # with (kind, where) alone only one of them inherited its disposition — the others came back as new debt
         last = {identity(f): f for f in prior[-1].get("findings", [])}
+        settled = answered(prior)
         carried = carried_observations(prior)
         kept, unchanged = [], {}
         for f in findings:
@@ -244,6 +246,8 @@ def cmd_review(args):
                 f["first-seen"] = old.get("first-seen", prior[-1]["id"])
                 if old.get("disposition"):
                     f["disposition"] = old["disposition"]
+            if not f.get("disposition") and charge(f) in settled:
+                f["disposition"] = settled[charge(f)]   # answered in any earlier review, not only the last: one charge, one answer
             # an observation is a fact of the record; written in full once, it is counted after that, with the review that
             # holds it — a site's 120 relations confirmed by delegation were 58 KB of every review, forever
             written_in = prior[-1]["id"] if old else carried.get(identity(f), (None, None))[1]
@@ -259,11 +263,13 @@ def cmd_review(args):
         for (kind, where, _), old in last.items():
             if layer(old) != "objection" or kind == "review-debt":
                 continue
-            if not old.get("disposition") and kind != "undisposed":
+            if old.get("disposition") or charge(old) in settled:
+                continue
+            if kind != "undisposed":
                 findings.append({"kind": "undisposed", "where": where, "layer": "objection",
                                  "text": "%s (first seen %s): %s" % (kind, old.get("first-seen", prior[-1]["id"]), old["text"][:80]),
-                                 "first-seen": old.get("first-seen", prior[-1]["id"])})
-            elif kind == "undisposed" and not old.get("disposition"):
+                                 "first-seen": old.get("first-seen", prior[-1]["id"]), "carries": list(identity(old))})
+            else:
                 findings.append(old)
 
     import secrets, time
@@ -319,6 +325,22 @@ def identity(f):
     return (f.get("kind"), f.get("where"), text)
 
 
+def charge(f):
+    """The charge a finding makes, across reviews: its identity — or, for an `undisposed` carry, the identity of the finding
+    it carries. Every copy of one charge is answered by one disposal."""
+    return tuple(f["carries"]) if f.get("kind") == "undisposed" and f.get("carries") else identity(f)
+
+
+def answered(prior):
+    """{charge: disposition} over every earlier review, the latest answer winning."""
+    out = {}
+    for r in prior:
+        for f in r.get("findings", []):
+            if f.get("disposition") and layer(f) == "objection":
+                out[charge(f)] = f["disposition"]
+    return out
+
+
 def cmd_dispose(args):
     rid, _, idx = args.finding.rpartition("/")
     path = os.path.join(args.target, REVIEWS, rid + ".json")
@@ -341,7 +363,18 @@ def cmd_dispose(args):
         print("warning: this finding is grounded in quotes; a disposal that answers no quote is harder to audit later (--quote QUOTE)")
     f["disposition"] = disp
     save(path, r)
-    print("disposed %s as %s%s" % (args.finding, args.as_, " (delegated)" if args.delegated else ""))
+    # the same charge in other reviews — seen again, or carried as `undisposed` — is answered by this disposal, not owed again
+    same = 0
+    for other in reviews(args.target):   # read again from disk: this review included, with the disposal just saved
+        hit = False
+        for g in other.get("findings", []):
+            if not g.get("disposition") and layer(g) == "objection" and charge(g) == charge(f):
+                g["disposition"] = dict(disp, via=args.finding)
+                hit, same = True, same + 1
+        if hit:
+            save(os.path.join(args.target, REVIEWS, other["id"] + ".json"), other)
+    print("disposed %s as %s%s%s" % (args.finding, args.as_, " (delegated)" if args.delegated else "",
+                                     " — the same charge answered in %d other place(s)" % same if same else ""))
     return 0
 
 

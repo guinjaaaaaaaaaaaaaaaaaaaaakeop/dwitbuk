@@ -149,8 +149,8 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         assert next(f for f in r["findings"] if f["kind"] == "undisposed")["text"].startswith("no-reporters")
 
 
-def load_review(pj):
-    return json.load(open(os.path.join(pj.dir, "reviews", pj.latest()["id"] + ".json"), encoding="utf-8"))
+def load_review(pj, rid=None):
+    return json.load(open(os.path.join(pj.dir, "reviews", (rid or pj.latest()["id"]) + ".json"), encoding="utf-8"))
 
 
 def save_review(pj, r):
@@ -197,17 +197,53 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         assert by_kind["unattributed"]["first-seen"] == first["id"]
         assert "delegated" not in by_kind and by_kind["unchanged"]["layer"] == "observation" and by_kind["unchanged"]["seen-in"] == first["id"], by_kind.keys()   # the observation is on record in the first review; counted here
         assert "outside-run" not in by_kind and "undisposed" not in by_kind, by_kind.keys()
-        # the previous review still held an open objection (unattributed): the new review accuses itself of the debt
-        assert by_kind["review-debt"]["layer"] == "objection" and first["id"] in by_kind["review-debt"]["text"] and "1 undisposed objection" in by_kind["review-debt"]["text"], by_kind["review-debt"]
+        # the previous review still held an open objection (unattributed): the new review says so, as a fact — the charge
+        # itself is the unattributed finding it carries; the debt is not a second thing to dispose
+        assert by_kind["review-debt"]["layer"] == "observation" and first["id"] in by_kind["review-debt"]["text"] and "1 undisposed objection" in by_kind["review-debt"]["text"], by_kind["review-debt"]
         code, out = run("follow", "--target", pj.dir)
-        assert code == 1 and "undisposed findings: 2" in out, out   # unattributed + review-debt; the observation is not counted
+        assert code == 1 and "undisposed findings: 1" in out, out   # the unattributed charge, once
         # the third review: the debt is recomputed (it names the second review now), never carried as undisposed
         time.sleep(1.1)
         run("review", "--target", pj.dir)
         third = pj.latest()
         assert sum(f["kind"] == "undisposed" for f in third["findings"]) == 0, [f for f in third["findings"] if f["kind"] == "undisposed"]
         debt = [f for f in third["findings"] if f["kind"] == "review-debt"]
-        assert len(debt) == 1 and second["id"] in debt[0]["text"] and "2 undisposed objection" in debt[0]["text"], debt
+        assert len(debt) == 1 and second["id"] in debt[0]["text"] and "1 undisposed objection" in debt[0]["text"], debt
+
+
+def test_one_charge_is_disposed_once_across_consecutive_reviews():
+    """Reviews in a row each held their own copy of one charge — found again, then carried as `undisposed`, with a debt line
+    pointing back at the older copy — and every copy was disposed on its own. One disposal answers the charge everywhere."""
+    import time
+    with Project() as pj:
+        charges = [{"kind": "non-claim", "where": "run-1", "text": "(provider) rendering size was not checked"},
+                   {"kind": "verifier-reject", "where": "run-1/T1 attempt 1", "text": "claim-unverified: no command behind the claim"}]
+        pj.reporter(charges)
+        run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        time.sleep(1.1); run("review", "--target", pj.dir)          # the same run's record, read again: found again
+        second = pj.latest()
+        pj.reporter([]); time.sleep(1.1); run("review", "--target", pj.dir)   # no longer reported: carried as undisposed
+        third = pj.latest()
+        carried = [i for i, f in enumerate(third["findings"]) if f["kind"] == "undisposed"]
+        assert len(carried) == 2 and all(third["findings"][i]["layer"] == "objection" for i in carried), third["findings"]
+        assert all(f["layer"] == "observation" for f in third["findings"] if f["kind"] == "review-debt")
+        for i in carried:
+            code, out = run("dispose", "%s/%d" % (third["id"], i), "--as", "accepted", "--why", "known", "--by", "kim", "--target", pj.dir)
+            assert code == 0 and "answered in 2 other place(s)" in out, out   # the first and second reviews' copies
+        for rid in (first["id"], second["id"]):
+            r = load_review(pj, rid)
+            open_ = [f for f in r["findings"] if f.get("layer") == "objection" and not f.get("disposition")]
+            assert not open_, (rid, open_)
+        assert run("follow", "--target", pj.dir)[0] == 0
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        fourth = pj.latest()
+        assert not [f for f in fourth["findings"] if f.get("layer") == "objection"], fourth["findings"]   # nothing owed, nothing carried
+        # a charge answered in an older review and found again later inherits that answer, whichever review held it
+        pj.reporter(charges[:1]); time.sleep(1.1); run("review", "--target", pj.dir)
+        again = pj.latest()
+        f = next(f for f in again["findings"] if f["kind"] == "non-claim")
+        assert f["disposition"]["as"] == "accepted", f
 
 
 def test_disposal_is_machine_judgeable_quote_stored_and_quoted_findings_warn_without_one():
