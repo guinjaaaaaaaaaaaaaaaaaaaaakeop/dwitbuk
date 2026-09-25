@@ -142,9 +142,12 @@ def resolve_argv(target, argv, since):
 
 
 def collect(target, since):
-    """Run every reporter the lock declares; keep what answers in the type. A reporter that does not is itself a finding."""
+    """Run every reporter the lock declares; keep what answers in the type. A reporter that does not is itself a finding.
+    Returns (findings, reporters, heard): `heard` is the reporters (the lock's names) that did answer — a `standing` reporter (one that
+    reads the current state, `"standing": true` on its findings document) that answered and no longer reports a finding
+    has said the finding is gone."""
     reporters = load(os.path.join(target, "hunsu.lock.json")).get("reporters") or {}
-    findings = []
+    findings, heard = [], set()
     if not reporters:
         findings.append({"kind": "no-reporters", "where": "hunsu.lock.json", "source": "dwitbuk",
                          "text": "no reporters declared (hunsu.json `reporters`, then lock): this review is late eyes and dispositions only; no run, relation or environment record was read"})
@@ -156,12 +159,14 @@ def collect(target, since):
         except (SystemExit, OSError, ValueError, AssertionError) as err:
             findings.append({"kind": "reporter-failed", "where": name, "source": "dwitbuk", "text": "reporter %s gave no dwitbuk/findings@1: %s" % (name, str(err)[:200])})
             continue
+        heard.add(name)
         for f in doc["findings"]:
             if f.get("kind") and f.get("where") is not None and f.get("text"):
                 findings.append({"kind": f["kind"], "where": f["where"], "text": f["text"], "source": doc.get("source", name),
                                  **({"files": f["files"]} if "files" in f else {}),
+                                 **({"standing": True, "reporter": name} if doc.get("standing") is True else {}),
                                  **({"layer": f["layer"]} if f.get("layer") in ("observation", "objection") else {})})
-    return findings, sorted(reporters)
+    return findings, sorted(reporters), heard
 
 
 def reviews(target):
@@ -198,7 +203,7 @@ def cmd_review(args):
     head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
     findings = []
 
-    raw, sources = collect(target, base if base != "no-git" else None)
+    raw, sources, heard = collect(target, base if base != "no-git" else None)
     # type-level presentation: outside-run per directory, non-claims by first clause so repeats show — kinds, not products
     by_dir = {}
     groups = {}
@@ -265,6 +270,8 @@ def cmd_review(args):
                 continue
             if old.get("disposition") or charge(old) in settled:
                 continue
+            if old.get("standing") and old.get("reporter") in heard:
+                continue   # its reporter reads the state as it is now, answered, and no longer sees it: the condition is gone
             if kind != "undisposed":
                 findings.append({"kind": "undisposed", "where": where, "layer": "objection",
                                  "text": "%s (first seen %s): %s" % (kind, old.get("first-seen", prior[-1]["id"]), old["text"][:80]),
@@ -382,6 +389,14 @@ EYES_KINDS = {"record-vs-tree": "a run's report (done, verified, touched, summar
               "plan-vs-code": "a plan sentence the code in the diff contradicts",
               "claim-unverified": "a `verified` check that could not have decided the claim it is cited for",
               "anomaly": "what a stranger would question in the tree itself — no record to quote, so `record_quote` is empty and `tree_quote` carries it"}
+def grounded(f):
+    """An eyes finding stands only on quotes: from both sides — the record and the tree — except an `anomaly`, which has no
+    record to quote by definition and stands on the tree alone. The one rule for every place a finding is kept or dropped
+    (the verify path once required a record quote of every finding and turned a true anomaly into an accept)."""
+    needed = ("where", "tree_quote", "why") if f.get("kind") == "anomaly" else ("where", "record_quote", "tree_quote", "why")
+    return f.get("kind") in EYES_KINDS and all(str(f.get(k, "")).strip() for k in needed)
+
+
 LENSES = {"contract": "Read only the diff against the contract (plan or the given document). Ignore the run records.",
           "record": "Read only the run records against the tree. Ignore the plan.",
           "fresh": "You know nothing of the intent. Report what a stranger reading this diff would question — anomalies with a tree quote."}
@@ -415,8 +430,11 @@ def verify_packet(request):
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
                              "decided by the check cited (a test that does not exercise the sentence, a key that selects nothing). "
                              "`touched` is what the builder changed; `touched_since` changed after it answered (a person's plan edits, say) and is not the builder's — do not hold the builder's report to it. "
-                             "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file. "
-                             "No quote from both sides, no finding — and no finding means accept. Do not review style. Change no files."
+                             "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file — "
+                             "except an `anomaly` (something wrong in the tree that no record speaks to), which quotes the tree only. "
+                             "No grounded finding, no reject — and no finding means accept. A behavior the code had before this slice, which the brief or "
+                             "contract says to carry over as it was, is not a finding against this slice: say it in `summary` if it looks wrong. "
+                             "Do not review style. Change no files."
                              + (" This slice is a refactoring: placement may change, behavior and explanation may not. Also reject when a docstring, a comment or a "
                                 "public name that the diff removes does not reappear where its code went (record_quote: the removed text from the diff's `-` lines; "
                                 "tree_quote: the new place, or the `+` lines that lack it), or when a moved function's body differs from the original beyond the move."
@@ -479,8 +497,7 @@ def cmd_eyes(args):
         raise SystemExit("no eyes*-response.json with `findings` in %s" % args.dir)
     kept, rejected, quoted = [], [], set()
     for f in (f for a in answers for f in a.get("findings", [])):
-        needed = ("where", "tree_quote", "why") if f.get("kind") == "anomaly" else ("where", "record_quote", "tree_quote", "why")
-        if f.get("kind") not in EYES_KINDS or not all(str(f.get(k, "")).strip() for k in needed):
+        if not grounded(f):
             rejected.append(json.dumps(f, ensure_ascii=False)[:160])
             continue
         key = (f["kind"], " ".join(str(f["tree_quote"]).split()))

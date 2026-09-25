@@ -53,10 +53,11 @@ class Project:
     def __exit__(self, *a):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def reporter(self, findings, name="fake"):
+    def reporter(self, findings, name="fake", standing=False):
         """A reporter the lock declares: prints the given dwitbuk/findings@1 (recorded from chongdae's real `report`, trimmed)."""
         script = os.path.join(self.dir, name + ".py")
-        write(script, "import json, sys\nprint(json.dumps(%s))\n" % json.dumps({"artifact-type": "dwitbuk/findings@1", "source": name, "findings": findings}))
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": name, "findings": findings, **({"standing": True} if standing else {})}
+        write(script, "import sys\nprint(%r)\n" % json.dumps(doc))   # the JSON as a string: `true` is not Python
         lock = dwitbuk.load(os.path.join(self.dir, "hunsu.lock.json"))
         lock.setdefault("reporters", {})[name] = [sys.executable, script, "--since", "{since}"]
         write(os.path.join(self.dir, "hunsu.lock.json"), lock)
@@ -382,6 +383,40 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         run("review", "--target", pj.dir)
         assert any(f["kind"] == "undisposed" and f["text"].startswith("contradiction") for f in pj.latest()["findings"])
         assert any(f["kind"] == "undisposed" and f["text"].startswith("anomaly") for f in pj.latest()["findings"])
+
+
+def test_a_standing_finding_that_stops_recurring_is_gone_not_owed():
+    """A reporter that reads the state as it is now (environment drift, stale relations) says a finding is gone by no longer
+    reporting it; carried as `undisposed`, a drift fixed an hour ago stayed a charge. Only when that reporter answered: a
+    reporter that failed says nothing about what is gone."""
+    import time
+    with Project() as pj:
+        drift = {"kind": "drift", "where": "plugin chongdae", "text": "installed 1.10.0, locked 1.9.0"}
+        pj.reporter([drift], "env", standing=True)
+        pj.reporter([{"kind": "unattributed", "where": "run-1/S1", "text": "no touched"}], "chongdae")
+        run("review", "--since", pj.base, "--target", pj.dir)
+        pj.reporter([], "env", standing=True)
+        pj.reporter([], "chongdae")
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        carried = [f for f in pj.latest()["findings"] if f["kind"] == "undisposed"]
+        assert len(carried) == 1 and "unattributed" in carried[0]["text"], carried   # the drift is gone; the event is still owed
+        # a standing reporter that failed this time: nothing is known to be gone
+        pj.reporter([drift], "env", standing=True)
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        with io.open(os.path.join(pj.dir, "env.py"), "w", encoding="utf-8") as fh:
+            fh.write("raise SystemExit(3)\n")
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        assert any(f["kind"] == "undisposed" and "drift" in f["text"] for f in pj.latest()["findings"]), pj.latest()["findings"]
+
+
+def test_one_grounding_rule_for_eyes_findings_an_anomaly_stands_on_the_tree():
+    """An anomaly has no record to quote by definition; the verify path once required a record quote of every finding and
+    turned a verifier's true anomaly into "rejected without a quoted finding; counted as accept"."""
+    anomaly = {"kind": "anomaly", "where": "mangsang/registry.json", "record_quote": "", "tree_quote": "\"path\": \"build.py\"", "why": "the file is gone"}
+    assert dwitbuk.grounded(anomaly)
+    assert not dwitbuk.grounded(dict(anomaly, kind="record-vs-tree")), "every other kind quotes the record too"
+    assert not dwitbuk.grounded(dict(anomaly, tree_quote="")) and not dwitbuk.grounded(dict(anomaly, kind="made-up"))
+    assert w.grounded is dwitbuk.grounded, "the verify path uses the same rule"
 
 
 def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():

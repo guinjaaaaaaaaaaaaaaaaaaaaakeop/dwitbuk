@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dwitbuk import EYES_SCHEMA, REVIEW_SCHEMA, verify_packet  # noqa: E402
+from dwitbuk import EYES_SCHEMA, REVIEW_SCHEMA, grounded, verify_packet  # noqa: E402
 from hostcall import run_claude, run_codex, claude_answer, worker_record  # noqa: E402  (vendored: the same file in each plugin of this family)
 
 PROMPT = ("This is a dwitbuk late-eyes request. Change no files. Follow the packet's `instructions` exactly. "
@@ -69,8 +69,9 @@ def main():
             raise
         out = {"verdict": None, "findings": [], "summary": str(err)}   # chongdae stops on a missing verdict; it never treats silence as accept
     if verify:
-        # the verifier's own rule, enforced here too: a reject without a finding quoted from both sides is not a reject
-        out["findings"] = [f for f in out.get("findings", []) if all(str(f.get(k, "")).strip() for k in ("record_quote", "tree_quote", "why"))]
+        # the verifier's own rule, enforced here too: a reject without a grounded finding (quoted from both sides, or from the
+        # tree for an anomaly) is not a reject
+        out["findings"] = [f for f in out.get("findings", []) if grounded(f)]
         if out.get("verdict") == "reject" and not out["findings"]:
             out["verdict"], out["summary"] = "accept", "rejected without a quoted finding; counted as accept"
         out = {"artifact-type": "dwitbuk/review@1", **out}

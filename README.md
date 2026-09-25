@@ -87,6 +87,13 @@ quoting both the record and the tree survive
 |---|---|---|
 | `reviews/<id>.json` | yes | a review: `since`, `head`, `reporters` it collected from, findings (kind, where, text, source, first-seen, disposition) |
 
+A reporter that reads the state as it is now — the environment's drift, the model's stale relations and questions — says
+so with `"standing": true` on its findings document. A standing finding it stops reporting is gone, not owed: it is not
+carried as `undisposed` (only when that reporter answered this review; one that failed says nothing about what is gone).
+A reporter that reads events over a range (a run's record since a commit) does not say it, and its findings are carried
+as before. An eyes finding stands on quotes from both sides, or — an `anomaly` — on the tree alone: one rule, for the
+review and for the verifier.
+
 The latest review is the open set. A finding seen again — the same kind, `where` and text, the changing counts struck
 — inherits its disposition, from whichever earlier review answered it; an objection that stops recurring without one is
 carried as `undisposed` (naming the charge it carries). One charge is answered once: disposing any copy of it — the
