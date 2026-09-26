@@ -425,6 +425,7 @@ def verify_packet(request):
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
+            **({"recheck": request["recheck"]} if request.get("recheck") else {}),
             "instructions": ("You are the verifier of one slice, before its gate. The checks passed; that is a premise, not a verdict. Read the contract "
                              "sections against the diff (Read the touched files and the tests under target when the diff is not enough). "
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
@@ -435,6 +436,11 @@ def verify_packet(request):
                              "No grounded finding, no reject — and no finding means accept. A behavior the code had before this slice, which the brief or "
                              "contract says to carry over as it was, is not a finding against this slice: say it in `summary` if it looks wrong. "
                              "Do not review style. Change no files."
+                             + (" This is a re-verification: the last verdict rejected this slice with `recheck.findings`, and `recheck.changed_since` "
+                                "lists the files changed since that verdict. Check two things only: that each of those findings is resolved (still true: "
+                                "report it again, quoted), and that what changed since breaks no contract sentence. What was there at the last verdict "
+                                "and is unchanged was read then — do not read it again for new findings; say in `summary` if something outside "
+                                "that scope still looks wrong." if request.get("recheck") else "")
                              + (" This slice is a refactoring: placement may change, behavior and explanation may not. Also reject when a docstring, a comment or a "
                                 "public name that the diff removes does not reappear where its code went (record_quote: the removed text from the diff's `-` lines; "
                                 "tree_quote: the new place, or the `+` lines that lack it), or when a moved function's body differs from the original beyond the move."

@@ -92,7 +92,9 @@ so with `"standing": true` on its findings document. A standing finding it stops
 carried as `undisposed` (only when that reporter answered this review; one that failed says nothing about what is gone).
 A reporter that reads events over a range (a run's record since a commit) does not say it, and its findings are carried
 as before. An eyes finding stands on quotes from both sides, or — an `anomaly` — on the tree alone: one rule, for the
-review and for the verifier.
+review and for the verifier. A verify request with `recheck` (the last reject's findings, the files changed since)
+is a re-verification: the eyes check that each finding is resolved and that what changed breaks no contract sentence,
+and do not re-read what they read at the last verdict for new findings.
 
 The latest review is the open set. A finding seen again — the same kind, `where` and text, the changing counts struck
 — inherits its disposition, from whichever earlier review answered it; an objection that stops recurring without one is

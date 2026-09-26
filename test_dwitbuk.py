@@ -430,6 +430,12 @@ def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():
         assert p["mode"] == "verify" and p["touched"] == ["a.py", "b.py"] and "+x = 2" in p["diff"] and "b.py (new file)" in p["diff"]
         assert p["contract"]["Q1"].endswith("prints one line") and p["built"]["summary"] == "did it" and "premise, not a verdict" in p["instructions"]
         assert dwitbuk.REVIEW_SCHEMA["properties"]["verdict"]["enum"] == ["accept", "reject"]
+        assert "recheck" not in p and "re-verification" not in p["instructions"]
+        # a re-verification: the last reject's findings and what changed since — the verifier checks those, not the whole slice again
+        prior = [{"kind": "plan-vs-code", "where": "a.py", "record_quote": "prints one line", "tree_quote": "x = 2", "why": "two lines"}]
+        p = dwitbuk.verify_packet(dict(req, recheck={"findings": prior, "changed_since": ["a.py"]}))
+        assert p["recheck"]["changed_since"] == ["a.py"] and p["recheck"]["findings"] == prior
+        assert "This is a re-verification" in p["instructions"] and "do not read it again for new findings" in p["instructions"]
 
 
 def test_runs_are_read_from_one_file_per_task_and_session_tasks_define_themselves():
