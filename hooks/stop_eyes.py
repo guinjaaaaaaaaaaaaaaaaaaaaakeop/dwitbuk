@@ -77,9 +77,8 @@ def main():
     if not findings:
         return 0
     if dwitbuk.reviews(cwd):
-        class A: dir, by = folder, "stop-eyes"
         try:
-            dwitbuk.cmd_eyes(type("Args", (), {"target": cwd, "mode": "consume", "dir": folder, "by": "stop-eyes"})())
+            dwitbuk.cmd_eyes(type("Args", (), {"target": cwd, "mode": "consume", "dir": folder})())
         except SystemExit:
             pass
     lines = ["%s @ %s: %s — tree: \u201c%s\u201d" % (f["kind"], f.get("where", ""), f["why"], f["tree_quote"][:120]) for f in findings]

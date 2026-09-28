@@ -2,13 +2,13 @@
 
   review [--since COMMIT] [--target DIR]   collect `dwitbuk/findings@1` from the reporters the lock declares (hunsu.lock.json `reporters`),
                                            carry dispositions and recurrence from the last review, write reviews/<id>.json
-  dispose <review>/<finding> --as accepted|dismissed --why WHY [--by NAME] [--quote QUOTE]
+  dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY) [--quote QUOTE]
                                            the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree
   follow [--target DIR]                    findings from earlier reviews that nobody disposed of
   eyes request --out DIR [--since COMMIT] [--contract PATH] [--lens NAME]...
                                            late eyes: a packet (diff, run records, plan or contract, open findings) for a bounded read-only
                                            session; one packet per lens (contract | record | fresh), or one without
-  eyes consume --dir DIR [--by WHO]        its answer, validated (a quote from the record and one from the tree, or no finding), into the latest review
+  eyes consume --dir DIR                   its answer, validated (a quote from the record and one from the tree, or no finding), into the latest review
 
 The same eyes, placed earlier: as a chongdae `verifier` provider (`eyes_worker.py --request <chongdae request> --response ...`)
 they read the task's contract, the files it touched and the builder's report, and answer `dwitbuk/review@1` — accept, or reject
@@ -149,7 +149,7 @@ def collect(target, since):
     reporters = load(os.path.join(target, "hunsu.lock.json")).get("reporters") or {}
     findings, heard = [], set()
     if not reporters:
-        findings.append({"kind": "no-reporters", "where": "hunsu.lock.json", "source": "dwitbuk",
+        findings.append({"kind": "no-reporters", "where": "hunsu.lock.json",
                          "text": "no reporters declared (hunsu.json `reporters`, then lock): this review is late eyes and dispositions only; no run, relation or environment record was read"})
     for name, argv in reporters.items():
         try:
@@ -157,13 +157,13 @@ def collect(target, since):
             doc = json.loads(done.stdout)
             assert doc.get("artifact-type") == "dwitbuk/findings@1" and isinstance(doc.get("findings"), list)
         except (SystemExit, OSError, ValueError, AssertionError) as err:
-            findings.append({"kind": "reporter-failed", "where": name, "source": "dwitbuk", "text": "reporter %s gave no dwitbuk/findings@1: %s" % (name, str(err)[:200])})
+            findings.append({"kind": "reporter-failed", "where": name, "text": "reporter %s gave no dwitbuk/findings@1: %s" % (name, str(err)[:200])})
             continue
         heard.add(name)
         for f in doc["findings"]:
             if f.get("kind") and f.get("where") is not None and f.get("text"):
-                findings.append({"kind": f["kind"], "where": f["where"], "text": f["text"], "source": doc.get("source", name),
-                                 **({"files": f["files"]} if "files" in f else {}),
+                findings.append({"kind": f["kind"], "where": f["where"], "text": f["text"],
+                                 **({"files": f["files"]} if "files" in f else {}),   # read below to group by directory; not saved
                                  **({"standing": True, "reporter": name} if doc.get("standing") is True else {}),
                                  **({"layer": f["layer"]} if f.get("layer") in ("observation", "objection") else {})})
     return findings, sorted(reporters), heard
@@ -219,7 +219,7 @@ def cmd_review(args):
     for folder, names in sorted(by_dir.items()):
         where = folder + "/" if folder != "." else ""
         shown = ", ".join(names[:4]) + (" … (+%d)" % (len(names) - 4) if len(names) > 4 else "")
-        findings.append({"kind": "outside-run", "where": where + shown, "files": [os.path.join(folder, n).replace("\\", "/") if folder != "." else n for n in names],
+        findings.append({"kind": "outside-run", "where": where + shown,
                          "text": "%d file(s) changed since %s; no completed run recorded touching them" % (len(names), base or "the beginning")})
     for key, where in groups.items():
         findings.append({"kind": "non-claim", "where": ", ".join(sorted(set(where))), "text": key + ("  [x%d]" % len(where) if len(where) > 1 else "")})
@@ -232,7 +232,7 @@ def cmd_review(args):
     if prior:
         owed = sum(1 for f in prior[-1].get("findings", []) if layer(f) == "objection" and not f.get("disposition"))
         if owed:
-            findings.append({"kind": "review-debt", "where": prior[-1]["id"], "source": "dwitbuk", "layer": "observation",
+            findings.append({"kind": "review-debt", "where": prior[-1]["id"], "layer": "observation",
                              "text": "previous review %s still has %d undisposed objection(s), carried here" % (prior[-1]["id"], owed)})
 
     # 5. the latest review is the open set. A finding seen again inherits its disposition; one that stopped recurring without
@@ -263,7 +263,7 @@ def cmd_review(args):
         findings[:] = kept
         for rid_, kinds_ in sorted(unchanged.items()):
             n = sum(kinds_.values())
-            findings.append({"kind": "unchanged", "layer": "observation", "where": rid_, "seen-in": rid_, "count": n,
+            findings.append({"kind": "unchanged", "layer": "observation", "where": rid_, "seen-in": rid_,
                              "text": "%d observation(s) written in %s and unchanged since (%s)" % (n, rid_, ", ".join("%s %d" % kv for kv in sorted(kinds_.items())))})
         for (kind, where, _), old in last.items():
             if layer(old) != "objection" or kind == "review-debt":
@@ -281,7 +281,9 @@ def cmd_review(args):
 
     import secrets, time
     rid = "review-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(2))   # sorts by time on one machine, still unique across machines
-    save(os.path.join(target, REVIEWS, rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": base, "head": head, "reporters": sources, "findings": findings})
+    # the review is `since`, `head` and the findings: which reporters were asked is the lock's to say (a `reporters` list was
+    # written here and read by nothing; `source` on each finding, `files` on outside-run, `count` on unchanged — the same)
+    save(os.path.join(target, REVIEWS, rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": base, "head": head, "findings": findings})
     obs = [(i, f) for i, f in enumerate(findings) if layer(f) == "observation"]
     for i, f in enumerate(findings):
         if layer(f) == "objection":
@@ -359,15 +361,17 @@ def cmd_dispose(args):
         raise SystemExit("dispose: %s is an observation — an observation is a fact, not a charge; there is nothing to dispose" % args.finding)
     if bool(args.why) == bool(args.delegated):
         raise SystemExit("dispose: --why WHY --by NAME (a person's words) or --delegated WHY (no person read this; why it was handed off) — one of the two")
+    if args.delegated and args.by:
+        raise SystemExit("dispose: --by names the person whose words --why carries; a --delegated disposal has no such person (it used to be dropped silently)")
     disp = {"as": args.as_, "why": args.why, "by": args.by} if args.why else {"as": args.as_, "delegated": args.delegated, "by": None}
-    # the disposal carries the charge it answers, copied at disposal time: (finding_text, why) is self-contained for a
-    # later judge — no re-resolving indices across reviews to learn what was answered
+    # the disposal carries the charge it answers, copied at disposal time: a person reading the review later sees (finding, reason)
+    # side by side, without resolving indices across reviews to learn what was answered
     disp["finding_text"] = f["text"]
     disp["where"] = f["where"]
     if args.quote:
         disp["quote"] = args.quote
     elif f.get("kind") in ("contradiction", "anomaly") or f.get("record_quote") or f.get("tree_quote"):
-        print("warning: this finding is grounded in quotes; a disposal that answers no quote is harder to audit later (--quote QUOTE)")
+        print("warning: this finding is grounded in quotes; a disposal that quotes nothing back is harder for the next reader to weigh (--quote QUOTE)")
     f["disposition"] = disp
     save(path, r)
     # the same charge in other reviews — seen again, or carried as `undisposed` — is answered by this disposal, not owed again
@@ -376,7 +380,7 @@ def cmd_dispose(args):
         hit = False
         for g in other.get("findings", []):
             if not g.get("disposition") and layer(g) == "objection" and charge(g) == charge(f):
-                g["disposition"] = dict(disp, via=args.finding)
+                g["disposition"] = dict(disp)   # the same answer, copied (a `via` pointer was written here and read by nothing)
                 hit, same = True, same + 1
         if hit:
             save(os.path.join(args.target, REVIEWS, other["id"] + ".json"), other)
@@ -511,10 +515,9 @@ def cmd_eyes(args):
             continue   # two lenses quoting the same line found the same thing; one finding
         quoted.add(key)
         if f["kind"] == "anomaly":
-            kept.append({"kind": "anomaly", "where": f["where"], "text": "%s — tree: \u201c%s\u201d" % (f["why"], f["tree_quote"]), "by": args.by})
+            kept.append({"kind": "anomaly", "where": f["where"], "text": "%s — tree: \u201c%s\u201d" % (f["why"], f["tree_quote"])})
         else:
-            kept.append({"kind": "contradiction", "where": f["where"], "text": "%s: %s — record: \u201c%s\u201d — tree: \u201c%s\u201d" % (f["kind"], f["why"], f["record_quote"], f["tree_quote"]),
-                         "by": args.by})
+            kept.append({"kind": "contradiction", "where": f["where"], "text": "%s: %s — record: \u201c%s\u201d — tree: \u201c%s\u201d" % (f["kind"], f["why"], f["record_quote"], f["tree_quote"])})
     r = prior[-1]
     have = {identity(f) for f in r["findings"]}
     kept = [f for f in kept if identity(f) not in have]
@@ -548,7 +551,6 @@ def main(argv=None):
             p.add_argument("--out", default="dwitbuk-eyes")
             p.add_argument("--dir", default="dwitbuk-eyes")
             p.add_argument("--since", default=None)
-            p.add_argument("--by", default="unknown")
             p.add_argument("--contract", default=None, help="request: a document to read the diff against instead of plan/PLAN.md (a spec, a PR text)")
             p.add_argument("--lens", action="append", default=None, help="request: one packet per lens — %s" % ", ".join(LENSES))
         if name == "review":

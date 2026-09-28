@@ -30,9 +30,10 @@ reporters: the review says so and is late eyes and dispositions only
 Record a disposition of a finding — a person's (`--as accepted|dismissed --why "…" --by NAME`) or one no person read
 (`--as … --delegated WHY`, recorded as a delegation like a gate); observations refuse it (they are not debt). The
 disposition copies the finding's own `text` and `where` at disposal time (`finding_text`), and `--quote` may add a
-verbatim quote from the record or the tree that grounds it — so a later machine judge can ask of the pair (finding,
-reason): does the reason actually address the finding, without re-resolving ids across reviews? Disposing a
-quote-grounded finding (`contradiction`, `anomaly`) without `--quote` warns, not refuses
+verbatim quote from the record or the tree that grounds it — so a person reading the review later sees the pair
+(finding, reason) side by side and can weigh whether the reason addresses the finding, without resolving ids across
+reviews. Disposing a quote-grounded finding (`contradiction`, `anomaly`) without `--quote` warns, not refuses.
+`--by` names the person whose words `--why` carries; with `--delegated` it is refused (no person read the finding)
 
 ### `/dwitbuk:follow`
 
@@ -85,7 +86,7 @@ quoting both the record and the tree survive
 
 | path | committed | what |
 |---|---|---|
-| `reviews/<id>.json` | yes | a review: `since`, `head`, `reporters` it collected from, findings (kind, where, text, source, first-seen, disposition) |
+| `reviews/<id>.json` | yes | a review: `since`, `head`, findings (kind, where, text, layer, first-seen, disposition). Which reporters were asked is the lock's `reporters` |
 
 A reporter that reads the state as it is now — the environment's drift, the model's stale relations and questions — says
 so with `"standing": true` on its findings document. A standing finding it stops reporting is gone, not owed: it is not

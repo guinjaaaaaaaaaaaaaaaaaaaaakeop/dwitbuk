@@ -1,6 +1,6 @@
 ---
 description: Late eyes — pack the diff, run records, plan and open findings for a bounded read-only session (request), or take its quoted contradictions into the latest review (consume)
-argument-hint: request --out DIR [--since COMMIT] | consume --dir DIR --by WHO
+argument-hint: request --out DIR [--since COMMIT] | consume --dir DIR
 ---
 !`python3 "${CLAUDE_PLUGIN_ROOT}/dwitbuk.py" eyes $ARGUMENTS --target .`
 

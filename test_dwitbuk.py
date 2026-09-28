@@ -138,12 +138,11 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         code, out = run("review", "--since", pj.base, "--target", pj.dir)
         assert code == 0, out
         r = pj.latest()
-        assert sorted(r["reporters"]) == ["broken", "chongdae", "hunsu"]
         k = kinds(r)
         assert k == {"outside-run": 1, "unattributed": 1, "delegated": 2, "non-claim": 2, "unreviewed": 1, "reporter-failed": 1, "undisposed": 1, "review-debt": 1}, k
         outside = next(f for f in r["findings"] if f["kind"] == "outside-run")
-        assert outside["files"] == ["b.py", "hunsu.json"], outside
-        assert next(f for f in r["findings"] if f["kind"] == "unreviewed")["source"] == "hunsu"
+        assert "b.py" in outside["where"] and "hunsu.json" in outside["where"] and "files" not in outside, outside   # grouped by directory; the list is not saved
+        assert "source" not in next(f for f in r["findings"] if f["kind"] == "unreviewed") and "reporters" not in r   # written once, read by nothing
         assert "gave no dwitbuk/findings@1" in next(f["text"] for f in r["findings"] if f["kind"] == "reporter-failed")
         nc = [f["text"] for f in r["findings"] if f["kind"] == "non-claim"]
         assert any("x untested  [x2]" in t for t in nc) and any(t.startswith("y untested") for t in nc), nc
@@ -176,6 +175,8 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         u = next(i for i, f in enumerate(first["findings"]) if f["kind"] == "unattributed")
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--target", pj.dir)[0] != 0, "one of --why / --delegated is required"
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--why", "x", "--delegated", "y", "--target", pj.dir)[0] != 0, "not both"
+        code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "y", "--by", "kim", "--target", pj.dir)
+        assert code != 0 and "--by names the person" in out, "a name on a delegated disposal used to be dropped silently; refused"
         code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "the person was away; the run is a test", "--target", pj.dir)
         du = pj.latest()["findings"][u]["disposition"]
         assert code == 0 and "(delegated)" in out and du["as"] == "dismissed" and du["delegated"] == "the person was away; the run is a test" and du["by"] is None
@@ -247,7 +248,9 @@ def test_one_charge_is_disposed_once_across_consecutive_reviews():
         assert f["disposition"]["as"] == "accepted", f
 
 
-def test_disposal_is_machine_judgeable_quote_stored_and_quoted_findings_warn_without_one():
+def test_disposal_carries_the_charge_and_its_quote_for_the_next_reader_and_quoted_findings_warn_without_one():
+    """The pair (finding, reason) sits in the disposal for the person who reads the review later — no machine judge reads it
+    (none exists in any product; the wording that promised one is gone)."""
     with Project() as pj:
         pj.reporter([{"kind": "unattributed", "where": "run-1/S1", "text": "no touched"}])
         run("review", "--since", pj.base, "--target", pj.dir)
@@ -259,7 +262,7 @@ def test_disposal_is_machine_judgeable_quote_stored_and_quoted_findings_warn_wit
         rid, ci = r["id"], len(r["findings"]) - 1
         # disposing a quoted finding without --quote: warns, does not refuse
         code, out = run("dispose", "%s/%d" % (rid, ci), "--as", "dismissed", "--why", "the TODO is in a comment", "--by", "kim", "--target", pj.dir)
-        assert code == 0 and "grounded in quotes" in out and "harder to audit" in out, out
+        assert code == 0 and "grounded in quotes" in out and "harder for the next reader" in out, out
         # with --quote: stored verbatim, no warning
         r = load_review(pj); r["findings"][ci].pop("disposition"); save_review(pj, r)
         code, out = run("dispose", "%s/%d" % (rid, ci), "--as", "dismissed", "--why", "the TODO is in a comment", "--by", "kim",
@@ -312,7 +315,7 @@ def test_an_observation_is_written_once_and_counted_after_that():
         second = pj.latest()
         assert kinds(second) == {"unchanged": 1, "left-open": 1, "review-debt": 1}, kinds(second)
         u = next(f for f in second["findings"] if f["kind"] == "unchanged")
-        assert u["layer"] == "observation" and u["seen-in"] == first["id"] and u["count"] == 2 and "delegated 2" in u["text"], u
+        assert u["layer"] == "observation" and u["seen-in"] == first["id"] and "count" not in u and u["text"].startswith("2 observation(s)") and "delegated 2" in u["text"], u
         assert next(f for f in second["findings"] if f["kind"] == "left-open")["first-seen"] == first["id"]
         time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
         third = pj.latest()   # two reviews on: still one line, still pointing at the review that holds them
@@ -321,7 +324,7 @@ def test_an_observation_is_written_once_and_counted_after_that():
         pj.reporter([dict(obs[0], text="re-confirmed by delegation: plan-09"), obs[1], {"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"}])
         time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
         fourth = pj.latest()
-        assert kinds(fourth)["delegated"] == 1 and next(f for f in fourth["findings"] if f["kind"] == "unchanged")["count"] == 1, kinds(fourth)
+        assert kinds(fourth)["delegated"] == 1 and next(f for f in fourth["findings"] if f["kind"] == "unchanged")["text"].startswith("1 observation(s)"), kinds(fourth)
         assert run("follow", "--target", pj.dir)[0] == 1, "the objection is still debt; observations never were"
 
 
@@ -370,14 +373,14 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         assert ".chongdae" in packet["diff_leaves_out"] and packet["runs"][0]["tasks"][0]["state"]["touched"] == ["a.py", "proposals.json"]
         assert "prints one line" in packet["plan"] and any(f["kind"] == "no-reporters" for f in packet["open_findings"])
         write(os.path.join(out_dir, "eyes-response.json"), EYES_RESPONSE)
-        code, out = run("eyes", "consume", "--dir", out_dir, "--by", "test", "--target", pj.dir)
+        code, out = run("eyes", "consume", "--dir", out_dir, "--target", pj.dir)
         assert code == 0 and "2 finding(s) added" in out and "2 rejected" in out, out
         r = pj.latest()
         added = [f for f in r["findings"] if f["kind"] == "contradiction"]
-        assert len(added) == 1 and "proposals.json" in added[0]["where"] and "record: " in added[0]["text"] and added[0]["by"] == "test"
+        assert len(added) == 1 and "proposals.json" in added[0]["where"] and "record: " in added[0]["text"] and "by" not in added[0]
         assert any(f["kind"] == "anomaly" and "bare constant" in f["text"] for f in r["findings"])
         # consuming the same answer again adds nothing; the finding carries into the next review like any other
-        code, out = run("eyes", "consume", "--dir", out_dir, "--by", "test", "--target", pj.dir)
+        code, out = run("eyes", "consume", "--dir", out_dir, "--target", pj.dir)
         assert "0 finding(s) added" in out, out
         import time; time.sleep(1.1)
         run("review", "--target", pj.dir)
