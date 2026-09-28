@@ -434,6 +434,16 @@ def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():
         assert p["contract"]["Q1"].endswith("prints one line") and p["built"]["summary"] == "did it" and "premise, not a verdict" in p["instructions"]
         assert dwitbuk.REVIEW_SCHEMA["properties"]["verdict"]["enum"] == ["accept", "reject"]
         assert "recheck" not in p and "re-verification" not in p["instructions"]
+        assert "excluded" not in p and "`excluded`" not in p["instructions"]   # nothing left out, nothing said
+        # a task whose whole work is the environment: `touched` is empty by rule, and the packet says what was left out and shows it
+        subprocess.run(["git", "init", "-q"], cwd=pj.dir, check=True)
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": {}}\n')
+        subprocess.run(["git", "add", "-A"], cwd=pj.dir, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], cwd=pj.dir, check=True)
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": {"mangsang": {}}}\n')
+        env = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["hunsu.json", ".chongdae/run-1/state.json"]}))
+        assert env["touched"] == [] and env["excluded"] == ["hunsu.json"] and '+{"plugins": {"mangsang": {}}}' in env["excluded_diff"], env.get("excluded_diff")
+        assert "by rule, not by omission" in env["instructions"] and "no record-vs-tree finding" in env["instructions"]
         # a re-verification: the last reject's findings and what changed since — the verifier checks those, not the whole slice again
         prior = [{"kind": "plan-vs-code", "where": "a.py", "record_quote": "prints one line", "tree_quote": "x = 2", "why": "two lines"}]
         p = dwitbuk.verify_packet(dict(req, recheck={"findings": prior, "changed_since": ["a.py"]}))

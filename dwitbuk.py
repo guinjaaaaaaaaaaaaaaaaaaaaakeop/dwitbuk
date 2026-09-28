@@ -424,10 +424,16 @@ def verify_packet(request):
             diff += d
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:
             diff += "+++ %s (new file)\n" % path + io.open(os.path.join(target, path), encoding="utf-8", errors="replace").read() + "\n"
+    # what chongdae left out of `touched` by rule — the environment (hunsu's files) and the products' records — with its diff: a
+    # task whose whole work is `hunsu lock` or `mangsang confirm` has `touched: []`, and a verifier told nothing about these read
+    # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
+    excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not p.startswith(RUNS + "/")]
+    excluded_diff = "".join(git(target, "diff", "HEAD", "--", p) or "" for p in excluded)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
+            **({"excluded": excluded, "excluded_diff": excluded_diff[:40000]} if excluded else {}),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
             **({"recheck": request["recheck"]} if request.get("recheck") else {}),
             "instructions": ("You are the verifier of one slice, before its gate. The checks passed; that is a premise, not a verdict. Read the contract "
@@ -435,6 +441,11 @@ def verify_packet(request):
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
                              "decided by the check cited (a test that does not exercise the sentence, a key that selects nothing). "
                              "`touched` is what the builder changed; `touched_since` changed after it answered (a person's plan edits, say) and is not the builder's — do not hold the builder's report to it. "
+                             + ("`excluded` lists files under the products' record paths that differ from HEAD — the environment (hunsu's manifest, lock and "
+                                "judgments) and records such as mangsang/ — which are never in `touched`, by rule, not by omission: a change there is not an "
+                                "undeclared edit and no record-vs-tree finding. When the brief or contract says the task's work is that change (update a plugin, "
+                                "lock the environment, relate concepts), read it in `excluded_diff` as the slice's work and verify it against them. "
+                                if excluded else "") +
                              "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file — "
                              "except an `anomaly` (something wrong in the tree that no record speaks to), which quotes the tree only. "
                              "No grounded finding, no reject — and no finding means accept. A behavior the code had before this slice, which the brief or "
