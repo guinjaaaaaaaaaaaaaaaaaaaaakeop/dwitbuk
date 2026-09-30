@@ -119,7 +119,10 @@ neither lists nor counts it. `delegated` is an observation by kind; a reporter m
 `"layer": "observation"` and is trusted. Everything else — unknown kinds included — is an objection: fail closed.
 
 From reporters, in their own words: chongdae's `outside-run` (grouped per directory here), `unattributed`, `delegated`
-(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (grouped by first clause so repeats show),
+(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, `[xN]` when N runs share the clause — grouped across runs, a run's charge had a
+new identity whenever a review's span changed and never kept its answer; a declared setting's note, and "no check
+decides this task" on a plan-domain or test-writer task, are observations; an objection answered in an earlier review
+is carried with its answer and counted, not listed again),
 `left-open` (a task open when its run closed, or rejected and never retried), `stage-finding` (what a role hired
 before or after a task found, with its quote), `verifier-reject` (a verdict that stopped an attempt, quoted from both
 sides), `delegation-stamp` (one reason stamped on 3+ judgments); mangsang's `stale`, `broken`, and from its `cq

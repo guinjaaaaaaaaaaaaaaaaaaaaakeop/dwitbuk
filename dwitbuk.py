@@ -204,25 +204,40 @@ def cmd_review(args):
     findings = []
 
     raw, sources, heard = collect(target, base if base != "no-git" else None)
-    # type-level presentation: outside-run per directory, non-claims by first clause so repeats show — kinds, not products
+    # type-level presentation: outside-run per directory, non-claims by first clause so repeats show — kinds, not products.
+    # A non-claim stays one finding per run: grouped across runs, its `where` listed whichever runs this review happened to
+    # span, so the same run's non-claim had a new identity in the next review and never inherited its disposition — the
+    # same "no check decides this task" was answered ten times on one site in a day. Repeats show as `[xN]` (runs sharing
+    # the clause), which identity() strikes.
     by_dir = {}
     groups = {}
+    defs = {name: {t.get("id"): t for t in plan.get("tasks", [])} for name, plan, _ in runs(target)}
     for f in raw:
         if f["kind"] == "outside-run" and f.get("files"):
             for p in f["files"]:
                 by_dir.setdefault(os.path.dirname(p) or ".", []).append(os.path.basename(p))
-        elif f["kind"] == "non-claim":
-            key = re.sub(r"^\S+(?: \([^)]*\))?: ", "", f["text"]).split(";")[0]   # the first clause, whole — a cut sentence is a different sentence
-            groups.setdefault(key, []).append(f["where"])
+        elif f["kind"] == "non-claim" and not str(f["where"]).startswith("settings."):
+            key = re.sub(r"^\S+(?: \([^)]*\))?: ", "", f["text"]).split(";")[0].split(" — ")[0]   # the first clause, whole — a cut sentence is a different sentence
+            groups.setdefault(key, {}).setdefault(f["where"], []).append(f)
         else:
+            if f["kind"] == "non-claim":
+                # a finding about a setting the project declared (`settings.<product>.<key>` in hunsu.json): the reviewer is told
+                # what the declaration leaves out, and the declaration is the project's own, answered where it was written
+                f.setdefault("layer", "observation")
             findings.append(f)
     for folder, names in sorted(by_dir.items()):
         where = folder + "/" if folder != "." else ""
         shown = ", ".join(names[:4]) + (" … (+%d)" % (len(names) - 4) if len(names) > 4 else "")
         findings.append({"kind": "outside-run", "where": where + shown,
                          "text": "%d file(s) changed since %s; no completed run recorded touching them" % (len(names), base or "the beginning")})
-    for key, where in groups.items():
-        findings.append({"kind": "non-claim", "where": ", ".join(sorted(set(where))), "text": key + ("  [x%d]" % len(where) if len(where) > 1 else "")})
+    for key, by_run in groups.items():
+        for where, fs in sorted(by_run.items()):
+            f = {"kind": "non-claim", "where": where, "text": key + ("  [x%d]" % len(by_run) if len(by_run) > 1 else "")}
+            if key == "no check decides this task" and all(uncheckable_by_nature(defs.get(where, {}), t) for x in fs for t in task_ids(x["text"])):
+                # a contract, design or plan document (domain plan) has no check that could decide prose, and a test task's tests
+                # are what the build is checked against: said, not a charge — a session's code task with no check still is one
+                f["layer"] = "observation"
+            findings.append(f)
 
     for f in findings:
         f["layer"] = layer(f)   # observation: a fact of the record; objection: a charge to dispose. Fail closed on unknown kinds.
@@ -285,20 +300,40 @@ def cmd_review(args):
     # written here and read by nothing; `source` on each finding, `files` on outside-run, `count` on unchanged — the same)
     save(os.path.join(target, REVIEWS, rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": base, "head": head, "findings": findings})
     obs = [(i, f) for i, f in enumerate(findings) if layer(f) == "observation"]
+    answered_ = [(i, f) for i, f in enumerate(findings) if layer(f) == "objection" and f.get("disposition")]
     for i, f in enumerate(findings):
-        if layer(f) == "objection":
+        if layer(f) == "objection" and not f.get("disposition"):
             print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
+    if answered_:
+        # seen again, answered before: carried with its disposition — the record keeps it, the reader is not asked again
+        print("already answered, carried with their disposition: %d (%s)" % (len(answered_), ", ".join(str(i) for i, _ in answered_)))
     if obs:
         print("observations (facts of the record, not disposal debt): %d" % len(obs))
         for i, f in obs:
             print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
     counts = {}
     for f in findings:
-        if layer(f) == "objection":
+        if layer(f) == "objection" and not f.get("disposition"):
             counts[f["kind"]] = counts.get(f["kind"], 0) + 1
     print("%s: %d objection(s) (%s), %d observation(s) since %s"
           % (rid, sum(counts.values()), ", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none", len(obs), base or "the beginning"))
     return 0
+
+
+def task_ids(text):
+    """The tasks a chongdae non-claim names: `T1: …` or `… — 2 task(s): T1, T2`."""
+    m = re.search(r" — \d+ task\(s\): (.+)$", text)
+    if m:
+        return [t.strip() for t in m.group(1).split(",")]
+    m = re.match(r"^(\S+?)(?: \([^)]*\))?: ", text)
+    return [m.group(1)] if m else []
+
+
+def uncheckable_by_nature(tasks, tid):
+    """A task no check can decide by what it is: a plan-domain task (a contract, a design, a decision — prose), or the test
+    writer's task (its tests are the check the build answers to). Unknown tasks are not: fail closed."""
+    t = tasks.get(tid) or {}
+    return t.get("domain") == "plan" or t.get("role") == "nitpick"
 
 
 def carried_observations(prior):

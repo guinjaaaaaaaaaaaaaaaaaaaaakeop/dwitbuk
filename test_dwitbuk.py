@@ -114,6 +114,43 @@ def test_a_reporters_plugin_is_the_copy_from_the_marketplace_the_project_declare
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_charged():
+    """guin-site, 2026-09-30: eleven reviews in a day, forty objections, all delegated. A run's non-claims were grouped with
+    other runs', so the `where` changed with each review's span and the same charge came back new ("run A" -> "run A, run
+    B"): "no check decides this task" was answered ten times. The project's declared outside-runs setting was listed as an
+    objection in every review. And a contract or design task (domain plan) or a test task has no check by nature."""
+    with Project() as pj:
+        for rid, tasks in (("run-20260101-000001-aaaa", {"C1": {"domain": "plan", "role": "session"}, "B1": {"domain": "code", "role": "session"}}),
+                           ("run-20260101-000002-bbbb", {"T2": {"domain": "code", "role": "nitpick"}})):
+            write(os.path.join(pj.dir, ".chongdae", rid, "plan.json"), {"artifact-type": "chongdae/plan@1", "goal": rid,
+                  "tasks": [{"id": k, "checks": [], **v} for k, v in tasks.items()]})
+            write(os.path.join(pj.dir, ".chongdae", rid, "state.json"), {"status": "complete", "tasks": {k: {"status": "done"} for k in tasks}})
+        nc = "no check decides this task; done means the agent said so"
+        first = [{"kind": "non-claim", "where": "settings.chongdae.outside-runs", "text": "content, docs: the project's own procedure, declared in hunsu.json; 3 file(s) changed there since abc1234 are not reported as outside-run"},
+                 {"kind": "non-claim", "where": "run-20260101-000001-aaaa", "text": "C1: " + nc},
+                 {"kind": "non-claim", "where": "run-20260101-000001-aaaa", "text": "B1: " + nc}]
+        pj.reporter(first, "chongdae")
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        r = pj.latest()
+        setting = next(f for f in r["findings"] if f["where"] == "settings.chongdae.outside-runs")
+        assert dwitbuk.layer(setting) == "observation", setting   # the project's own declaration
+        # C1 (plan) and B1 (a code task with no check) share a run: the run's finding is a charge because B1 is one
+        objs = [f for f in r["findings"] if f["kind"] == "non-claim" and dwitbuk.layer(f) == "objection"]
+        assert [f["where"] for f in objs] == ["run-20260101-000001-aaaa"], objs
+        idx = r["findings"].index(objs[0])
+        assert run("dispose", "%s/%d" % (r["id"], idx), "--as", "accepted", "--why", "B1 was checked by hand", "--by", "kim", "--target", pj.dir)[0] == 0
+        # the next review spans one more run: the first run's charge keeps its identity and its answer; the test task's is said
+        import time; time.sleep(1.1)
+        pj.reporter(first + [{"kind": "non-claim", "where": "run-20260101-000002-bbbb", "text": "T2: " + nc}], "chongdae")
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        r2 = pj.latest()
+        again = next(f for f in r2["findings"] if f["kind"] == "non-claim" and f["where"] == "run-20260101-000001-aaaa")
+        assert again["disposition"]["why"] == "B1 was checked by hand" and again["text"].endswith("[x2]"), again
+        t2 = next(f for f in r2["findings"] if f["where"] == "run-20260101-000002-bbbb")
+        assert dwitbuk.layer(t2) == "observation", t2
+        assert "0 objection(s)" in out and "already answered, carried with their disposition: 1" in out, out
+
+
 def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_kind():
     with Project() as pj:
         # no reporters declared: the review says so, and computes nothing from any product's directory
@@ -139,13 +176,13 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         assert code == 0, out
         r = pj.latest()
         k = kinds(r)
-        assert k == {"outside-run": 1, "unattributed": 1, "delegated": 2, "non-claim": 2, "unreviewed": 1, "reporter-failed": 1, "undisposed": 1, "review-debt": 1}, k
+        assert k == {"outside-run": 1, "unattributed": 1, "delegated": 2, "non-claim": 3, "unreviewed": 1, "reporter-failed": 1, "undisposed": 1, "review-debt": 1}, k
         outside = next(f for f in r["findings"] if f["kind"] == "outside-run")
         assert "b.py" in outside["where"] and "hunsu.json" in outside["where"] and "files" not in outside, outside   # grouped by directory; the list is not saved
         assert "source" not in next(f for f in r["findings"] if f["kind"] == "unreviewed") and "reporters" not in r   # written once, read by nothing
         assert "gave no dwitbuk/findings@1" in next(f["text"] for f in r["findings"] if f["kind"] == "reporter-failed")
         nc = [f["text"] for f in r["findings"] if f["kind"] == "non-claim"]
-        assert any("x untested  [x2]" in t for t in nc) and any(t.startswith("y untested") for t in nc), nc
+        assert sum("x untested  [x2]" in t for t in nc) == 2 and any(t.startswith("y untested") for t in nc), nc   # one per run; the repeat shows as [x2]
         assert next(f for f in r["findings"] if f["kind"] == "undisposed")["text"].startswith("no-reporters")
 
 
