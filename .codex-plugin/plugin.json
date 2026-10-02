@@ -1,6 +1,6 @@
 {
   "name": "dwitbuk",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "engines": {
     "python": ">=3.11"
   },
@@ -35,5 +35,16 @@
       "Read"
     ],
     "defaultPrompt": "Use dwitbuk on this project."
+  },
+  "reads": {
+    "file": [
+      "python3",
+      "{plugin:dwitbuk}/dwitbuk.py",
+      "follow",
+      "--path",
+      "{path}",
+      "--target",
+      "{target}"
+    ]
   }
 }

@@ -4,7 +4,8 @@
                                            carry dispositions and recurrence from the last review, write reviews/<id>.json
   dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY) [--quote QUOTE]
                                            the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree
-  follow [--target DIR]                    findings from earlier reviews that nobody disposed of
+  follow [--path FILE] [--target DIR]      the latest review's undisposed objections, whole and grouped by kind; --path: only those
+                                           whose `where` or `files` name FILE (ask before editing it)
   eyes request --out DIR [--since COMMIT] [--contract PATH] [--lens NAME]...
                                            late eyes: a packet (diff, run records, plan or contract, open findings) for a bounded read-only
                                            session; one packet per lens (contract | record | fresh), or one without
@@ -577,12 +578,37 @@ def cmd_eyes(args):
     return 0
 
 
+def names_path(f, path):
+    """Whether a finding's `where` or `files` names this path: as a whole token (`src/a.html:12`, `doc.md#Heading`, a list
+    `a.py, b.py`), never as a prefix of a longer name (`a.py` does not name `a.pyc` or `lib/a.py`)."""
+    if path in (f.get("files") or []):
+        return True
+    return re.search(r"(?<![\w./-])" + re.escape(path) + r"(?![\w/-]|\.\w)", str(f.get("where", ""))) is not None
+
+
 def cmd_follow(args):
     latest = reviews(args.target)[-1:]   # the open set is the latest review; observations are facts, not debt — not listed, not counted
     open_ = [(r["id"], i, f) for r in latest for i, f in enumerate(r.get("findings", [])) if not f.get("disposition") and layer(f) == "objection"]
-    for rid, i, f in open_:
-        print("  open  %s/%d  %-12s %s — %s" % (rid, i, f["kind"], f["where"], f["text"][:90]))
-    print("undisposed findings: %d" % len(open_))
+    path = None
+    if args.path:
+        path = os.path.relpath(os.path.abspath(args.path), os.path.abspath(args.target)) if os.path.isabs(args.path) else os.path.normpath(args.path)
+        path = path.replace(os.sep, "/")
+        every, open_ = len(open_), [o for o in open_ if names_path(o[2], path)]
+    # whole, grouped by kind: a disposal round reads the charge itself here, not in reviews/*.json
+    kinds = {}
+    for o in open_:
+        kinds.setdefault(o[2]["kind"], []).append(o)
+    for kind, group in kinds.items():
+        print("%s (%d)" % (kind, len(group)))
+        for rid, i, f in group:
+            print("  open  %s/%d  %s" % (rid, i, f["where"]))
+            print("        %s" % f["text"])
+            if f.get("files"):
+                print("        files: %s" % ", ".join(f["files"]))
+            for q in ("record_quote", "tree_quote"):
+                if f.get(q):
+                    print("        %s: \u201c%s\u201d" % (q.split("_")[0], f[q]))
+    print("undisposed findings: %d" % len(open_) + (" naming %s (%d in all)" % (path, every) if path else ""))
     return 1 if open_ else 0
 
 
@@ -601,6 +627,8 @@ def main(argv=None):
             p.add_argument("--lens", action="append", default=None, help="request: one packet per lens — %s" % ", ".join(LENSES))
         if name == "review":
             p.add_argument("--since", default=None)
+        if name == "follow":
+            p.add_argument("--path", default=None, help="only open objections whose `where` or `files` name this file (relative to --target)")
         if name == "dispose":
             p.add_argument("finding")
             p.add_argument("--as", dest="as_", choices=["accepted", "dismissed"], required=True)

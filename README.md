@@ -37,7 +37,11 @@ reviews. Disposing a quote-grounded finding (`contradiction`, `anomaly`) without
 
 ### `/dwitbuk:follow`
 
-Findings of the latest review that nobody disposed of
+The latest review's objections that nobody disposed of, each whole — `where`, the full text, `files` and the
+record/tree quotes when the finding has them — grouped by kind with a count, behind the `<review>/<n>` handle `dispose`
+takes. A disposal round reads the charges here, not in `reviews/*.json`. The last line stays `undisposed findings: N`;
+the exit code is 1 while any is open. `follow --path FILE` (relative to `--target`) keeps only those whose `where` or
+`files` name that file as a whole token (`src/a.html:12`, `doc.md#Heading`) — what is open on a file before editing it
 
 ### as chongdae's `verifier`
 

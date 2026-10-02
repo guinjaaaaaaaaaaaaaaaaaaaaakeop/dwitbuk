@@ -335,6 +335,37 @@ def test_layers_are_fail_closed_and_a_reporter_may_mark_its_own_kind_information
         assert code != 0 and "an observation is a fact, not a charge" in out, out
 
 
+def test_follow_prints_each_charge_whole_grouped_by_kind_and_path_asks_what_concerns_a_file():
+    """Measured on a site: `follow` was the read at every resume and disposal, but it cut each text at 90 characters and
+    listed flat, so every disposal round opened reviews/*.json too. Now the charge is whole, under its kind with a count,
+    still behind the `<review>/<n>` handle `dispose` takes; `--path` answers "what is open on this file" before an edit."""
+    with Project() as pj:
+        long_text = "plan-vs-code: the draft card renders preview and open only; " + "the publish button appears on the detail screen. " * 3 + "END"
+        pj.reporter([{"kind": "contradiction", "where": "run-1/T attempt 1: src/admin.html:274-285", "text": long_text},
+                     {"kind": "contradiction", "where": "run-1/T: docs/plan.md#Admin", "text": "second"},
+                     {"kind": "stale", "where": "rel-7", "text": "the relation's anchor moved", "files": ["src/admin.html", "lib/x.py"]},
+                     {"kind": "stale", "where": "lib/a.pyc, src/admin.html.bak", "text": "names neither file"},
+                     {"kind": "delegated", "where": "src/admin.html", "text": "an observation, never listed"}])
+        run("review", "--since", pj.base, "--target", pj.dir)
+        r = load_review(pj)
+        r["findings"][0].update(record_quote="Drafts have preview and publish buttons.", tree_quote="bits.push(open);")
+        save_review(pj, r)
+        code, out = run("follow", "--target", pj.dir)
+        lines = out.splitlines()
+        assert code == 1 and lines[-1] == "undisposed findings: 4", out   # the last line and the exit code are what they were
+        assert long_text in out and "%s/0  run-1/T attempt 1: src/admin.html:274-285" % r["id"] in out, out   # whole, with its handle
+        assert "contradiction (2)" in lines and "stale (2)" in lines and lines.index("stale (2)") > lines.index("contradiction (2)"), out
+        assert "record: \u201cDrafts have preview and publish buttons.\u201d" in out and "tree: \u201cbits.push(open);\u201d" in out, out
+        assert "files: src/admin.html, lib/x.py" in out and "delegated" not in out, out
+        code, out = run("follow", "--path", "src/admin.html", "--target", pj.dir)
+        assert code == 1 and out.splitlines()[-1] == "undisposed findings: 2 naming src/admin.html (4 in all)", out
+        assert "contradiction (1)" in out and "stale (1)" in out and "second" not in out and "names neither" not in out, out
+        code, out = run("follow", "--path", os.path.join(pj.dir, "docs", "plan.md"), "--target", pj.dir)   # absolute: relative to the target
+        assert code == 1 and "second" in out and "undisposed findings: 1 naming docs/plan.md" in out, out
+        code, out = run("follow", "--path", "./a.py", "--target", pj.dir)
+        assert code == 0 and out.splitlines()[-1] == "undisposed findings: 0 naming a.py (4 in all)", out
+
+
 def test_an_observation_is_written_once_and_counted_after_that():
     """Measured on a site: 120 relations confirmed by delegation came back as 120 `delegated` observations in every review,
     58 KB of a 96 KB file, forever. An observation is a fact; once a review holds it in full, later reviews count it in one
@@ -569,24 +600,6 @@ def test_worker_record_names_the_model_and_keeps_the_transcript():
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
-if __name__ == "__main__":
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    failed = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_"):
-            try:
-                fn()
-                print("PASS", name)
-            except Skip as why:
-                print("SKIP", name, "--", why)
-            except (Exception, SystemExit) as err:   # a self-check that dies between tests lies by omission
-                failed += 1
-                print("FAIL", name, "--", "%s: %s" % (type(err).__name__, err))
-    print("all passed" if not failed else "%d failed" % failed)
-    sys.exit(1 if failed else 0)
-
-
 def test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring():
     """A refactoring's eyes accepted a split that lost eleven docstrings: the contract said tests and bytes, nothing about words.
     The packet now carries the request's domain, and for `refactor` the instructions say what else to reject."""
@@ -609,3 +622,21 @@ def test_the_eyes_leave_out_the_records_the_lock_declares():
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["a.py", ".alpha/x.json", "alpha.json", ".chongdae/run-1/tasks/T.json", "mangsang/relations/R-1.json"]}
         assert dwitbuk.verify_packet(req)["touched"] == ["a.py"], dwitbuk.verify_packet(req)["touched"]
+
+
+if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    failed = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_"):
+            try:
+                fn()
+                print("PASS", name)
+            except Skip as why:
+                print("SKIP", name, "--", why)
+            except (Exception, SystemExit) as err:   # a self-check that dies between tests lies by omission
+                failed += 1
+                print("FAIL", name, "--", "%s: %s" % (type(err).__name__, err))
+    print("all passed" if not failed else "%d failed" % failed)
+    sys.exit(1 if failed else 0)
