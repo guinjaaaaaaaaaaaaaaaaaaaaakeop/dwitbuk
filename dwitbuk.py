@@ -5,7 +5,8 @@
   dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY) [--quote QUOTE]
                                            the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree
   follow [--path FILE] [--target DIR]      the latest review's undisposed objections, whole and grouped by kind; --path: only those
-                                           whose `where` or `files` name FILE (ask before editing it)
+                                           whose `where` or `files` name FILE (ask before editing it); --brief (with --path): at most two
+                                           lines, `N open objection(s) on this file: <kind> — <text>` and `+N more`; nothing open: no output
   eyes request --out DIR [--since COMMIT] [--contract PATH] [--lens NAME]...
                                            late eyes: a packet (diff, run records, plan or contract, open findings) for a bounded read-only
                                            session; one packet per lens (contract | record | fresh), or one without
@@ -594,6 +595,18 @@ def cmd_follow(args):
         path = os.path.relpath(os.path.abspath(args.path), os.path.abspath(args.target)) if os.path.isabs(args.path) else os.path.normpath(args.path)
         path = path.replace(os.sep, "/")
         every, open_ = len(open_), [o for o in open_ if names_path(o[2], path)]
+    if args.brief:
+        # a reader's line at its first look at a file (jokbo `reads`): the first charge, cut, and a count — or nothing at all,
+        # so a reader is never told "0". Full outputs pasted into a context were ignored; the whole charge stays in plain `follow`
+        if not args.path:
+            raise SystemExit("--brief answers for one file: give --path")
+        if open_:
+            f = open_[0][2]
+            text = " ".join(str(f["text"]).split())
+            print("%d open objection(s) on this file: %s \u2014 %s" % (len(open_), f["kind"], text if len(text) <= 120 else text[:119].rstrip() + "\u2026"))
+            if len(open_) > 1:
+                print("+%d more (`dwitbuk follow --path %s`)" % (len(open_) - 1, path))
+        return 1 if open_ else 0
     # whole, grouped by kind: a disposal round reads the charge itself here, not in reviews/*.json
     kinds = {}
     for o in open_:
@@ -629,6 +642,7 @@ def main(argv=None):
             p.add_argument("--since", default=None)
         if name == "follow":
             p.add_argument("--path", default=None, help="only open objections whose `where` or `files` name this file (relative to --target)")
+            p.add_argument("--brief", action="store_true", help="with --path: at most two lines (the first charge cut at ~120 chars, then +N more); nothing open: no output, exit 0")
         if name == "dispose":
             p.add_argument("finding")
             p.add_argument("--as", dest="as_", choices=["accepted", "dismissed"], required=True)

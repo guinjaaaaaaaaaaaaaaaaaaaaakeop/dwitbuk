@@ -366,6 +366,40 @@ def test_follow_prints_each_charge_whole_grouped_by_kind_and_path_asks_what_conc
         assert code == 0 and out.splitlines()[-1] == "undisposed findings: 0 naming a.py (4 in all)", out
 
 
+def test_follow_brief_is_a_readers_line_and_says_nothing_when_nothing_is_open():
+    """jokbo gives the agent, at its first look at a file, one line per fact that bears on it; full outputs pasted into a
+    context were ignored, and `follow --path` printed even "undisposed findings: 0 naming ...". `--brief`: the first charge
+    cut near 120 characters with its kind and the count, `+N more` when there are more — and no output at all, exit 0,
+    when nothing is open on the file. The `note` read declares it in every manifest that carries `reads`."""
+    with Project() as pj:
+        long_text = "plan-vs-code: the draft card renders preview and open only; " + "the publish button appears on the detail screen. " * 3 + "END"
+        pj.reporter([{"kind": "contradiction", "where": "run-1/T attempt 1: src/admin.html:274-285", "text": long_text},
+                     {"kind": "stale", "where": "rel-7", "text": "the relation's anchor moved", "files": ["src/admin.html"]},
+                     {"kind": "stale", "where": "docs/plan.md#Admin", "text": "short\n  charge"},
+                     {"kind": "delegated", "where": "lib/b.py", "text": "an observation, never a charge"}])
+        run("review", "--since", pj.base, "--target", pj.dir)
+        code, out = run("follow", "--path", "src/admin.html", "--brief", "--target", pj.dir)
+        lines = out.splitlines()
+        assert code == 1 and len(lines) == 2, out
+        assert lines[0].startswith("2 open objection(s) on this file: contradiction \u2014 plan-vs-code: the draft card"), out
+        assert "END" not in out and lines[0].endswith("\u2026") and len(lines[0]) < 200, out
+        assert lines[1] == "+1 more (`dwitbuk follow --path src/admin.html`)", out
+        code, out = run("follow", "--path", "docs/plan.md", "--brief", "--target", pj.dir)
+        assert code == 1 and out == "1 open objection(s) on this file: stale \u2014 short charge\n", repr(out)   # one: no "+N more"
+        for quiet in ("a.py", "lib/b.py"):   # nothing named, or only an observation: nothing printed, not "0"
+            code, out = run("follow", "--path", quiet, "--brief", "--target", pj.dir)
+            assert code == 0 and out == "", (quiet, code, out)
+        code, out = run("follow", "--brief", "--target", pj.dir)
+        assert code != 0 and "--path" in out, out
+    with Project() as pj:   # no review at all: still nothing
+        code, out = run("follow", "--path", "a.py", "--brief", "--target", pj.dir)
+        assert code == 0 and out == "", out
+    for manifest in ("plugin.json", os.path.join(".claude-plugin", "plugin.json"), os.path.join(".codex-plugin", "plugin.json")):
+        reads = dwitbuk.load(os.path.join(HERE, manifest))["reads"]
+        assert reads["note"] == ["python3", "{plugin:dwitbuk}/dwitbuk.py", "follow", "--path", "{path}", "--brief", "--target", "{target}"], manifest
+        assert "--brief" not in reads["file"], manifest   # the whole read stays
+
+
 def test_an_observation_is_written_once_and_counted_after_that():
     """Measured on a site: 120 relations confirmed by delegation came back as 120 `delegated` observations in every review,
     58 KB of a 96 KB file, forever. An observation is a fact; once a review holds it in full, later reviews count it in one

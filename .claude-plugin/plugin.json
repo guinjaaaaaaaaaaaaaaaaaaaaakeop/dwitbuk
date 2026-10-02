@@ -1,6 +1,6 @@
 {
   "name": "dwitbuk",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "engines": {
     "python": ">=3.9"
   },
@@ -28,6 +28,16 @@
       "follow",
       "--path",
       "{path}",
+      "--target",
+      "{target}"
+    ],
+    "note": [
+      "python3",
+      "{plugin:dwitbuk}/dwitbuk.py",
+      "follow",
+      "--path",
+      "{path}",
+      "--brief",
       "--target",
       "{target}"
     ]

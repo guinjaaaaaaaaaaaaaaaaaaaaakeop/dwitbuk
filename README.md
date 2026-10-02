@@ -43,6 +43,11 @@ takes. A disposal round reads the charges here, not in `reviews/*.json`. The las
 the exit code is 1 while any is open. `follow --path FILE` (relative to `--target`) keeps only those whose `where` or
 `files` name that file as a whole token (`src/a.html:12`, `doc.md#Heading`) — what is open on a file before editing it
 
+`follow --path FILE --brief` is the same question as a reader's line: at most two lines — `N open objection(s) on this
+file: <kind> — <text>` (the first charge, cut near 120 characters) and `+N more` when there are more — and nothing at
+all (exit 0) when nothing is open on the file, so a reader is never told "0". This plugin declares it as the `note`
+read in `reads` (beside `file`, the whole `follow --path`), which jokbo runs at the agent's first look at a file
+
 ### as chongdae's `verifier`
 
 The same eyes before a gate: `eyes_worker.py --request <chongdae request> --response ...` reads the task's contract,
