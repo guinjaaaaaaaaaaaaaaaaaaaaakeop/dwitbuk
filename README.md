@@ -39,7 +39,8 @@ reviews. Disposing a quote-grounded finding (`contradiction`, `anomaly`) without
 
 The latest review's objections that nobody disposed of, each whole — `where`, the full text, `files` and the
 record/tree quotes when the finding has them — grouped by kind with a count, behind the `<review>/<n>` handle `dispose`
-takes. A disposal round reads the charges here, not in `reviews/*.json`. The last line stays `undisposed findings: N`;
+takes. A carried charge is listed under the kind of the charge it carries, with `raised in <review>/<n>` and when it
+was first seen. A disposal round reads the charges here, not in `reviews/*.json`. The last line stays `undisposed findings: N`;
 the exit code is 1 while any is open. `follow --path FILE` (relative to `--target`) keeps only those whose `where` or
 `files` name that file as a whole token (`src/a.html:12`, `doc.md#Heading`) — what is open on a file before editing it
 
@@ -109,14 +110,20 @@ request with `recheck` (the last reject's findings, the files changed since)
 is a re-verification: the eyes check that each finding is resolved and that what changed breaks no contract sentence,
 and do not re-read what they read at the last verdict for new findings.
 
-The latest review is the open set. A finding seen again — the same kind, `where` and text, the changing counts struck
-— inherits its disposition, from whichever earlier review answered it; an objection that stops recurring without one is
-carried as `undisposed` (naming the charge it carries). One charge is answered once: disposing any copy of it — the
-finding, the same finding in a later review, its `undisposed` carry — answers every copy in every review; an observation
-that stops recurring simply stops. An observation is written in full once: the reviews after it count it in one
-`unchanged` line naming the review that holds it (`seen-in`), and read that review to recognize it again — so a
-project's hundred delegated relations are on record once, not in every review (they were 58 KB of every 96 KB review
-on a site). A fact whose text changed is a new fact, written in full. `eyes request` puts its packet and the worker's
+The latest review is the open set: it holds every open charge, each once. A finding seen again — the same kind, `where`
+and text, the changing counts struck — inherits its disposition, from whichever earlier review answered it; an objection
+that stops recurring without one is carried as `undisposed`: the charge's own text, whole, with `carries` (the charge it
+is), `first-seen`, and `raised-in` (`<review>/<n>`, where it was raised in full) — a reference, not a new objection in
+words of its own. A carry carried again keeps its `raised-in`; a charge reported again while carried is the reporter's
+finding, one copy, with its first sighting. One charge is answered once: `dispose` writes the answer where the charge stands
+now (the latest review, whichever copy's handle it was given) and nowhere else; every other copy, in any review, is answered
+by it, and the earlier reviews stay as they were written. An observation that stops recurring simply stops. An
+observation is written in full once: the reviews after it count everything already on record in one `unchanged` line
+whose `seen-in` lists the reviews that hold it, and read those to recognize it again — so a project's hundred delegated
+relations are on record once, not in every review (they were 58 KB of every 96 KB review on a site), and what a review
+writes in full is what is new since the last one. A fact whose text changed is a new fact, written in full: a relation
+judged again is a new judgment. Older reviews (an `unchanged` line per holding review, `undisposed` text cut behind a
+prefix, the answer copied into every review, a `review-debt` line) are read as they are. `eyes request` puts its packet and the worker's
 transcript under `--out` (default `dwitbuk-eyes/`; a reviewer keeps them under `reviews/`).
 
 ## Kinds of finding
@@ -136,10 +143,10 @@ is carried with its answer and counted, not listed again),
 before or after a task found, with its quote), `verifier-reject` (a verdict that stopped an attempt, quoted from both
 sides), `delegation-stamp` (one reason stamped on 3+ judgments); mangsang's `stale`, `broken`, and from its `cq
 --findings` reporter `cq-failed`, `cq-unanswerable`, `cq-unquestioned`; hunsu's `drift`, `unreviewed`. dwitbuk's own:
-`undisposed`, `unchanged` (observations an earlier review holds in full, counted), `contradiction` and `anomaly` (late
-eyes), `no-reporters`, `reporter-failed`, and `review-debt` — when the previous review still holds undisposed
-objections, the new review says so in one observation naming that review and the count; no gate, no block. The charges
-themselves are carried one by one, so the debt line is a count of them, not one more thing to dispose.
+`undisposed` (an open charge carried, once, by reference), `unchanged` (observations earlier reviews hold in full,
+counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`, `reporter-failed`. `review-debt` (the
+previous review's open count) is no longer written: the carried charges are the debt, each once, and the line restated
+their count in every review; older reviews keep theirs, read as an observation.
 
 `eyes_worker.py --prompt-only --request <file> --response <file>` prints the exact prompt a call would send (the
 skill/eyes text, the request, the answer schema) and exits — for a session that dispatches its host's own subagent

@@ -20,12 +20,13 @@ A review is a record like a run: `reviews/<id>.json`, committed. dwitbuk finds; 
 (`dwitbuk/finding@1`: kind, where, text, files?) and the follow-through; products report on their own records in that type
 (chongdae `report`, mangsang `impact --findings`, hunsu `check --findings` …), declared as `reporters` in hunsu.json and locked.
 dwitbuk never reads a product's directory to compute findings. Kinds it adds itself:
-  undisposed    a finding from an earlier review with no disposition yet
-  unchanged     observations an earlier review holds in full (`seen-in`), counted here instead of written again
+  undisposed    an open charge from an earlier review that nothing reported again: carried once, whole, naming where it was
+                raised (`raised-in`) — the latest review holds every open charge, and one disposal answers it
+  unchanged     observations earlier reviews hold in full (`seen-in`, a list), counted in one line instead of written again
   contradiction late eyes: the record says one thing, the tree or the plan another — quoted from both sides
   anomaly       late eyes: what a stranger would question in the tree, with a tree quote only
   no-reporters  nothing is declared: the review is late eyes and dispositions only, and says so
-  review-debt   the previous review still holds undisposed objections; the debt re-accuses itself until they are disposed
+  review-debt   (older reviews only) the previous review's open count; no longer written — the carried charges are the debt
 
 Every finding carries a `layer`: an *objection* is a charge someone must answer (dispose); an *observation* is a fact of the
 record — `delegated`, or any kind a reporter itself marks `"layer": "observation"` — kept in the review but never disposal
@@ -42,8 +43,8 @@ import sys
 
 REVIEWS = "reviews"
 RUNS = ".chongdae"
-OBSERVATION_KINDS = {"delegated", "review-debt"}   # facts of the record, not charges: nobody should dispose them. The debt is
-# a count of charges the latest review already carries one by one: disposing it as well was the same charge answered twice
+OBSERVATION_KINDS = {"delegated", "review-debt"}   # facts of the record, not charges: nobody should dispose them. The debt (in
+# older reviews) was a count of charges the review already carried one by one: disposing it as well was the same charge answered twice
 
 
 def record_paths(target):
@@ -244,26 +245,22 @@ def cmd_review(args):
     for f in findings:
         f["layer"] = layer(f)   # observation: a fact of the record; objection: a charge to dispose. Fail closed on unknown kinds.
 
-    # review-debt: the previous review still holds undisposed objections — said once, as a fact; the charges themselves are
-    # carried below, each once. No gate, no block; the record just refuses to let the debt look settled.
-    if prior:
-        owed = sum(1 for f in prior[-1].get("findings", []) if layer(f) == "objection" and not f.get("disposition"))
-        if owed:
-            findings.append({"kind": "review-debt", "where": prior[-1]["id"], "layer": "observation",
-                             "text": "previous review %s still has %d undisposed objection(s), carried here" % (prior[-1]["id"], owed)})
-
-    # 5. the latest review is the open set. A finding seen again inherits its disposition; one that stopped recurring without
-    #    a disposition is carried as `undisposed` so it cannot vanish silently. Older reviews are history — and only
-    #    objections are debt: an observation that stops recurring simply stops; review-debt is recomputed each review.
+    # 5. the latest review is the open set. A finding seen again inherits its disposition; an open charge that stopped
+    #    recurring is carried into this review once, whole, as a reference to where it was raised (`raised-in`) — not re-raised
+    #    as a new objection with its own wording. Older reviews are history. Only objections are debt: an observation that stops
+    #    recurring simply stops. There is no debt line: the carried charges are the debt, each once (a `review-debt` line
+    #    restated their count in every review, guin-site 2026-10-05..06, and the same eight charges stood in five reviews).
     if prior:
         # a finding's identity is kind + where + its text: several stage-findings share one `where` (one quibble round), and
-        # with (kind, where) alone only one of them inherited its disposition — the others came back as new debt
-        last = {identity(f): f for f in prior[-1].get("findings", [])}
+        # with (kind, where) alone only one of them inherited its disposition — the others came back as new debt. Keyed by the
+        # charge, a carry and the reporter's own copy of the same charge, found again, are one finding, not two
+        last = {charge(f): (i, f) for i, f in enumerate(prior[-1].get("findings", []))}
         settled = answered(prior)
         carried = carried_observations(prior)
+        origin = raised(prior)
         kept, unchanged = [], {}
         for f in findings:
-            old = last.pop(identity(f), None)
+            i_old, old = last.pop(charge(f), (None, None))
             if old:
                 f["first-seen"] = old.get("first-seen", prior[-1]["id"])
                 if old.get("disposition"):
@@ -278,23 +275,25 @@ def cmd_review(args):
                 continue
             kept.append(f)
         findings[:] = kept
-        for rid_, kinds_ in sorted(unchanged.items()):
-            n = sum(kinds_.values())
-            findings.append({"kind": "unchanged", "layer": "observation", "where": rid_, "seen-in": rid_,
-                             "text": "%d observation(s) written in %s and unchanged since (%s)" % (n, rid_, ", ".join("%s %d" % kv for kv in sorted(kinds_.items())))})
-        for (kind, where, _), old in last.items():
-            if layer(old) != "objection" or kind == "review-debt":
+        if unchanged:
+            # one line for everything already on record, however many reviews hold it: one line per holding review was 12-15
+            # lines at the head of every review on a site, all of them the same as the review before's
+            by_kind = {}
+            for kinds_ in unchanged.values():
+                for k, n in kinds_.items():
+                    by_kind[k] = by_kind.get(k, 0) + n
+            held = sorted(unchanged)
+            findings.append({"kind": "unchanged", "layer": "observation", "where": "%d earlier review(s)" % len(held), "seen-in": held,
+                             "text": "%d observation(s) written in full in %d earlier review(s) and unchanged since (%s)"
+                                     % (sum(by_kind.values()), len(held), ", ".join("%s %d" % kv for kv in sorted(by_kind.items())))})
+        for i_old, old in last.values():
+            if layer(old) != "objection" or old.get("kind") == "review-debt":
                 continue
             if old.get("disposition") or charge(old) in settled:
                 continue
             if old.get("standing") and old.get("reporter") in heard:
                 continue   # its reporter reads the state as it is now, answered, and no longer sees it: the condition is gone
-            if kind != "undisposed":
-                findings.append({"kind": "undisposed", "where": where, "layer": "objection",
-                                 "text": "%s (first seen %s): %s" % (kind, old.get("first-seen", prior[-1]["id"]), old["text"][:80]),
-                                 "first-seen": old.get("first-seen", prior[-1]["id"]), "carries": list(identity(old))})
-            else:
-                findings.append(old)
+            findings.append(carry(old, "%s/%d" % (prior[-1]["id"], i_old), prior[-1]["id"], origin))
 
     import secrets, time
     rid = "review-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(2))   # sorts by time on one machine, still unique across machines
@@ -303,9 +302,16 @@ def cmd_review(args):
     save(os.path.join(target, REVIEWS, rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": base, "head": head, "findings": findings})
     obs = [(i, f) for i, f in enumerate(findings) if layer(f) == "observation"]
     answered_ = [(i, f) for i, f in enumerate(findings) if layer(f) == "objection" and f.get("disposition")]
+    carried_ = 0
     for i, f in enumerate(findings):
         if layer(f) == "objection" and not f.get("disposition"):
-            print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
+            if f.get("raised-in"):
+                carried_ += 1
+                print("  %-12s %d  %s — %s  (carried: raised in %s)" % (kind_of(f), i, f["where"], f["text"], f["raised-in"]))
+            else:
+                print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
+    if carried_:
+        print("carried from earlier reviews, each once: %d (not raised again; one disposal answers each)" % carried_)
     if answered_:
         # seen again, answered before: carried with its disposition — the record keeps it, the reader is not asked again
         print("already answered, carried with their disposition: %d (%s)" % (len(answered_), ", ".join(str(i) for i, _ in answered_)))
@@ -351,11 +357,58 @@ def carried_observations(prior):
         seen.add(r.get("id"))
         for f in r.get("findings", []):
             if f.get("kind") == "unchanged":
-                if f.get("seen-in") in by_id:
-                    queue.append(by_id[f["seen-in"]])
+                seen_in = f.get("seen-in")
+                queue.extend(by_id[x] for x in (seen_in if isinstance(seen_in, list) else [seen_in]) if x in by_id)
             elif layer(f) == "observation":
                 out.setdefault(identity(f), (f, r.get("id")))
     return out
+
+
+def raised(prior):
+    """{charge: (handle, finding)}: the latest review that holds each charge as raised — the reporter's or the eyes' own
+    finding, whole — not as a carry. A carry points there (`raised-in`), so its text is the charge's, never a re-wording."""
+    out = {}
+    for r in prior:
+        for i, f in enumerate(r.get("findings", [])):
+            if layer(f) == "objection" and f.get("kind") != "undisposed":
+                out[identity(f)] = ("%s/%d" % (r.get("id"), i), f)
+    return out
+
+
+CHARGE_KEYS = ("files", "record_quote", "tree_quote")
+
+
+def carry(old, handle, rid, origin):
+    """An open charge the previous review held and nothing reported again, carried into the new review once: its own text
+    whole (an `undisposed` line once cut it at 80 characters behind a prefix of its own — "no completed r"), the charge it
+    is (`carries`), when it was first seen and where it was raised. A carry already carried keeps all of that; one written
+    before `raised-in` existed is pointed at the charge as raised, and gets its whole text back from there."""
+    if old.get("kind") == "undisposed":
+        c = {k: v for k, v in old.items() if k != "disposition"}
+        if not c.get("raised-in") and tuple(c.get("carries") or ()) in origin:
+            c["raised-in"], src = origin[tuple(c["carries"])]
+            c["text"] = src["text"]
+            c.update({k: src[k] for k in CHARGE_KEYS if k in src})
+        return c
+    return {"kind": "undisposed", "layer": "objection", "where": old["where"], "text": old["text"],
+            **{k: old[k] for k in CHARGE_KEYS if k in old},
+            "carries": list(identity(old)), "first-seen": old.get("first-seen", rid), "raised-in": handle}
+
+
+def kind_of(f):
+    """The kind of charge a finding makes: a carry's is the kind of the charge it carries."""
+    return f["carries"][0] if f.get("kind") == "undisposed" and f.get("carries") else f.get("kind")
+
+
+def open_charges(target):
+    """(latest review id, [(index, finding)]) — the latest review's objections no disposal answers. A disposal is written
+    once, where the charge stood when it was answered; every other copy of that charge, in any review, is answered by it."""
+    rs = reviews(target)
+    if not rs:
+        return None, []
+    settled = answered(rs)
+    return rs[-1]["id"], [(i, f) for i, f in enumerate(rs[-1].get("findings", []))
+                          if layer(f) == "objection" and not f.get("disposition") and charge(f) not in settled]
 
 
 def lock_commit(target):
@@ -409,20 +462,22 @@ def cmd_dispose(args):
         disp["quote"] = args.quote
     elif f.get("kind") in ("contradiction", "anomaly") or f.get("record_quote") or f.get("tree_quote"):
         print("warning: this finding is grounded in quotes; a disposal that quotes nothing back is harder for the next reader to weigh (--quote QUOTE)")
-    f["disposition"] = disp
+    # one charge, one answer, written once: where the charge stands now — the latest review, which `follow` reads — or, when
+    # the latest does not hold it, the copy named. Every other copy, in every review, is answered by it (`answered`); copying
+    # the answer into each was "the same charge answered in 5 other place(s)" for one charge carried through five reviews
+    rs = reviews(args.target)
+    here_rid, here_i = rid, int(idx)
+    if rs and rs[-1]["id"] != rid:
+        j = next((j for j, g in enumerate(rs[-1].get("findings", [])) if layer(g) == "objection" and charge(g) == charge(f)), None)
+        if j is not None:
+            here_rid, here_i = rs[-1]["id"], j
+            r, path = rs[-1], os.path.join(args.target, REVIEWS, rs[-1]["id"] + ".json")
+    r["findings"][here_i]["disposition"] = disp
     save(path, r)
-    # the same charge in other reviews — seen again, or carried as `undisposed` — is answered by this disposal, not owed again
-    same = 0
-    for other in reviews(args.target):   # read again from disk: this review included, with the disposal just saved
-        hit = False
-        for g in other.get("findings", []):
-            if not g.get("disposition") and layer(g) == "objection" and charge(g) == charge(f):
-                g["disposition"] = dict(disp)   # the same answer, copied (a `via` pointer was written here and read by nothing)
-                hit, same = True, same + 1
-        if hit:
-            save(os.path.join(args.target, REVIEWS, other["id"] + ".json"), other)
-    print("disposed %s as %s%s%s" % (args.finding, args.as_, " (delegated)" if args.delegated else "",
-                                     " — the same charge answered in %d other place(s)" % same if same else ""))
+    first = r["findings"][here_i].get("first-seen")
+    print("disposed %s as %s%s%s%s" % (args.finding, args.as_, " (delegated)" if args.delegated else "",
+                                       " — recorded at %s/%d, where the charge stands now" % (here_rid, here_i) if (here_rid, here_i) != (rid, int(idx)) else "",
+                                       " — one answer for the charge first seen in %s" % first if first and first != here_rid else ""))
     return 0
 
 
@@ -527,7 +582,7 @@ def cmd_eyes(args):
                           "non-claims": state.get("non-claims", [])})
         plan_path = os.path.join(target, args.contract) if args.contract else os.path.join(target, "plan", "PLAN.md")
         plan_text = io.open(plan_path, encoding="utf-8").read() if os.path.exists(plan_path) else ""
-        open_ = [{"kind": f["kind"], "where": f["where"], "text": f["text"]} for f in (prior[-1]["findings"] if prior else []) if not f.get("disposition")]
+        open_ = [{"kind": kind_of(f), "where": f["where"], "text": f["text"]} for _, f in open_charges(target)[1]]
         packet = {"artifact-type": "dwitbuk/eyes-request@1", "target": os.path.abspath(target).replace(os.sep, "/"), "since": base, "head": head,
                   "diff": diff[:80000], "diff_truncated": len(diff) > 80000, "diff_leaves_out": left_out, "new_files": new_files,
                   "runs": runs_, "plan": plan_text[:40000], "open_findings": open_,
@@ -588,8 +643,8 @@ def names_path(f, path):
 
 
 def cmd_follow(args):
-    latest = reviews(args.target)[-1:]   # the open set is the latest review; observations are facts, not debt — not listed, not counted
-    open_ = [(r["id"], i, f) for r in latest for i, f in enumerate(r.get("findings", [])) if not f.get("disposition") and layer(f) == "objection"]
+    rid, open_ = open_charges(args.target)   # the open set is the latest review; observations are facts, not debt — not listed, not counted
+    open_ = [(rid, i, f) for i, f in open_]
     path = None
     if args.path:
         path = os.path.relpath(os.path.abspath(args.path), os.path.abspath(args.target)) if os.path.isabs(args.path) else os.path.normpath(args.path)
@@ -603,18 +658,18 @@ def cmd_follow(args):
         if open_:
             f = open_[0][2]
             text = " ".join(str(f["text"]).split())
-            print("%d open objection(s) on this file: %s \u2014 %s" % (len(open_), f["kind"], text if len(text) <= 120 else text[:119].rstrip() + "\u2026"))
+            print("%d open objection(s) on this file: %s \u2014 %s" % (len(open_), kind_of(f), text if len(text) <= 120 else text[:119].rstrip() + "\u2026"))
             if len(open_) > 1:
                 print("+%d more (`dwitbuk follow --path %s`)" % (len(open_) - 1, path))
         return 1 if open_ else 0
     # whole, grouped by kind: a disposal round reads the charge itself here, not in reviews/*.json
     kinds = {}
     for o in open_:
-        kinds.setdefault(o[2]["kind"], []).append(o)
+        kinds.setdefault(kind_of(o[2]), []).append(o)   # a carry under the kind of the charge it carries
     for kind, group in kinds.items():
         print("%s (%d)" % (kind, len(group)))
         for rid, i, f in group:
-            print("  open  %s/%d  %s" % (rid, i, f["where"]))
+            print("  open  %s/%d  %s" % (rid, i, f["where"]) + ("  (carried: raised in %s, first seen %s)" % (f["raised-in"], f.get("first-seen")) if f.get("raised-in") else ""))
             print("        %s" % f["text"])
             if f.get("files"):
                 print("        files: %s" % ", ".join(f["files"]))

@@ -15,12 +15,10 @@ import dwitbuk  # noqa: E402
 
 
 def open_objections(cwd):
-    """(review id, [findings]) of the latest review's undisposed objections; (None, []) when there is nothing to say."""
-    latest = dwitbuk.reviews(cwd)[-1:]
-    if not latest:
-        return None, []
-    r = latest[0]
-    return r.get("id"), [f for f in r.get("findings", []) if not f.get("disposition") and dwitbuk.layer(f) == "objection"]
+    """(review id, [findings]) of the latest review's objections no disposal answers — the same set `follow` lists; (None, [])
+    when there is nothing to say."""
+    rid, open_ = dwitbuk.open_charges(cwd)
+    return rid, [f for _, f in open_]
 
 
 def main():
@@ -39,7 +37,8 @@ def main():
         return 0
     kinds = {}
     for f in open_:
-        kinds[f.get("kind", "?")] = kinds.get(f.get("kind", "?"), 0) + 1
+        k = dwitbuk.kind_of(f) or "?"   # a carried charge counts under the kind it is
+        kinds[k] = kinds.get(k, 0) + 1
     engine = os.path.join(os.path.dirname(HERE), "dwitbuk.py").replace(os.sep, "/")
     msg = ("dwitbuk: %d undisposed objection(s) in %s (%s) — `python3 \"%s\" follow --target .` lists them; `dispose <review>/<n> --as accepted|dismissed --why ... --by NAME` answers one."
            % (len(open_), rid, ", ".join("%s %d" % kv for kv in sorted(kinds.items())), engine))

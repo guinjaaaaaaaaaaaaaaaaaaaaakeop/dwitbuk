@@ -176,14 +176,15 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         assert code == 0, out
         r = pj.latest()
         k = kinds(r)
-        assert k == {"outside-run": 1, "unattributed": 1, "delegated": 2, "non-claim": 3, "unreviewed": 1, "reporter-failed": 1, "undisposed": 1, "review-debt": 1}, k
+        assert k == {"outside-run": 1, "unattributed": 1, "delegated": 2, "non-claim": 3, "unreviewed": 1, "reporter-failed": 1, "undisposed": 1}, k   # no debt line: the carry is the debt
         outside = next(f for f in r["findings"] if f["kind"] == "outside-run")
         assert "b.py" in outside["where"] and "hunsu.json" in outside["where"] and "files" not in outside, outside   # grouped by directory; the list is not saved
         assert "source" not in next(f for f in r["findings"] if f["kind"] == "unreviewed") and "reporters" not in r   # written once, read by nothing
         assert "gave no dwitbuk/findings@1" in next(f["text"] for f in r["findings"] if f["kind"] == "reporter-failed")
         nc = [f["text"] for f in r["findings"] if f["kind"] == "non-claim"]
         assert sum("x untested  [x2]" in t for t in nc) == 2 and any(t.startswith("y untested") for t in nc), nc   # one per run; the repeat shows as [x2]
-        assert next(f for f in r["findings"] if f["kind"] == "undisposed")["text"].startswith("no-reporters")
+        carry = next(f for f in r["findings"] if f["kind"] == "undisposed")
+        assert carry["carries"][0] == "no-reporters" and carry["text"].startswith("no reporters declared") and carry["raised-in"].endswith("/0"), carry   # whole, pointing back
 
 
 def load_review(pj, rid=None):
@@ -234,20 +235,17 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         assert second["id"] != first["id"] and second["since"] == first["head"]
         by_kind = {f["kind"]: f for f in second["findings"]}
         assert by_kind["unattributed"]["first-seen"] == first["id"]
-        assert "delegated" not in by_kind and by_kind["unchanged"]["layer"] == "observation" and by_kind["unchanged"]["seen-in"] == first["id"], by_kind.keys()   # the observation is on record in the first review; counted here
+        assert "delegated" not in by_kind and by_kind["unchanged"]["layer"] == "observation" and by_kind["unchanged"]["seen-in"] == [first["id"]], by_kind.keys()   # the observation is on record in the first review; counted here
         assert "outside-run" not in by_kind and "undisposed" not in by_kind, by_kind.keys()
-        # the previous review still held an open objection (unattributed): the new review says so, as a fact — the charge
-        # itself is the unattributed finding it carries; the debt is not a second thing to dispose
-        assert by_kind["review-debt"]["layer"] == "observation" and first["id"] in by_kind["review-debt"]["text"] and "1 undisposed objection" in by_kind["review-debt"]["text"], by_kind["review-debt"]
+        # the previous review still held an open objection (unattributed): the charge itself is here, once — no debt line restating it
+        assert "review-debt" not in by_kind, by_kind.keys()
         code, out = run("follow", "--target", pj.dir)
         assert code == 1 and "undisposed findings: 1" in out, out   # the unattributed charge, once
-        # the third review: the debt is recomputed (it names the second review now), never carried as undisposed
+        # the third review: the charge is still reported, so it is the reporter's own finding again — one copy, no carry beside it
         time.sleep(1.1)
         run("review", "--target", pj.dir)
         third = pj.latest()
-        assert sum(f["kind"] == "undisposed" for f in third["findings"]) == 0, [f for f in third["findings"] if f["kind"] == "undisposed"]
-        debt = [f for f in third["findings"] if f["kind"] == "review-debt"]
-        assert len(debt) == 1 and second["id"] in debt[0]["text"] and "1 undisposed objection" in debt[0]["text"], debt
+        assert sum(f["kind"] == "undisposed" for f in third["findings"]) == 0 and "review-debt" not in kinds(third), third["findings"]
 
 
 def test_one_charge_is_disposed_once_across_consecutive_reviews():
@@ -266,14 +264,13 @@ def test_one_charge_is_disposed_once_across_consecutive_reviews():
         third = pj.latest()
         carried = [i for i, f in enumerate(third["findings"]) if f["kind"] == "undisposed"]
         assert len(carried) == 2 and all(third["findings"][i]["layer"] == "objection" for i in carried), third["findings"]
-        assert all(f["layer"] == "observation" for f in third["findings"] if f["kind"] == "review-debt")
+        assert all(third["findings"][i]["raised-in"].startswith(second["id"] + "/") for i in carried), third["findings"]
+        before = {rid: load_review(pj, rid) for rid in (first["id"], second["id"])}
         for i in carried:
             code, out = run("dispose", "%s/%d" % (third["id"], i), "--as", "accepted", "--why", "known", "--by", "kim", "--target", pj.dir)
-            assert code == 0 and "answered in 2 other place(s)" in out, out   # the first and second reviews' copies
-        for rid in (first["id"], second["id"]):
-            r = load_review(pj, rid)
-            open_ = [f for f in r["findings"] if f.get("layer") == "objection" and not f.get("disposition")]
-            assert not open_, (rid, open_)
+            assert code == 0 and "other place" not in out and "one answer for the charge first seen in %s" % first["id"] in out, out
+        for rid, r in before.items():
+            assert load_review(pj, rid) == r, "an earlier review is history: the answer is written once, not copied into it"
         assert run("follow", "--target", pj.dir)[0] == 0
         time.sleep(1.1); run("review", "--target", pj.dir)
         fourth = pj.latest()
@@ -415,19 +412,115 @@ def test_an_observation_is_written_once_and_counted_after_that():
         assert kinds(first) == {"delegated": 2, "left-open": 1}, kinds(first)
         time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
         second = pj.latest()
-        assert kinds(second) == {"unchanged": 1, "left-open": 1, "review-debt": 1}, kinds(second)
+        assert kinds(second) == {"unchanged": 1, "left-open": 1}, kinds(second)
         u = next(f for f in second["findings"] if f["kind"] == "unchanged")
-        assert u["layer"] == "observation" and u["seen-in"] == first["id"] and "count" not in u and u["text"].startswith("2 observation(s)") and "delegated 2" in u["text"], u
+        assert u["layer"] == "observation" and u["seen-in"] == [first["id"]] and "count" not in u and u["text"].startswith("2 observation(s)") and "delegated 2" in u["text"], u
         assert next(f for f in second["findings"] if f["kind"] == "left-open")["first-seen"] == first["id"]
         time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
         third = pj.latest()   # two reviews on: still one line, still pointing at the review that holds them
-        assert kinds(third)["unchanged"] == 1 and next(f for f in third["findings"] if f["kind"] == "unchanged")["seen-in"] == first["id"], third["findings"]
+        assert kinds(third)["unchanged"] == 1 and next(f for f in third["findings"] if f["kind"] == "unchanged")["seen-in"] == [first["id"]], third["findings"]
         # one fact changes: it is written in full again; the other stays counted
         pj.reporter([dict(obs[0], text="re-confirmed by delegation: plan-09"), obs[1], {"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"}])
         time.sleep(1.1); assert run("review", "--target", pj.dir)[0] == 0
         fourth = pj.latest()
         assert kinds(fourth)["delegated"] == 1 and next(f for f in fourth["findings"] if f["kind"] == "unchanged")["text"].startswith("1 observation(s)"), kinds(fourth)
         assert run("follow", "--target", pj.dir)[0] == 1, "the objection is still debt; observations never were"
+
+
+def site_reviews(pj):
+    """Reviews as 1.11.0 wrote them on guin-site (2026-10-05..06), trimmed: the first raises eight charges (four outside-run
+    files, four runs' "no check decides this task") and three delegated relations; each of the four after it re-raises the
+    eight as `undisposed` — its own wording, cut at 80 characters — with a `review-debt` line, one `unchanged` line per review
+    that holds observations, and two delegated judgments of its own."""
+    rids = ["review-20261005-01145%d-36b%d" % (n, n) for n in range(5)]
+    since = "5fd9bb07ce7612d50a7a582a6f61fbd5c50b1f20"
+    charges = [{"kind": "outside-run", "where": w, "layer": "objection", "first-seen": rids[0],
+                "text": "1 file(s) changed since %s; no completed run recorded touching them" % since}
+               for w in ("package.json", "scripts/setup-backup.mjs", "worker/backup.mjs", "tests/backup_harness.mjs, test_backup.py")]
+    charges += [{"kind": "non-claim", "where": "run-20261004-1%d4130-9035" % n, "layer": "objection", "first-seen": rids[0],
+                 "text": "no check decides this task  [x2]"} for n in range(4)]
+    held = {rids[0]: [{"kind": "delegated", "where": "R-%d site.css realizes concept:page-regions" % n, "layer": "observation",
+                       "text": "re-confirmed by delegation: judge kim: still the same region (%d)" % n} for n in range(3)]}
+    for k, rid in enumerate(rids):
+        findings = [dict(f) for f in held.get(rid, [])]
+        if k == 0:
+            findings += [dict(c) for c in charges]
+        else:
+            held[rid] = [{"kind": "delegated", "where": "R-%d%d test.py realizes concept:feed" % (k, n), "layer": "observation",
+                          "text": "re-confirmed by delegation: judge kim: review %d, judgment %d" % (k, n)} for n in range(2)]
+            findings = [dict(f) for f in held[rid]]
+            findings.append({"kind": "review-debt", "where": rids[k - 1], "layer": "observation",
+                             "text": "previous review %s still has 8 undisposed objection(s), carried here" % rids[k - 1]})
+            for h in rids[:k]:
+                findings.append({"kind": "unchanged", "layer": "observation", "where": h, "seen-in": h,
+                                 "text": "%d observation(s) written in %s and unchanged since (delegated %d)" % (len(held[h]), h, len(held[h]))})
+            findings += [{"kind": "undisposed", "where": c["where"], "layer": "objection",
+                          "text": "%s (first seen %s): %s" % (c["kind"], rids[0], c["text"][:80]), "first-seen": rids[0],
+                          "carries": list(dwitbuk.identity(c))} for c in charges]
+        write(os.path.join(pj.dir, "reviews", rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": pj.base, "head": pj.base, "findings": findings})
+    return rids, charges, [f for fs in held.values() for f in fs]
+
+
+def test_a_carried_charge_stands_once_and_one_disposal_answers_it_once():
+    """guin-site, 2026-10-05..06: eight charges stood in five reviews in a row — raised, then re-raised in each as `undisposed`
+    in a wording of their own cut at 80 characters ("no completed r"), with a `review-debt` line restating the count and one
+    `unchanged` line per holding review (12-15 lines at the head of each); disposing one copied the answer into every review
+    ("the same charge answered in 5 other place(s)"), and the eight were closed at last by one blanket "as proposed". Now: the
+    latest review holds each open charge once, whole, pointing at where it was raised; the observations already on record are
+    one counted line; a disposal is written once; the earlier reviews stay as they were, and still read."""
+    import time
+    with Project() as pj:
+        rids, charges, held = site_reviews(pj)
+        before = {rid: open(os.path.join(pj.dir, "reviews", rid + ".json"), encoding="utf-8").read() for rid in rids}
+        # the reporter reads the relations again: every judgment already on record, and two new ones since the last review
+        new = [{"kind": "delegated", "where": "R-9%d site.css realizes concept:share" % n, "text": "re-confirmed by delegation: judge kim: new %d" % n} for n in range(2)]
+        pj.reporter([{k: f[k] for k in ("kind", "where", "text")} for f in held] + new)
+        code, out = run("review", "--target", pj.dir)
+        assert code == 0, out
+        r = pj.latest()
+        assert kinds(r) == {"delegated": 2, "unchanged": 1, "undisposed": 8}, kinds(r)   # no review-debt; one unchanged line
+        u = next(f for f in r["findings"] if f["kind"] == "unchanged")
+        assert u["seen-in"] == rids and u["text"].startswith("11 observation(s) written in full in 5 earlier review(s)") and "delegated 11" in u["text"], u
+        assert {f["where"] for f in r["findings"] if f["kind"] == "delegated"} == {f["where"] for f in new}, "only what is new is written"
+        carried = [(i, f) for i, f in enumerate(r["findings"]) if f["kind"] == "undisposed"]
+        first_review = load_review(pj, rids[0])
+        for i, f in carried:
+            src_rid, _, src_i = f["raised-in"].rpartition("/")
+            src = first_review["findings"][int(src_i)]
+            assert src_rid == rids[0] and dwitbuk.identity(src) == tuple(f["carries"]), f   # referenced, not re-raised
+            assert f["text"] == src["text"] and "(first seen" not in f["text"] and f["first-seen"] == rids[0], f   # whole
+        assert "carried from earlier reviews, each once: 8" in out, out
+        code, out = run("follow", "--target", pj.dir)
+        lines = out.splitlines()
+        assert code == 1 and lines[-1] == "undisposed findings: 8" and "outside-run (4)" in lines and "non-claim (4)" in lines, out
+        assert out.count("no completed run recorded touching them") == 4 and "no completed r\n" not in out and "raised in %s/" % rids[0] in out, out
+        # one disposal, written once — the earlier reviews are not touched
+        i0 = carried[0][0]
+        code, out = run("dispose", "%s/%d" % (r["id"], i0), "--as", "dismissed", "--why", "adopted by hand in backup-setup", "--by", "kim", "--target", pj.dir)
+        assert code == 0 and "other place" not in out and "first seen in %s" % rids[0] in out, out
+        assert all(open(os.path.join(pj.dir, "reviews", rid + ".json"), encoding="utf-8").read() == before[rid] for rid in rids), "history stays as written"
+        assert run("follow", "--target", pj.dir)[1].splitlines()[-1] == "undisposed findings: 7"
+        # an earlier review's handle still works: the answer goes where the charge stands now, once
+        old_i = next(i for i, f in enumerate(load_review(pj, rids[3])["findings"]) if f["kind"] == "undisposed" and f["where"] == carried[1][1]["where"])
+        code, out = run("dispose", "%s/%d" % (rids[3], old_i), "--as", "accepted", "--why", "known", "--by", "kim", "--target", pj.dir)
+        assert code == 0 and "recorded at %s/%d" % (r["id"], carried[1][0]) in out, out
+        assert open(os.path.join(pj.dir, "reviews", rids[3] + ".json"), encoding="utf-8").read() == before[rids[3]]
+        assert pj.latest()["findings"][carried[1][0]]["disposition"]["why"] == "known"
+        # the next review: the six still open, carried once each, still pointing at the same raising; nothing restated
+        time.sleep(1.1); code, out = run("review", "--target", pj.dir)
+        nxt = pj.latest()
+        again = [f for f in nxt["findings"] if f["kind"] == "undisposed"]
+        assert len(again) == 6 and {f["raised-in"] for f in again} <= {f["raised-in"] for _, f in carried[2:]}, again
+        assert kinds(nxt) == {"unchanged": 1, "undisposed": 6}, kinds(nxt)
+        assert next(f for f in nxt["findings"] if f["kind"] == "unchanged")["text"].startswith("13 observation(s) written in full in 6 earlier review(s)")
+        # a charge reported again while carried is one finding — the reporter's — not the carry beside it
+        pj.reporter([{k: charges[4][k] for k in ("kind", "where", "text")}])
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        latest = pj.latest()
+        same = [f for f in latest["findings"] if dwitbuk.charge(f) == dwitbuk.identity(charges[4])]
+        assert len(same) == 1 and same[0]["kind"] == "non-claim" and same[0]["first-seen"] == rids[0], same
+        # the answers stand where they were written and are inherited: neither disposed charge comes back
+        assert sum(1 for _, f in dwitbuk.open_charges(pj.dir)[1]) == 6
 
 
 def test_review_debt_does_not_fire_when_the_previous_review_is_clean():
@@ -486,8 +579,8 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         assert "0 finding(s) added" in out, out
         import time; time.sleep(1.1)
         run("review", "--target", pj.dir)
-        assert any(f["kind"] == "undisposed" and f["text"].startswith("contradiction") for f in pj.latest()["findings"])
-        assert any(f["kind"] == "undisposed" and f["text"].startswith("anomaly") for f in pj.latest()["findings"])
+        assert any(f["kind"] == "undisposed" and f["carries"][0] == "contradiction" and "record: " in f["text"] for f in pj.latest()["findings"])
+        assert any(f["kind"] == "undisposed" and f["carries"][0] == "anomaly" and "bare constant" in f["text"] for f in pj.latest()["findings"])
 
 
 def test_a_standing_finding_that_stops_recurring_is_gone_not_owed():
@@ -504,14 +597,14 @@ def test_a_standing_finding_that_stops_recurring_is_gone_not_owed():
         pj.reporter([], "chongdae")
         time.sleep(1.1); run("review", "--target", pj.dir)
         carried = [f for f in pj.latest()["findings"] if f["kind"] == "undisposed"]
-        assert len(carried) == 1 and "unattributed" in carried[0]["text"], carried   # the drift is gone; the event is still owed
+        assert len(carried) == 1 and carried[0]["carries"][0] == "unattributed", carried   # the drift is gone; the event is still owed
         # a standing reporter that failed this time: nothing is known to be gone
         pj.reporter([drift], "env", standing=True)
         time.sleep(1.1); run("review", "--target", pj.dir)
         with io.open(os.path.join(pj.dir, "env.py"), "w", encoding="utf-8") as fh:
             fh.write("raise SystemExit(3)\n")
         time.sleep(1.1); run("review", "--target", pj.dir)
-        assert any(f["kind"] == "undisposed" and "drift" in f["text"] for f in pj.latest()["findings"]), pj.latest()["findings"]
+        assert any(f["kind"] == "undisposed" and f["carries"][0] == "drift" for f in pj.latest()["findings"]), pj.latest()["findings"]
 
 
 def test_one_grounding_rule_for_eyes_findings_an_anomaly_stands_on_the_tree():
