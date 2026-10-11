@@ -56,7 +56,10 @@ touched files and the builder's report and answers `dwitbuk/review@1` — accept
 `worker` (host, model, turns, cost) with the whole stream kept as `<response>.transcript.jsonl`: an accept with no
 findings is auditable (what did the eyes read?), not a bare word. Declared as the `eyes` role in this plugin's
 plugin.json (`roles`), so a project writes `"verifier": "dwitbuk:eyes"` in hunsu.json and the lock carries the argv;
-or in the plan's `providers.verifier`. The builder never places it
+or in the plan's `providers.verifier`. The builder never places it. The packet tells the eyes to read the hands'
+own non-claims (`built.non-claims`, and the tests writer's `tests_non_claims`) against the code — an accept is recorded as
+having read them, and they are not charged again — and, when chongdae ran commands itself (`take`/`retry --checked`),
+that `checked` is evidence chongdae observed, unlike a claim in `built.verified`
 
 ### as chongdae's `reviewer`
 
@@ -167,7 +170,9 @@ worker never ran.
 - The engine reads records and git, never code for meaning. Meaning is read by late eyes — a fresh session with
   Read/Grep/Glob only, a fixed answer schema, and the rule that a finding without a quote from each side is dropped on
   consume. The reader is a model on the person's own host account.
-- "Same kind of non-claim" is the first clause of the sentence, not a judgment.
+- "Same kind of non-claim" is the first clause of the sentence, not a judgment — except a provider's own (`(provider) …`),
+  kept whole: it leads with the contract sentence and says the gap after the dash, and cut there it read as a bare quote. A
+  disposal written for the cut form (before 1.13.0) answers the whole sentence.
 
 - `eyes_worker.py` starts its host session through `hostcall.py` — one host call for every worker of this family (hunsu's judge, mangsang's judge, dwitbuk's eyes,
   hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The umbrella checkout's `tools/same-file.py` says when the copies drift.

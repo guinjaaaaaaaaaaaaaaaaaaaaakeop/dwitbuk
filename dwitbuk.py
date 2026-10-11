@@ -220,7 +220,11 @@ def cmd_review(args):
             for p in f["files"]:
                 by_dir.setdefault(os.path.dirname(p) or ".", []).append(os.path.basename(p))
         elif f["kind"] == "non-claim" and not str(f["where"]).startswith("settings."):
-            key = re.sub(r"^\S+(?: \([^)]*\))?: ", "", f["text"]).split(";")[0].split(" — ")[0]   # the first clause, whole — a cut sentence is a different sentence
+            key = re.sub(r"^\S+(?: \([^)]*\))?: ", "", f["text"])
+            # the first clause, whole — a cut sentence is a different sentence. Not a provider's own: it leads with the contract
+            # sentence it could not decide and says why after the dash, and cut there it read as a bare quote (36 such charges
+            # in one guin-site review, the gap they named gone); only the "— N task(s): …" a reporter appends is dropped
+            key = re.sub(r" — \d+ task\(s\): .*$", "", key) if key.startswith("(provider) ") else key.split(";")[0].split(" — ")[0]
             groups.setdefault(key, {}).setdefault(f["where"], []).append(f)
         else:
             if f["kind"] == "non-claim":
@@ -260,13 +264,13 @@ def cmd_review(args):
         origin = raised(prior)
         kept, unchanged = [], {}
         for f in findings:
-            i_old, old = last.pop(charge(f), (None, None))
+            i_old, old = last.pop(charge(f), None) or last.pop(cut_charge(f), (None, None))
             if old:
                 f["first-seen"] = old.get("first-seen", prior[-1]["id"])
                 if old.get("disposition"):
                     f["disposition"] = old["disposition"]
-            if not f.get("disposition") and charge(f) in settled:
-                f["disposition"] = settled[charge(f)]   # answered in any earlier review, not only the last: one charge, one answer
+            if not f.get("disposition") and (charge(f) in settled or cut_charge(f) in settled):
+                f["disposition"] = settled.get(charge(f)) or settled[cut_charge(f)]   # answered in any earlier review, not only the last: one charge, one answer
             # an observation is a fact of the record; written in full once, it is counted after that, with the review that
             # holds it — a site's 120 relations confirmed by delegation were 58 KB of every review, forever
             written_in = prior[-1]["id"] if old else carried.get(identity(f), (None, None))[1]
@@ -430,6 +434,15 @@ def charge(f):
     return tuple(f["carries"]) if f.get("kind") == "undisposed" and f.get("carries") else identity(f)
 
 
+def cut_charge(f):
+    """The charge a provider's non-claim made before 1.13.0, when grouping cut it at ` — ` to the bare quote it leads with:
+    a disposal written then answers the whole sentence now. None for any other finding."""
+    kind, where, text = charge(f) if f.get("kind") != "undisposed" else (None, None, "")
+    if kind != "non-claim" or not text.startswith("(provider) ") or " — " not in text:
+        return None
+    return (kind, where, text.split(";")[0].split(" — ")[0].strip())
+
+
 def answered(prior):
     """{charge: disposition} over every earlier review, the latest answer winning."""
     out = {}
@@ -527,12 +540,23 @@ def verify_packet(request):
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
             **({"excluded": excluded, "excluded_diff": excluded_diff[:40000]} if excluded else {}),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
+            **({"tests_non_claims": request["tests_non_claims"]} if request.get("tests_non_claims") else {}),
+            **({"checked": request["checked"]} if request.get("checked") else {}),
             **({"recheck": request["recheck"]} if request.get("recheck") else {}),
             "instructions": ("You are the verifier of one slice, before its gate. The checks passed; that is a premise, not a verdict. Read the contract "
                              "sections against the diff (Read the touched files and the tests under target when the diff is not enough). "
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
                              "decided by the check cited (a test that does not exercise the sentence, a key that selects nothing). "
                              "`touched` is what the builder changed; `touched_since` changed after it answered (a person's plan edits, say) and is not the builder's — do not hold the builder's report to it. "
+                             "`built.non-claims` "
+                             + ("(and `tests_non_claims`, what the writer of the protected tests says they do not decide) are the hands' own "
+                                if request.get("tests_non_claims") else "are the builder's own ")
+                             + "list of what they did not check: read the code at each — a contract sentence a non-claim leaves undecided and the code "
+                             "contradicts is a finding. Your accept is recorded as having read them; they are not charged again after it. "
+                             + ("`checked` lists commands chongdae itself ran on the tree and saw exit 0 (`tail` is their output's end; `changed_since` "
+                                "the files changed after) — evidence chongdae observed, unlike a claim in `built.verified`: a check it shows passing "
+                                "is not a finding that it fails, unless what changed since could break it; whether it decides the sentence is still "
+                                "yours to judge. " if request.get("checked") else "")
                              + ("`excluded` lists files under the products' record paths that differ from HEAD — the environment (hunsu's manifest, lock and "
                                 "judgments) and records such as mangsang/ — which are never in `touched`, by rule, not by omission: a change there is not an "
                                 "undeclared edit and no record-vs-tree finding. When the brief or contract says the task's work is that change (update a plugin, "

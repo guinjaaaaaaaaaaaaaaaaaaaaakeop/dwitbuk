@@ -646,6 +646,62 @@ def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():
         assert "This is a re-verification" in p["instructions"] and "do not read it again for new findings" in p["instructions"]
 
 
+def test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself():
+    """guin-site, 10-10: the providers' non-claims reached the verifier only as `built` with nothing saying to read them, and
+    the session's own full test run (exit 0) after a take reached it not at all. The packet carries the tests writer's
+    non-claims and chongdae's checked commands, and says what each is."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "run": "run-1", "task": "S1", "target": pj.dir, "contract": {},
+               "touched": ["a.py"], "built": {"summary": "s", "verified": [], "non-claims": ["nothing deployed"]}}
+        p = dwitbuk.verify_packet(req)
+        assert "`built.non-claims`" in p["instructions"] and "not charged again" in p["instructions"]
+        assert "tests_non_claims" not in p and "checked" not in p and "chongdae itself ran" not in p["instructions"]
+        assert "tests_non_claims" not in p["instructions"] and "are the builder's own" in p["instructions"]
+        ck = [{"command": "python3 tests/run.py --all", "exit": 0, "tail": ["write 135 OK"], "changed_since": []}]
+        p = dwitbuk.verify_packet(dict(req, tests_non_claims={"T": ['"the list is sorted" — three items only']}, checked=ck))
+        assert p["tests_non_claims"] == {"T": ['"the list is sorted" — three items only']} and p["checked"] == ck
+        assert "chongdae itself ran on the tree and saw exit 0" in p["instructions"] and "`tests_non_claims`" in p["instructions"]
+        # a passing check is not a finding that it fails — not a pass on whether it decides the sentence
+        assert "is not a finding that it fails" in p["instructions"] and "whether it decides the sentence is still yours to judge" in p["instructions"]
+
+
+def test_a_providers_non_claim_keeps_its_reason_and_chongdaes_own_repeats_still_group():
+    """guin-site review ff52: a provider's non-claim leads with the contract sentence it could not decide and says why after
+    the dash; cut at the first clause it read as a bare quote, the gap it named gone (36 such charges). Chongdae's own
+    sentences still group by their first clause."""
+    with Project() as pj:
+        pj.run_record("run-20260101-000001-aaaa", {"S1": {"status": "done"}})
+        pj.reporter([{"kind": "non-claim", "where": "run-20260101-000001-aaaa", "text": 'T1: (provider) "the list is sorted" — checked on three items only; no long list'},
+                     {"kind": "non-claim", "where": "run-20260101-000001-aaaa", "text": "T2: no check decides this task; done means the agent said so"},
+                     {"kind": "seen-non-claims", "layer": "observation", "where": "run-20260101-000001-aaaa/T3 (4)",
+                      "text": "4 provider non-claim(s) went to the verifier with the work and it accepted — read there, said here, not charged"}], "chongdae")
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        nc = {f["text"]: f["layer"] for f in pj.latest()["findings"] if f["kind"] in ("non-claim", "seen-non-claims")}
+        assert nc == {'(provider) "the list is sorted" — checked on three items only; no long list': "objection",
+                      "no check decides this task": "objection",
+                      "4 provider non-claim(s) went to the verifier with the work and it accepted — read there, said here, not charged": "observation"}, nc
+        # a disposal written before 1.13.0 answered the cut form, `(provider) "…"`: it answers the whole sentence now, and an
+        # unanswered cut form is the same charge, not a second one carried beside it
+        full = '(provider) "the list is sorted" — checked on three items only; no long list'
+        import time
+        for disposed in (False, True):   # unanswered first: an answer, once written, answers every later review
+            r = pj.latest()
+            path = os.path.join(pj.dir, dwitbuk.REVIEWS, r["id"] + ".json")
+            for f in r["findings"]:
+                if f.get("text") == full or f.get("text") == '(provider) "the list is sorted"':
+                    f["text"] = '(provider) "the list is sorted"'
+                    f.pop("disposition", None)
+                    if disposed:
+                        f["disposition"] = {"as": "accepted", "delegated": "three items decide sorting here", "by": None}
+            write(path, r)
+            time.sleep(1.1)
+            assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+            same = [f for f in pj.latest()["findings"] if "the list is sorted" in f.get("text", "")]
+            assert len(same) == 1 and same[0]["text"] == full and same[0]["kind"] == "non-claim", same
+            assert bool(same[0].get("disposition")) == disposed, same
+
+
 def test_runs_are_read_from_one_file_per_task_and_session_tasks_define_themselves():
     with Project() as pj:
         root = os.path.join(pj.dir, ".chongdae", "run-20260101-000003-cccc")
