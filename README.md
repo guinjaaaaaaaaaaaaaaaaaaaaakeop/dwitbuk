@@ -33,7 +33,10 @@ disposition copies the finding's own `text` and `where` at disposal time (`findi
 verbatim quote from the record or the tree that grounds it — so a person reading the review later sees the pair
 (finding, reason) side by side and can weigh whether the reason addresses the finding, without resolving ids across
 reviews. Disposing a quote-grounded finding (`contradiction`, `anomaly`) without `--quote` warns, not refuses.
-`--by` names the person whose words `--why` carries; with `--delegated` it is refused (no person read the finding)
+`--by` names the person whose words `--why` carries. With `--delegated` no person read the finding, so `by` stays `null`;
+`--by NAME` there names who handed it off (`delegated-by`) and `--approved-in source:ID` where they said so — a session
+disposing at the owner's request says whose request it was (before 1.14.0 the name was refused, and twelve delegated
+disposals on a site read `by: null`, the owner's words only in each reason's prose)
 
 ### `/dwitbuk:follow`
 
@@ -54,12 +57,34 @@ read in `reads` (beside `file`, the whole `follow --path`), which jokbo runs at 
 The same eyes before a gate: `eyes_worker.py --request <chongdae request> --response ...` reads the task's contract,
 touched files and the builder's report and answers `dwitbuk/review@1` — accept, or reject with quoted findings — plus
 `worker` (host, model, turns, cost) with the whole stream kept as `<response>.transcript.jsonl`: an accept with no
-findings is auditable (what did the eyes read?), not a bare word. Declared as the `eyes` role in this plugin's
+findings is auditable (what did the eyes read?), not a bare word. The worker reads that stream back: what the eyes
+read goes beside the verdict as `read` (`files` a Claude session opened with Read/Grep/Glob, `commands` a Codex session ran
+with their exit codes, `answered-before-reading` when the first answer came before any of it), and an accept that read
+nothing of the tree — or only the diff (`git diff`/`status`/`show`/`log`) while the contract names behaviour (the slice has
+tests, or code among its files) — stays an accept with a `non-claims` line saying so: "accepted without reading the tree …"
+or "accepted without reading the touched files or the tests: the eyes read the diff only …". A second verifier on
+cache-build (guin-site run a0ec) answered accept first, ran one `git diff`, and answered the same — 607 output tokens on the
+input the first verifier rejected — and the record said only "accept". Declared as the `eyes` role in this plugin's
 plugin.json (`roles`), so a project writes `"verifier": "dwitbuk:eyes"` in hunsu.json and the lock carries the argv;
 or in the plan's `providers.verifier`. The builder never places it. The packet tells the eyes to read the hands'
 own non-claims (`built.non-claims`, and the tests writer's `tests_non_claims`) against the code — an accept is recorded as
 having read them, and they are not charged again — and, when chongdae ran commands itself (`take`/`retry --checked`),
-that `checked` is evidence chongdae observed, unlike a claim in `built.verified`
+that `checked` is evidence chongdae observed, unlike a claim in `built.verified`.
+
+`tests_non_claims` reaches the eyes as `{"whose": "the tests writer's statements about its own tests — not the builder's
+report …", "statements": {task: [sentence, …]}}`, and the instructions say a finding about the builder may not quote it as
+the builder's (a verifier quoted the tests writer's "I did not run the whole suite" as `built.non-claims` and rejected a
+build whose full suite had passed). The answer is then weighed against the request: each backticked span of a finding's
+`record_quote` must occur in the request — the builder's report, the contract, the brief, the touched files, the tests, a
+file `where` names. A span found nowhere, or only in another hand's field (`tests_non_claims`, `checked`) while `where`
+names `built`, makes the finding unfounded; so does a `claim-unverified` about a command `checked` shows chongdae ran with
+exit 0 and nothing changed since, unless it quotes the contract sentence the check is said not to decide. Unfounded
+findings leave the verdict's grounds and stay visible under `unfounded` (each with why); a reject that rested only on them
+is an accept, said in `summary`.
+
+`checked` (from chongdae, stable): a list of `{"command": "python3 tests/run.py --all", "exit": 0, "tail": [last lines],
+"at": time, "changed_since": [files changed after it ran]}`, plus `"expect": "fail"` and `"outcome"` on an expected red run
+(`--checked-red`). A pass is `exit` 0 with no `expect`; `command` is the string chongdae ran (a list is joined with spaces)
 
 ### as chongdae's `reviewer`
 
@@ -72,7 +97,11 @@ review per run, since the previous one's head
 ### SessionStart hook
 
 One fact when there is one: `dwitbuk: N undisposed objection(s) in <review> (kinds)` and the `follow`/`dispose`
-commands — what the reviews the runner placed still need from a person. Nothing open, no reviews, or a worker session:
+commands. The kinds are counted by one rule, the same as `review`'s last line: each distinct open charge once (two copies
+of one charge are one), under the kind of the charge it makes — a carry (`undisposed`) under the kind it carries — then how
+many of them are carries, said as already in the count: `cq-failed 2, non-claim 10; 3 of them carried, already in the
+count` (a bare "; 3 carried" can be read as three more). Open is: layer objection, no disposition, and no disposition of the same charge in
+any review — what the reviews the runner placed still need from a person. Nothing open, no reviews, or a worker session:
 silent. Never blocks, never writes
 
 ### Stop hook
@@ -138,9 +167,14 @@ neither lists nor counts it. `delegated` is an observation by kind; a reporter m
 `"layer": "observation"` and is trusted. Everything else — unknown kinds included — is an objection: fail closed.
 
 From reporters, in their own words: chongdae's `outside-run` (grouped per directory here), `unattributed`, `delegated`
-(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, `[xN]` when N runs share the clause — grouped across runs, a run's charge had a
+(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, its tasks and the runs sharing the clause said in words — `[tasks T1, T2; in 2
+runs: run-…, run-…]`; before 1.14.0 an `[xN]`, read as a count of tasks: "no check decides this task [x2]" stood for eight
+tasks in two runs, and three charges were told as "5건". Struck from the charge's identity, so a review that wrote `[xN]`
+still answers it; grouped across runs, a run's charge had a
 new identity whenever a review's span changed and never kept its answer; a declared setting's note, and "no check
-decides this task" on a plan-domain or test-writer task, are observations; an objection answered in an earlier review
+decides this task" on a task no check could decide by nature — a plan-domain task or one declaring `domain` doc/record, the
+test writer's or the quibble's, or one whose files (touched and adopted, else its `scope`) are all documents (`.md`, `.txt`
+…) or under the lock's `record-paths` — are observations, and such a charge raised before 1.14.0 is not carried; an objection answered in an earlier review
 is carried with its answer and counted, not listed again),
 `left-open` (a task open when its run closed, or rejected and never retried), `stage-finding` (what a role hired
 before or after a task found, with its quote), `verifier-reject` (a verdict that stopped an attempt, quoted from both

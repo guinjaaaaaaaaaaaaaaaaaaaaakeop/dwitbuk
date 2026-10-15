@@ -145,7 +145,8 @@ def test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_c
         code, out = run("review", "--since", pj.base, "--target", pj.dir)
         r2 = pj.latest()
         again = next(f for f in r2["findings"] if f["kind"] == "non-claim" and f["where"] == "run-20260101-000001-aaaa")
-        assert again["disposition"]["why"] == "B1 was checked by hand" and again["text"].endswith("[x2]"), again
+        assert again["disposition"]["why"] == "B1 was checked by hand", again   # answered when it read `[tasks C1, B1]`: the same charge
+        assert again["text"].endswith("  [tasks C1, B1; in 2 runs: run-20260101-000001-aaaa, run-20260101-000002-bbbb]"), again
         t2 = next(f for f in r2["findings"] if f["where"] == "run-20260101-000002-bbbb")
         assert dwitbuk.layer(t2) == "observation", t2
         assert "0 objection(s)" in out and "already answered, carried with their disposition: 1" in out, out
@@ -182,7 +183,8 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         assert "source" not in next(f for f in r["findings"] if f["kind"] == "unreviewed") and "reporters" not in r   # written once, read by nothing
         assert "gave no dwitbuk/findings@1" in next(f["text"] for f in r["findings"] if f["kind"] == "reporter-failed")
         nc = [f["text"] for f in r["findings"] if f["kind"] == "non-claim"]
-        assert sum("x untested  [x2]" in t for t in nc) == 2 and any(t.startswith("y untested") for t in nc), nc   # one per run; the repeat shows as [x2]
+        assert sorted(t for t in nc if t.startswith("x untested")) == ["x untested  [task S%d; in 2 runs: run-20260101-000001-aaaa, run-20260101-000002-bbbb]" % n
+                                                                      for n in (1, 2)] and "y untested  [task S2]" in nc, nc   # one per run; the repeat named, not `[x2]`
         carry = next(f for f in r["findings"] if f["kind"] == "undisposed")
         assert carry["carries"][0] == "no-reporters" and carry["text"].startswith("no reporters declared") and carry["raised-in"].endswith("/0"), carry   # whole, pointing back
 
@@ -213,11 +215,10 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         u = next(i for i, f in enumerate(first["findings"]) if f["kind"] == "unattributed")
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--target", pj.dir)[0] != 0, "one of --why / --delegated is required"
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--why", "x", "--delegated", "y", "--target", pj.dir)[0] != 0, "not both"
-        code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "y", "--by", "kim", "--target", pj.dir)
-        assert code != 0 and "--by names the person" in out, "a name on a delegated disposal used to be dropped silently; refused"
         code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "the person was away; the run is a test", "--target", pj.dir)
         du = pj.latest()["findings"][u]["disposition"]
-        assert code == 0 and "(delegated)" in out and du["as"] == "dismissed" and du["delegated"] == "the person was away; the run is a test" and du["by"] is None
+        assert code == 0 and "(delegated, nobody named as handing it off" in out and du["as"] == "dismissed" and du["delegated"] == "the person was away; the run is a test" and du["by"] is None
+        assert "delegated-by" not in du, du
         # the disposal carries the charge it answers: the finding's own text and where, copied at disposal time
         assert du["finding_text"] == first["findings"][u]["text"] and du["where"] == first["findings"][u]["where"], du
         r = load_review(pj); r["findings"][u].pop("disposition"); save_review(pj, r)
@@ -488,7 +489,8 @@ def test_a_carried_charge_stands_once_and_one_disposal_answers_it_once():
             src_rid, _, src_i = f["raised-in"].rpartition("/")
             src = first_review["findings"][int(src_i)]
             assert src_rid == rids[0] and dwitbuk.identity(src) == tuple(f["carries"]), f   # referenced, not re-raised
-            assert f["text"] == src["text"] and "(first seen" not in f["text"] and f["first-seen"] == rids[0], f   # whole
+            assert f["text"] == dwitbuk.OLD_REPEAT.sub("", src["text"]) and "(first seen" not in f["text"] and f["first-seen"] == rids[0], f   # whole
+            assert "[x" not in f["text"], f   # an old `[x2]` read as a count of tasks: struck from the carried text, not from the charge
         assert "carried from earlier reviews, each once: 8" in out, out
         code, out = run("follow", "--target", pj.dir)
         lines = out.splitlines()
@@ -660,8 +662,11 @@ def test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itsel
         assert "tests_non_claims" not in p["instructions"] and "are the builder's own" in p["instructions"]
         ck = [{"command": "python3 tests/run.py --all", "exit": 0, "tail": ["write 135 OK"], "changed_since": []}]
         p = dwitbuk.verify_packet(dict(req, tests_non_claims={"T": ['"the list is sorted" — three items only']}, checked=ck))
-        assert p["tests_non_claims"] == {"T": ['"the list is sorted" — three items only']} and p["checked"] == ck
-        assert "chongdae itself ran on the tree and saw exit 0" in p["instructions"] and "`tests_non_claims`" in p["instructions"]
+        # whose words they are is in the data, not only in the instructions (guin-site run a0ec)
+        assert p["tests_non_claims"] == {"whose": dwitbuk.TESTS_NON_CLAIMS_WHOSE, "statements": {"T": ['"the list is sorted" — three items only']}} and p["checked"] == ck
+        assert "not the builder's report" in p["tests_non_claims"]["whose"]
+        assert "chongdae itself ran on the tree and saw exit 0" in p["instructions"] and "`tests_non_claims.statements` the tests writer's (T)" in p["instructions"]
+        assert "`tests_non_claims` is never the builder's report" in p["instructions"] and "may not quote it as the builder's" in p["instructions"]
         # a passing check is not a finding that it fails — not a pass on whether it decides the sentence
         assert "is not a finding that it fails" in p["instructions"] and "whether it decides the sentence is still yours to judge" in p["instructions"]
 
@@ -678,8 +683,8 @@ def test_a_providers_non_claim_keeps_its_reason_and_chongdaes_own_repeats_still_
                       "text": "4 provider non-claim(s) went to the verifier with the work and it accepted — read there, said here, not charged"}], "chongdae")
         assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
         nc = {f["text"]: f["layer"] for f in pj.latest()["findings"] if f["kind"] in ("non-claim", "seen-non-claims")}
-        assert nc == {'(provider) "the list is sorted" — checked on three items only; no long list': "objection",
-                      "no check decides this task": "objection",
+        assert nc == {'(provider) "the list is sorted" — checked on three items only; no long list  [task T1]': "objection",
+                      "no check decides this task  [task T2]": "objection",
                       "4 provider non-claim(s) went to the verifier with the work and it accepted — read there, said here, not charged": "observation"}, nc
         # a disposal written before 1.13.0 answered the cut form, `(provider) "…"`: it answers the whole sentence now, and an
         # unanswered cut form is the same charge, not a second one carried beside it
@@ -689,7 +694,7 @@ def test_a_providers_non_claim_keeps_its_reason_and_chongdaes_own_repeats_still_
             r = pj.latest()
             path = os.path.join(pj.dir, dwitbuk.REVIEWS, r["id"] + ".json")
             for f in r["findings"]:
-                if f.get("text") == full or f.get("text") == '(provider) "the list is sorted"':
+                if dwitbuk.identity(f)[2] in (full, '(provider) "the list is sorted"'):
                     f["text"] = '(provider) "the list is sorted"'
                     f.pop("disposition", None)
                     if disposed:
@@ -698,7 +703,7 @@ def test_a_providers_non_claim_keeps_its_reason_and_chongdaes_own_repeats_still_
             time.sleep(1.1)
             assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
             same = [f for f in pj.latest()["findings"] if "the list is sorted" in f.get("text", "")]
-            assert len(same) == 1 and same[0]["text"] == full and same[0]["kind"] == "non-claim", same
+            assert len(same) == 1 and dwitbuk.identity(same[0])[2] == full and same[0]["kind"] == "non-claim", same
             assert bool(same[0].get("disposition")) == disposed, same
 
 
@@ -805,6 +810,266 @@ def test_the_eyes_leave_out_the_records_the_lock_declares():
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["a.py", ".alpha/x.json", "alpha.json", ".chongdae/run-1/tasks/T.json", "mangsang/relations/R-1.json"]}
         assert dwitbuk.verify_packet(req)["touched"] == ["a.py"], dwitbuk.verify_packet(req)["touched"]
+
+
+def test_a_verifier_finding_whose_quote_is_another_hands_or_nowhere_is_unfounded_and_a_reject_on_it_is_an_accept():
+    """guin-site run a0ec, cache-build (10-15): the verifier rejected with claim-unverified, `where` "built.verified[0] and
+    built.non-claims", quoting "`built.non-claims` says: `I did not run the whole suite.`" — a sentence only the tests writer
+    said (`tests_non_claims.cache-tests[8]`); the builder had run the full suite and it passed. A quoted span is checked against
+    the request: only in another hand's field while the finding charges the builder, or nowhere at all, is unfounded — kept
+    beside the verdict, not under it. And a claim-unverified about a check chongdae itself saw pass is unfounded, unless it
+    quotes the contract sentence the check is said not to decide."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "run": "run-1", "task": "cache-build", "target": pj.dir,
+               "contract": {"Q1": "## Q1\n\nThe snapshot key carries the deployed version."}, "checks": [["python3", "tests/run.py", "--all"]],
+               "touched": ["a.py"], "built": {"summary": "the full check passes", "verified": [{"check": "python3 tests/run.py --all", "exit": 0}],
+                                              "non-claims": ["I didn't run the TypeScript type-check."]},
+               "tests_non_claims": {"cache-tests": ["'tests/run.py --all passes' — I did not run the whole suite. I ran RevisionTests."]}}
+        p = dwitbuk.verify_packet(req)
+        mis = {"kind": "claim-unverified", "where": "built.verified[0] and built.non-claims",
+               "record_quote": "`built.verified` claims `python3 tests/run.py --all` exited 0, while `built.non-claims` says: `I did not run the whole suite.`",
+               "tree_quote": "`tests/run.py`: runs every group", "why": "the report contradicts itself"}
+        assert dwitbuk.quoted_spans(mis, p) == ["python3 tests/run.py --all", "I did not run the whole suite"], "field names are where, not what"
+        assert "only in tests_non_claims" in dwitbuk.unfounded(mis, p)
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [mis], "summary": "s"}, p)
+        assert out["verdict"] == "accept" and out["findings"] == [] and out["unfounded"][0]["where"] == mis["where"], out
+        assert "counted as accept" in out["summary"] and "the eyes said: s" in out["summary"], out["summary"]
+        # the same sentence, quoted as the tests writer's in a finding that does not charge the builder, stands
+        about_tests = dict(mis, where="tests_non_claims.cache-tests[0]", record_quote="the tests writer says `I did not run the whole suite.`")
+        assert dwitbuk.unfounded(about_tests, p) is None
+        # a span the request does not hold anywhere: unfounded; one the builder's report holds: founded
+        assert "nowhere in the request" in dwitbuk.unfounded(dict(mis, record_quote="`I ran nothing at all`"), p)
+        founded = {"kind": "plan-vs-code", "where": "contract.Q1; a.py", "record_quote": "`The snapshot key carries the deployed version.`",
+                   "tree_quote": "x = 2", "why": "no version in the key"}
+        assert dwitbuk.unfounded(founded, p) is None
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [founded, mis]}, p)
+        assert out["verdict"] == "reject" and out["findings"] == [founded] and len(out["unfounded"]) == 1, "a founded finding still rejects"
+        # a quote with no backticks is not checked: nothing says which words are the record's
+        assert dwitbuk.unfounded(dict(founded, record_quote="the key carries the version"), p) is None
+        # chongdae itself ran the check and saw exit 0, nothing changed since: whether it passed is not the eyes' to doubt
+        ran = {"kind": "claim-unverified", "where": "built.verified[0]", "record_quote": "`python3 tests/run.py --all` exit 0",
+               "tree_quote": "tests/run.py", "why": "cannot tell it ran"}
+        ck = [{"command": "python3 tests/run.py --all", "exit": 0, "tail": ["OK"], "changed_since": []}]
+        assert dwitbuk.unfounded(ran, p) is None, "without `checked` the claim is the builder's word"
+        pc = dwitbuk.verify_packet(dict(req, checked=ck))
+        assert "saw exit 0" in dwitbuk.unfounded(ran, pc)
+        assert dwitbuk.unfounded(ran, dwitbuk.verify_packet(dict(req, checked=[dict(ck[0], changed_since=["a.py"])]))) is None, "changed since: it could break"
+        assert dwitbuk.unfounded(ran, dwitbuk.verify_packet(dict(req, checked=[dict(ck[0], exit=1, expect="fail")]))) is None, "a red run is no pass"
+        decides = dict(ran, record_quote="`python3 tests/run.py --all` is cited for `The snapshot key carries the deployed version.`")
+        assert dwitbuk.unfounded(decides, pc) is None, "whether the check decides a contract sentence stays the eyes' to judge"
+        # the worker applies it: a recorded reject on the misattributed quote comes out an accept, the finding kept beside it
+        d = tempfile.mkdtemp(prefix="eyes-")
+        try:
+            reqf, resp = os.path.join(d, "req.json"), os.path.join(d, "resp.json")
+            write(reqf, req)
+            def fake(packet, schema, args):
+                assert packet["tests_non_claims"]["whose"] == dwitbuk.TESTS_NON_CLAIMS_WHOSE
+                return {"verdict": "reject", "findings": [mis], "summary": "s"}
+            old_claude, old_argv = w.claude, sys.argv
+            w.claude, sys.argv = fake, ["eyes_worker.py", "--request", reqf, "--response", resp]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    assert w.main() == 0
+            finally:
+                w.claude, sys.argv = old_claude, old_argv
+            got = json.load(io.open(resp, encoding="utf-8"))
+            assert got["verdict"] == "accept" and got["findings"] == [] and got["unfounded"][0]["unfounded"].startswith("quotes `I did not run"), got
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def test_a_documents_or_records_task_with_no_check_is_said_not_charged_and_its_old_carry_stops():
+    """guin-site review a3c2 (10-13): of its twelve objections five were "no check decides this task" — four on tasks that
+    wrote only documents or records (a first post's Done line in ATPROTO.md, `hunsu lock`, a Cirrus note, a contract and its
+    quibble); three of those were carries from runs closed the day before. A task whose files are all documents or records,
+    that declares itself so, or a quibble's, has nothing a check could run on: an observation. A carry raised before that was
+    known stops; a session task that also touched code is still charged."""
+    with Project() as pj:
+        nc = "no check decides this task; done means the agent said so"
+        def session_run(rid, tasks):
+            root = os.path.join(pj.dir, ".chongdae", rid)
+            write(os.path.join(root, "plan.json"), {"artifact-type": "chongdae/plan@1", "goal": rid, "kind": "session", "tasks": []})
+            write(os.path.join(root, "state.json"), {"artifact-type": "chongdae/run@1", "status": "complete"})
+            for tid, (extra, record) in tasks.items():
+                write(os.path.join(root, "tasks", tid + ".json"), {"artifact-type": "chongdae/task@1", "status": "done", "non-claims": [nc],
+                      "def": {"id": tid, "role": "session", "checks": [], **extra}, **record})
+        session_run("run-20260101-000001-aaaa", {"first-post-done": ({"scope": ["plan/ATPROTO.md"]}, {"touched": ["plan/ATPROTO.md"]})})
+        session_run("run-20260101-000002-bbbb", {"plugin-lock": ({"scope": ["hunsu.json", "hunsu.lock.json"]}, {"touched": []})})
+        session_run("run-20260101-000003-cccc", {"ops": ({"scope": ["plan/ATPROTO.md"]}, {"touched": ["plan/ATPROTO.md", "scripts/setup.mjs"]}),
+                                                 "decide": ({"domain": "doc"}, {"touched": []})})
+        session_run("run-20260101-000004-dddd", {"q": ({"role": "quibble"}, {"touched": []})})
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"mangsang": ["mangsang/", ".mangsang/"]}})   # what the lock says is a record
+        assert dwitbuk.documents_or_records(["plan/ATPROTO.md", "./README.md", "hunsu.lock.json", "mangsang/relations/R-1.json", "mangsang"], pj.dir)
+        assert not dwitbuk.documents_or_records(["plan/ATPROTO.md", "scripts/setup.mjs"], pj.dir) and not dwitbuk.documents_or_records([], pj.dir)
+        # the first review was written before 1.14.0: the first two runs' charges were objections, never disposed
+        pj.reporter([{"kind": "non-claim", "where": "run-20260101-000001-aaaa", "text": "first-post-done: " + nc},
+                     {"kind": "non-claim", "where": "run-20260101-000002-bbbb", "text": "plugin-lock: " + nc}], "chongdae")
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        r = pj.latest()
+        assert [dwitbuk.layer(f) for f in r["findings"]] == ["observation", "observation"], r["findings"]
+        for f in r["findings"]:
+            f["layer"] = "objection"
+        write(os.path.join(pj.dir, dwitbuk.REVIEWS, r["id"] + ".json"), r)
+        # the next review: those runs are closed (not reported again), two more are
+        import time; time.sleep(1.1)
+        pj.reporter([{"kind": "non-claim", "where": "run-20260101-000003-cccc", "text": "ops: " + nc},
+                     {"kind": "non-claim", "where": "run-20260101-000003-cccc", "text": "decide: " + nc},
+                     {"kind": "non-claim", "where": "run-20260101-000004-dddd", "text": "q: " + nc}], "chongdae")
+        code, out = run("review", "--target", pj.dir)
+        r2 = pj.latest()
+        assert not any(f["kind"] == "undisposed" for f in r2["findings"]), "a documents-or-records task's old charge is not carried"
+        layers = {f["where"]: dwitbuk.layer(f) for f in r2["findings"] if f["kind"] == "non-claim"}
+        assert layers == {"run-20260101-000003-cccc": "objection", "run-20260101-000004-dddd": "observation"}, layers   # ops touched a script
+        assert "1 objection(s) (non-claim 1)" in out, out
+
+
+def test_review_and_the_session_start_line_count_each_open_charge_once_by_the_kind_it_makes():
+    """guin-site review a3c2: chongdae's close said "cq-failed 2, non-claim 7, undisposed 3" and the next session start
+    "cq-failed 2, non-claim 10" for the same twelve objections — review counted a carry as `undisposed`, the hook as the kind
+    it carries. One rule, one text: each open objection once, under the kind of the charge it makes, then how many are carried."""
+    open_ = [{"kind": "cq-failed", "where": "a", "text": "x"}, {"kind": "non-claim", "where": "r1", "text": "y"},
+             {"kind": "undisposed", "where": "r2", "text": "z", "carries": ["non-claim", "r2", "z"]}]
+    assert dwitbuk.count_text(open_) == "cq-failed 1, non-claim 2; 1 of them carried, already in the count"
+    assert dwitbuk.count_text(open_[:2]) == "cq-failed 1, non-claim 1" and dwitbuk.count_text([]) == "none"
+    hook = os.path.join(HERE, "hooks", "session_start.py")
+    with Project() as pj:
+        pj.reporter([{"kind": "left-open", "where": "run-1/T", "text": "left open"}, {"kind": "stale", "where": "R-1", "text": "stale"}])
+        assert run("review", "--target", pj.dir)[0] == 0
+        import time; time.sleep(1.1)
+        pj.reporter([{"kind": "stale", "where": "R-1", "text": "stale"}])
+        code, out = run("review", "--target", pj.dir)
+        assert "2 objection(s) (left-open 1, stale 1; 1 of them carried, already in the count)" in out, out
+        done = subprocess.run([sys.executable, hook], input=json.dumps({"cwd": pj.dir}), capture_output=True, text=True, encoding="utf-8",
+                              env={k: v for k, v in os.environ.items() if k != "AGENT_WORKER"})
+        ctx = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "2 undisposed objection(s) in %s (left-open 1, stale 1; 1 of them carried, already in the count)" % pj.latest()["id"] in ctx, ctx
+
+
+def test_a_delegated_disposal_says_who_handed_it_off_and_where_they_agreed():
+    """guin-site review a3c2: all twelve objections were accepted by delegation with `by: null` — the owner's "뒷북 검토
+    진행" only in each reason's prose, because `--by` with `--delegated` was refused. No person read the finding, so `by`
+    stays null; who handed it off is `delegated-by`, and where they said so `approved-in`."""
+    with Project() as pj:
+        pj.reporter([{"kind": "unattributed", "where": "run-1/S1", "text": "no touched"}])
+        run("review", "--since", pj.base, "--target", pj.dir)
+        r = pj.latest()
+        code, out = run("dispose", "%s/0" % r["id"], "--as", "accepted", "--delegated", "the session read it", "--by", "lee",
+                        "--approved-in", "source:at-65", "--target", pj.dir)
+        d = pj.latest()["findings"][0]["disposition"]
+        assert code == 0 and d["by"] is None and d["delegated-by"] == "lee" and d["approved-in"] == "source:at-65", d
+        assert "(delegated by lee; approved in source:at-65)" in out, out
+        assert run("dispose", "%s/0" % r["id"], "--as", "accepted", "--delegated", "x", "--approved-in", "yes", "--target", pj.dir)[0] != 0, "a source, not a word"
+
+
+def test_an_accept_says_what_the_eyes_read_and_one_that_read_nothing_of_the_tree_says_so():
+    """guin-site run a0ec, cache-build: the second verifier's first output was `{"verdict":"accept","findings":[]}`, then one
+    `git diff`, then the same verdict — 607 output tokens on exactly the input the first verifier rejected. What the eyes read
+    is kept beside the verdict (`read`, from the stream the worker keeps); an accept that read nothing of the tree, or only the
+    diff while the contract names behaviour, stays an accept and says so in `non-claims`. A reject is not touched."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "run": "run-1", "task": "cache-build",
+               "brief": "key the cache by version", "contract": {"Q-cache": "the snapshot key carries the deployed version"},
+               "checks": [["python3", "tests/run.py"]], "tests": ["tests/test_read.py"], "touched": [], "touched_since": ["a.py"],
+               "built": {"summary": "built", "verified": [], "non-claims": []}}
+        reqf, resp = os.path.join(pj.dir, "local", "req.json"), os.path.join(pj.dir, "local", "resp.json")
+        write(reqf, req)
+        verdict = '{"verdict":"accept","findings":[]}'
+        def codex_item(n, kind, **kw):
+            return json.dumps({"type": "item.completed", "item": dict(id="item_%d" % n, type=kind, **kw)})
+        def shell(cmd):
+            return "/bin/zsh -lc %s" % json.dumps(cmd).replace('"', "'")
+        streams = {
+            "a0ec": [codex_item(0, "agent_message", text=verdict),
+                     codex_item(1, "command_execution", command=shell("git status --short && git diff -- a.py && git diff --stat"), aggregated_output="+x = 2", exit_code=0),
+                     codex_item(2, "agent_message", text=verdict)],
+            "nothing": [codex_item(0, "agent_message", text=verdict)],
+            "read": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' a.py && rg -n key tests"), aggregated_output="x = 2", exit_code=0),
+                     codex_item(1, "agent_message", text=verdict)],
+            "failed": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' a.py"), aggregated_output="", exit_code=1),
+                       codex_item(1, "agent_message", text=verdict)],
+            "claude": [json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Let me read the file."},
+                                                                                 {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": pj.dir + "/a.py"}}]}}),
+                       json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": verdict}]}})],
+        }
+        def answer(case, verdict_="accept", findings=()):
+            def fake(packet, schema, args):
+                path = os.path.join(os.path.dirname(args.response), "resp.transcript.jsonl")
+                write(path, "\n".join(streams[case]) + "\n")
+                return {"verdict": verdict_, "findings": list(findings), "worker": {"host": "codex", "model": "m", "transcript": "resp.transcript.jsonl"}}
+            old_codex, old_argv = w.codex, sys.argv
+            w.codex, sys.argv = fake, ["eyes_worker.py", "--request", reqf, "--response", resp, "--host", "codex"]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    assert w.main() == 0
+            finally:
+                w.codex, sys.argv = old_codex, old_argv
+            return json.load(io.open(resp, encoding="utf-8"))
+        got = answer("a0ec")
+        assert got["verdict"] == "accept" and got["findings"] == [], got   # kept as accept: what was read is said, not judged
+        assert got["read"]["commands"] == [{"command": "git status --short && git diff -- a.py && git diff --stat", "exit": 0}] and got["read"]["files"] == [], got["read"]
+        assert got["read"].get("answered-before-reading") is True, got["read"]
+        assert len(got["non-claims"]) == 1 and got["non-claims"][0].startswith("accepted without reading the touched files or the tests: the eyes read the diff only"), got
+        assert "contract names behaviour" in got["non-claims"][0] and "gave the verdict before reading anything" in got["non-claims"][0], got
+        got = answer("nothing")
+        assert got["verdict"] == "accept" and got["non-claims"][0].startswith("accepted without reading the tree: the eyes opened no file and ran no command"), got
+        got = answer("failed")   # a command that failed read nothing
+        assert got["non-claims"][0].startswith("accepted without reading the tree"), got
+        got = answer("read")
+        assert "non-claims" not in got and got["read"]["commands"][0]["command"].startswith("sed -n"), got
+        got = answer("claude")   # "Let me read the file." is a word on the way, not the verdict
+        assert "non-claims" not in got and got["read"] == {"files": ["Read %s/a.py" % pj.dir], "commands": []}, got
+        # the diff only, on a slice of documents with no tests: the diff is the whole of what the contract names
+        write(reqf, dict(req, tests=[], touched_since=["plan/A.md"]))
+        got = answer("a0ec")
+        assert "non-claims" not in got and got["read"]["answered-before-reading"] is True, got
+        write(reqf, req)
+        anomaly = {"kind": "anomaly", "where": "a.py", "record_quote": "", "tree_quote": "x = 2", "why": "odd"}
+        got = answer("nothing", "reject", [anomaly])
+        assert got["verdict"] == "reject" and "non-claims" not in got and "read" not in got, got   # a reject stands on its quotes
+        assert w.unread_accept(None, {}).startswith("accepted, and what the eyes read is not on record"), "no stream: not on record, not 'nothing'"
+
+
+def test_a_grouped_non_claim_names_its_tasks_and_runs_and_the_count_is_of_distinct_charges():
+    """guin-site 10-15: "no check decides this task [x2]" stood for eight tasks across two runs (a0ec) and again for one task
+    (b3f0); the session told the owner "5건" when three charges were open (reviews 666e, 4a23). The tasks and the runs are
+    said in words, struck from the charge's identity like `[x2]` was — an `[x2]` review's answer still answers it — and the
+    count is of distinct charges, carries said as already included."""
+    with Project() as pj:
+        nc = "no check decides this task; done means the agent said so"
+        a0ec, b3f0 = "run-20261015-054352-a0ec", "run-20261015-064403-b3f0"
+        pj.run_record(a0ec, {t: {"status": "done"} for t in ("cache-contract", "cache-tests", "cache-build")})
+        pj.run_record(b3f0, {"deploy": {"status": "done"}})
+        # a review 1.13.0 wrote: the a0ec charge as `[x2]`, answered
+        old = {"artifact-type": "dwitbuk/review@1", "id": "review-20261015-154243-666e", "since": pj.base, "head": pj.base,
+               "findings": [{"kind": "non-claim", "where": a0ec, "layer": "objection", "text": "no check decides this task  [x2]",
+                             "disposition": {"as": "accepted", "why": "the owner read them", "by": "lee"}}]}
+        write(os.path.join(pj.dir, dwitbuk.REVIEWS, old["id"] + ".json"), old)
+        pj.reporter([{"kind": "non-claim", "where": a0ec, "text": "%s: %s" % (t, nc)} for t in ("cache-contract", "cache-tests", "cache-build")]
+                    + [{"kind": "non-claim", "where": b3f0, "text": "deploy: " + nc}], "chongdae")
+        code, out = run("review", "--target", pj.dir)
+        r = pj.latest()
+        texts = {f["where"]: f["text"] for f in r["findings"] if f["kind"] == "non-claim"}
+        assert texts == {a0ec: "no check decides this task  [tasks cache-contract, cache-tests, cache-build; in 2 runs: %s, %s]" % (a0ec, b3f0),
+                         b3f0: "no check decides this task  [task deploy; in 2 runs: %s, %s]" % (a0ec, b3f0)}, texts
+        assert not any("[x" in t for t in texts.values()), texts
+        mine = next(f for f in r["findings"] if f["where"] == a0ec)
+        assert dwitbuk.identity(mine) == dwitbuk.identity(old["findings"][0]) == ("non-claim", a0ec, "no check decides this task"), mine
+        assert mine["disposition"]["why"] == "the owner read them", mine   # the `[x2]` answer answers the reworded charge
+        assert "1 objection(s) (non-claim 1)" in out, out   # one open: b3f0's — not 2+2+1
+        # the next review: b3f0's charge is carried; one more charge is new — two open, the carry counted once, said as included
+        import time; time.sleep(1.1)
+        pj.reporter([{"kind": "stale", "where": "R-1", "text": "stale"}], "chongdae")
+        code, out = run("review", "--target", pj.dir)
+        assert "2 objection(s) (non-claim 1, stale 1; 1 of them carried, already in the count)" in out, out
+        carry = next(f for f in pj.latest()["findings"] if f["kind"] == "undisposed")
+        assert dwitbuk.charge(carry) == ("non-claim", b3f0, "no check decides this task"), carry
+    # two copies of one charge are one thing owed
+    a = {"kind": "non-claim", "where": "run-1", "text": "no check decides this task  [task T1]"}
+    b = {"kind": "undisposed", "where": "run-1", "text": "no check decides this task  [x2]", "carries": ["non-claim", "run-1", "no check decides this task"]}
+    assert dwitbuk.count_text([a, b]) == "non-claim 1", dwitbuk.count_text([a, b])
+    assert len(dwitbuk.distinct([a, b])) == 1
 
 
 if __name__ == "__main__":

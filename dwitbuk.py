@@ -2,8 +2,9 @@
 
   review [--since COMMIT] [--target DIR]   collect `dwitbuk/findings@1` from the reporters the lock declares (hunsu.lock.json `reporters`),
                                            carry dispositions and recurrence from the last review, write reviews/<id>.json
-  dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY) [--quote QUOTE]
-                                           the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree
+  dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY [--by NAME]) [--approved-in SOURCE:ID] [--quote QUOTE]
+                                           the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree;
+                                           with --delegated, --by is who handed it off (`delegated-by`; `by` stays null: no person read it)
   follow [--path FILE] [--target DIR]      the latest review's undisposed objections, whole and grouped by kind; --path: only those
                                            whose `where` or `files` name FILE (ask before editing it); --brief (with --path): at most two
                                            lines, `N open objection(s) on this file: <kind> — <text>` and `+N more`; nothing open: no output
@@ -210,11 +211,13 @@ def cmd_review(args):
     # type-level presentation: outside-run per directory, non-claims by first clause so repeats show — kinds, not products.
     # A non-claim stays one finding per run: grouped across runs, its `where` listed whichever runs this review happened to
     # span, so the same run's non-claim had a new identity in the next review and never inherited its disposition — the
-    # same "no check decides this task" was answered ten times on one site in a day. Repeats show as `[xN]` (runs sharing
-    # the clause), which identity() strikes.
+    # same "no check decides this task" was answered ten times on one site in a day. What it stands for is said in words —
+    # `[tasks a, b; in 2 runs: run-…, run-…]`, the run's tasks and the runs sharing the clause — and identity() strikes it:
+    # an `[x2]` (1.13.0) read as a count of tasks, "no check decides this task [x2]" stood for eight tasks in two runs, and
+    # two such lines and one more were told to the owner as "5건" (guin-site 10-15, reviews 666e and 4a23)
     by_dir = {}
     groups = {}
-    defs = {name: {t.get("id"): t for t in plan.get("tasks", [])} for name, plan, _ in runs(target)}
+    defs = run_tasks(target)
     for f in raw:
         if f["kind"] == "outside-run" and f.get("files"):
             for p in f["files"]:
@@ -239,10 +242,12 @@ def cmd_review(args):
                          "text": "%d file(s) changed since %s; no completed run recorded touching them" % (len(names), base or "the beginning")})
     for key, by_run in groups.items():
         for where, fs in sorted(by_run.items()):
-            f = {"kind": "non-claim", "where": where, "text": key + ("  [x%d]" % len(by_run) if len(by_run) > 1 else "")}
-            if key == "no check decides this task" and all(uncheckable_by_nature(defs.get(where, {}), t) for x in fs for t in task_ids(x["text"])):
-                # a contract, design or plan document (domain plan) has no check that could decide prose, and a test task's tests
-                # are what the build is checked against: said, not a charge — a session's code task with no check still is one
+            f = {"kind": "non-claim", "where": where, "text": key + bearing(fs, by_run)}
+            if key == NO_CHECK and all(uncheckable_by_nature(defs.get(where, {}), t, target) for x in fs for t in task_ids(x["text"])):
+                # a contract, design or plan document (domain plan) has no check that could decide prose, a test task's tests
+                # are what the build is checked against, and a task that wrote only documents or records (a Done line in
+                # ATPROTO.md, `hunsu lock`) has nothing a check could run on: said, not a charge — a session's code task with
+                # no check still is one
                 f["layer"] = "observation"
             findings.append(f)
 
@@ -297,6 +302,11 @@ def cmd_review(args):
                 continue
             if old.get("standing") and old.get("reporter") in heard:
                 continue   # its reporter reads the state as it is now, answered, and no longer sees it: the condition is gone
+            if no_check_by_nature(old, defs, target):
+                # raised before a documents-or-records task was known to be uncheckable by nature: a fact, not a charge, so it
+                # stops here like an observation — guin-site review a3c2 carried three such (a first post's Done line, a plugin
+                # lock, a Cirrus note), each an objection for a day before a session accepted it by delegation
+                continue
             findings.append(carry(old, "%s/%d" % (prior[-1]["id"], i_old), prior[-1]["id"], origin))
 
     import secrets, time
@@ -323,12 +333,8 @@ def cmd_review(args):
         print("observations (facts of the record, not disposal debt): %d" % len(obs))
         for i, f in obs:
             print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
-    counts = {}
-    for f in findings:
-        if layer(f) == "objection" and not f.get("disposition"):
-            counts[f["kind"]] = counts.get(f["kind"], 0) + 1
-    print("%s: %d objection(s) (%s), %d observation(s) since %s"
-          % (rid, sum(counts.values()), ", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none", len(obs), base or "the beginning"))
+    open_ = distinct([f for f in findings if layer(f) == "objection" and not f.get("disposition")])
+    print("%s: %d objection(s) (%s), %d observation(s) since %s" % (rid, len(open_), count_text(open_), len(obs), base or "the beginning"))
     return 0
 
 
@@ -341,11 +347,75 @@ def task_ids(text):
     return [m.group(1)] if m else []
 
 
-def uncheckable_by_nature(tasks, tid):
-    """A task no check can decide by what it is: a plan-domain task (a contract, a design, a decision — prose), or the test
-    writer's task (its tests are the check the build answers to). Unknown tasks are not: fail closed."""
+def bearing(fs, by_run):
+    """What a grouped non-claim stands for, in words: the tasks of this run that bear it, and — when other runs share the
+    clause — how many runs and which: `  [tasks T1, T2; in 2 runs: run-a, run-b]`. Struck from identity (BEARING), like the
+    `[xN]` it replaces, so the charge is the same charge however many tasks or runs come to bear it."""
+    tasks = []
+    for x in fs:
+        tasks += [t for t in task_ids(x["text"]) if t not in tasks]
+    parts = (["task%s %s" % ("s" if len(tasks) > 1 else "", ", ".join(tasks))] if tasks else []) + \
+            (["in %d runs: %s" % (len(by_run), ", ".join(sorted(by_run)))] if len(by_run) > 1 else [])
+    return "  [%s]" % "; ".join(parts) if parts else ""
+
+
+OLD_REPEAT = re.compile(r"\s*\[x\d+\]")
+BEARING = r"\[x\d+\]|\[(?:tasks? [^\]]*|in \d+ runs: [^\]]*)\]"   # `[x2]` (before 1.14.0) and the words that replaced it
+
+
+NO_CHECK = "no check decides this task"   # chongdae's non-claim on a task added without checks (first clause)
+DOC_SUFFIXES = (".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc")
+NO_CHECK_DOMAINS = {"plan", "doc", "docs", "record", "records"}   # a task that declares itself prose or record (chongdae `add --domain`)
+
+
+def run_tasks(target):
+    """{run: {task id: the task's definition, with `touched`/`adopted`/`scope` from its record}} — what review needs to tell a
+    task no check could decide from one nobody checked."""
+    out = {}
+    for name, plan, state in runs(target):
+        tasks = {}
+        for t in plan.get("tasks", []):
+            ts = (state.get("tasks") or {}).get(t.get("id")) or {}
+            tasks[t.get("id")] = dict(t, touched=ts.get("touched") or [], **{"non-claims": ts.get("non-claims") or []},
+                                      adopted=[p for a in ts.get("adopted") or [] if isinstance(a, dict) for p in a.get("files") or []])
+        out[name] = tasks
+    return out
+
+
+def documents_or_records(paths, target):
+    """Every path is a document (Markdown, text) or under the records and environment the lock declares (`record-paths`:
+    hunsu's files, mangsang/, reviews/ …). An empty list is not: a task that says nothing of its files fails closed."""
+    recs = record_paths(target)
+    def one(p):
+        p = str(p).replace("\\", "/")
+        p = p[2:] if p.startswith("./") else p
+        return p.lower().endswith(DOC_SUFFIXES) or any(p.startswith(r) or p == r.rstrip("/") for r in recs)
+    return bool(paths) and all(one(p) for p in paths)
+
+
+def uncheckable_by_nature(tasks, tid, target=None):
+    """A task no check can decide by what it is: a plan-domain task (a contract, a design, a decision — prose) or one that
+    declares itself documents or records (`domain`), the test writer's task (its tests are the check the build answers to),
+    the quibble's (its answer is questions on the contract), or a task whose files — what it touched and adopted, else its
+    declared `scope` — are all documents or records (guin-site 10-12: `first-post-done` wrote a Done line in ATPROTO.md,
+    `plugin-lock` ran `hunsu lock`, `cirrus-enter-doc` noted an upstream issue; each was charged "no check decides this
+    task"). Unknown tasks are not: fail closed."""
     t = tasks.get(tid) or {}
-    return t.get("domain") == "plan" or t.get("role") == "nitpick"
+    if t.get("domain") in NO_CHECK_DOMAINS or t.get("role") in ("nitpick", "quibble"):
+        return True
+    files = list(t.get("touched") or []) + list(t.get("adopted") or [])
+    return target is not None and documents_or_records(files or t.get("scope") or [], target)
+
+
+def no_check_by_nature(old, defs, target):
+    """An open "no check decides this task" charge (or a carry of one) whose run's tasks that bear it are all uncheckable by
+    nature now — a charge raised before that was known. Its text no longer names the tasks (grouped by clause), so the run's
+    records say which tasks carry the non-claim."""
+    kind, where, text = charge(old)
+    if kind != "non-claim" or text != NO_CHECK or where not in defs:
+        return False
+    bearing = [tid for tid, t in defs[where].items() if any(str(n).startswith(NO_CHECK) for n in t.get("non-claims") or [])]
+    return bool(bearing) and all(uncheckable_by_nature(defs[where], tid, target) for tid in bearing)
 
 
 def carried_observations(prior):
@@ -393,8 +463,10 @@ def carry(old, handle, rid, origin):
             c["raised-in"], src = origin[tuple(c["carries"])]
             c["text"] = src["text"]
             c.update({k: src[k] for k in CHARGE_KEYS if k in src})
+        c["text"] = OLD_REPEAT.sub("", c.get("text", ""))
         return c
-    return {"kind": "undisposed", "layer": "objection", "where": old["where"], "text": old["text"],
+    # an `[xN]` written before 1.14.0 is struck from the carried text: it read as a count of tasks (the charge is `carries`)
+    return {"kind": "undisposed", "layer": "objection", "where": old["where"], "text": OLD_REPEAT.sub("", old["text"]),
             **{k: old[k] for k in CHARGE_KEYS if k in old},
             "carries": list(identity(old)), "first-seen": old.get("first-seen", rid), "raised-in": handle}
 
@@ -415,6 +487,32 @@ def open_charges(target):
                           if layer(f) == "objection" and not f.get("disposition") and charge(f) not in settled]
 
 
+def distinct(open_):
+    """Open objections, one per charge: two copies of one charge are one thing owed."""
+    seen, out = set(), []
+    for f in open_:
+        if charge(f) not in seen:
+            seen.add(charge(f))
+            out.append(f)
+    return out
+
+
+def count_text(open_):
+    """The one count of open charges, the same in `review`'s last line and the SessionStart line: each distinct charge once,
+    under the kind of the charge it makes — a carry (`undisposed`) under the kind it carries — and then how many of those are
+    carried from earlier reviews, said as included: `cq-failed 2, non-claim 10; 3 of them carried, already in the count`. The
+    review counted a carry as `undisposed` and the session line as its charge's kind, so one review read "non-claim 7,
+    undisposed 3" at close and "non-claim 10" at the next session start (guin-site review a3c2); and a bare "; 3 carried"
+    can be read as three more."""
+    open_ = distinct(open_)
+    counts = {}
+    for f in open_:
+        k = kind_of(f) or "?"
+        counts[k] = counts.get(k, 0) + 1
+    carried = sum(1 for f in open_ if f.get("kind") == "undisposed")
+    return (", ".join("%s %d" % kv for kv in sorted(counts.items())) or "none") + ("; %d of them carried, already in the count" % carried if carried else "")
+
+
 def lock_commit(target):
     """The commit that first added hunsu.lock.json — where a project's record begins; None without git or a lock."""
     out = git(target, "log", "--diff-filter=A", "--format=%h", "--", "hunsu.lock.json") or ""
@@ -423,8 +521,9 @@ def lock_commit(target):
 
 def identity(f):
     """What makes a finding the same finding across reviews: its kind, where, and its text with the numbers that change
-    between reviews (counts, `[xN]`, "since <rev>") struck — a reworded finding is a different one."""
-    text = re.sub(r"\[x\d+\]|\b\d+ file\(s\)|since [0-9a-f]{7,}|\(first seen [^)]*\)", "", f.get("text", "")).strip()
+    between reviews (counts, which tasks and runs bear a grouped non-claim — `[tasks …; in N runs: …]`, `[xN]` before it —
+    "since <rev>") struck — a reworded finding is a different one."""
+    text = re.sub(BEARING + r"|\b\d+ file\(s\)|since [0-9a-f]{7,}|\(first seen [^)]*\)", "", f.get("text", "")).strip()
     return (f.get("kind"), f.get("where"), text)
 
 
@@ -464,9 +563,15 @@ def cmd_dispose(args):
         raise SystemExit("dispose: %s is an observation — an observation is a fact, not a charge; there is nothing to dispose" % args.finding)
     if bool(args.why) == bool(args.delegated):
         raise SystemExit("dispose: --why WHY --by NAME (a person's words) or --delegated WHY (no person read this; why it was handed off) — one of the two")
-    if args.delegated and args.by:
-        raise SystemExit("dispose: --by names the person whose words --why carries; a --delegated disposal has no such person (it used to be dropped silently)")
-    disp = {"as": args.as_, "why": args.why, "by": args.by} if args.why else {"as": args.as_, "delegated": args.delegated, "by": None}
+    if args.approved_in is not None and not re.match(r"^[\w.-]+:\S+$", args.approved_in):
+        raise SystemExit("dispose: --approved-in %r: where the person agreed, as source:ID (a mangsang source, `source:at-63`) or KIND:REF" % args.approved_in)
+    # a delegated disposal: no person read the finding (`by` stays null), but someone handed it off — `--by` with --delegated
+    # names who (`delegated-by`), `--approved-in` where they said so. Refused until 1.14.0, so all twelve of guin-site review
+    # a3c2's disposals read `by: null`, the owner's "뒷북 검토 진행" kept only in each reason's prose
+    disp = {"as": args.as_, "why": args.why, "by": args.by} if args.why else \
+        {"as": args.as_, "delegated": args.delegated, "by": None, **({"delegated-by": args.by} if args.by else {})}
+    if args.approved_in:
+        disp["approved-in"] = args.approved_in
     # the disposal carries the charge it answers, copied at disposal time: a person reading the review later sees (finding, reason)
     # side by side, without resolving indices across reviews to learn what was answered
     disp["finding_text"] = f["text"]
@@ -488,7 +593,9 @@ def cmd_dispose(args):
     r["findings"][here_i]["disposition"] = disp
     save(path, r)
     first = r["findings"][here_i].get("first-seen")
-    print("disposed %s as %s%s%s%s" % (args.finding, args.as_, " (delegated)" if args.delegated else "",
+    print("disposed %s as %s%s%s%s" % (args.finding, args.as_, (" (delegated%s%s)" % (" by %s" % args.by if args.by else ", nobody named as handing it off (--by NAME)",
+                                                                                   "; approved in %s" % args.approved_in if args.approved_in else ""))
+                                       if args.delegated else "",
                                        " — recorded at %s/%d, where the charge stands now" % (here_rid, here_i) if (here_rid, here_i) != (rid, int(idx)) else "",
                                        " — one answer for the charge first seen in %s" % first if first and first != here_rid else ""))
     return 0
@@ -540,7 +647,9 @@ def verify_packet(request):
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
             **({"excluded": excluded, "excluded_diff": excluded_diff[:40000]} if excluded else {}),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
-            **({"tests_non_claims": request["tests_non_claims"]} if request.get("tests_non_claims") else {}),
+            # whose words these are, in the data itself: a verifier read the tests writer's "I did not run the whole suite" as
+            # `built.non-claims` and rejected a build whose full suite had passed (guin-site run a0ec, cache-build, 10-15)
+            **({"tests_non_claims": {"whose": TESTS_NON_CLAIMS_WHOSE, "statements": request["tests_non_claims"]}} if request.get("tests_non_claims") else {}),
             **({"checked": request["checked"]} if request.get("checked") else {}),
             **({"recheck": request["recheck"]} if request.get("recheck") else {}),
             "instructions": ("You are the verifier of one slice, before its gate. The checks passed; that is a premise, not a verdict. Read the contract "
@@ -548,10 +657,12 @@ def verify_packet(request):
                              "Reject when a contract sentence is contradicted by the code, or when a claim in `built.verified` could not have been "
                              "decided by the check cited (a test that does not exercise the sentence, a key that selects nothing). "
                              "`touched` is what the builder changed; `touched_since` changed after it answered (a person's plan edits, say) and is not the builder's — do not hold the builder's report to it. "
-                             "`built.non-claims` "
-                             + ("(and `tests_non_claims`, what the writer of the protected tests says they do not decide) are the hands' own "
-                                if request.get("tests_non_claims") else "are the builder's own ")
-                             + "list of what they did not check: read the code at each — a contract sentence a non-claim leaves undecided and the code "
+                             "`built.non-claims` are the builder's own list of what it did not check"
+                             + (", and `tests_non_claims.statements` the tests writer's (" + ", ".join(sorted(request["tests_non_claims"]))
+                                + ") about its own tests — what they do not decide. `tests_non_claims` is never the builder's report: a finding about "
+                                "the builder (`where` naming `built`) may not quote it as the builder's, and a sentence found only there is not "
+                                "something the builder said" if request.get("tests_non_claims") else "")
+                             + ". Read the code at each — a contract sentence a non-claim leaves undecided and the code "
                              "contradicts is a finding. Your accept is recorded as having read them; they are not charged again after it. "
                              + ("`checked` lists commands chongdae itself ran on the tree and saw exit 0 (`tail` is their output's end; `changed_since` "
                                 "the files changed after) — evidence chongdae observed, unlike a claim in `built.verified`: a check it shows passing "
@@ -563,6 +674,8 @@ def verify_packet(request):
                                 "lock the environment, relate concepts), read it in `excluded_diff` as the slice's work and verify it against them. "
                                 if excluded else "") +
                              "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file — "
+                             "put each quoted sentence in backticks, verbatim, and name in `where` the field it is from (`built.verified[0]`, "
+                             "`contract.Q1`): a quoted span the named field does not hold is dropped as unfounded — "
                              "except an `anomaly` (something wrong in the tree that no record speaks to), which quotes the tree only. "
                              "No grounded finding, no reject — and no finding means accept. A behavior the code had before this slice, which the brief or "
                              "contract says to carry over as it was, is not a finding against this slice: say it in `summary` if it looks wrong. "
@@ -576,6 +689,103 @@ def verify_packet(request):
                                 "public name that the diff removes does not reappear where its code went (record_quote: the removed text from the diff's `-` lines; "
                                 "tree_quote: the new place, or the `+` lines that lack it), or when a moved function's body differs from the original beyond the move."
                                 if domain == "refactor" else ""))}
+
+
+TESTS_NON_CLAIMS_WHOSE = "the tests writer's statements about its own tests — not the builder's report (that is `built`)"
+QUOTE_SPAN = re.compile(r"`([^`\n]+)`")
+FIELD_PATH = re.compile(r"^[A-Za-z_][\w-]*(?:\.[\w-]+|\[\d+\])*$")
+OTHER_HANDS = ("tests_non_claims", "checked")   # the tests writer's words and chongdae's own runs: never the builder's report
+PACKET_META = ("artifact-type", "mode", "target", "kinds", "instructions")   # what dwitbuk wrote, not the record
+
+
+def strings(v):
+    """Every string leaf of a JSON value."""
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, dict):
+        for x in v.values():
+            yield from strings(x)
+    elif isinstance(v, list):
+        for x in v:
+            yield from strings(x)
+
+
+def flat(text):
+    return " ".join(str(text).split())
+
+
+def quoted_spans(f, packet):
+    """The verbatim spans a finding's `record_quote` puts in backticks — field names (`built.non-claims`) left out, they are
+    where, not what. Trailing punctuation the eyes add around a sentence is struck."""
+    out = []
+    for sp in QUOTE_SPAN.findall(str(f.get("record_quote") or "")):
+        sp = flat(sp).strip(" \"'\u201c\u201d\u2018\u2019")
+        sp = sp.rstrip(".,;:") if len(sp.rstrip(".,;:")) >= 4 else sp
+        if len(sp) < 4 or (FIELD_PATH.match(sp) and re.split(r"[.\[]", sp)[0] in packet):
+            continue
+        out.append(sp)
+    return out
+
+
+def unfounded(f, packet):
+    """Why a verify finding stands on nothing in the request, or None. Each backticked span of its `record_quote` must occur in
+    the request: in the builder's own fields, the contract, the brief, or the files the slice touched, its tests and the files
+    `where` names (the eyes Read them) — or, only
+    when `where` does not name `built`, in another hand's (`tests_non_claims`, `checked`). A span found nowhere, or found only
+    in the tests writer's words while the finding charges the builder, is unfounded (guin-site run a0ec, cache-build: "`I did
+    not run the whole suite.`" quoted as `built.non-claims` was `tests_non_claims.cache-tests[8]`; the builder had run the full
+    suite and it passed). And a `claim-unverified` about a check chongdae itself ran on this tree and saw exit 0 (`checked`,
+    nothing changed since) is unfounded unless it quotes the contract sentence the check is said not to decide — whether the
+    check ran and passed is what chongdae observed; whether it decides a sentence stays the eyes'."""
+    own = [s_ for k, v in packet.items() if k not in OTHER_HANDS + PACKET_META for s_ in strings(v)]
+    target = packet.get("target") or "."
+    named = re.findall(r"[\w.-]+(?:/[\w.-]+)*\.\w+", str(f.get("where") or ""))   # `plan/PLAN.md:260-264; src/a.ts:36`: a file the eyes Read
+    for rel in list(packet.get("tests") or []) + list(packet.get("touched") or []) + named:
+        path = os.path.join(target, rel)
+        if os.path.realpath(path) != os.path.realpath(target) and not os.path.realpath(path).startswith(os.path.realpath(target) + os.sep):
+            continue
+        if os.path.isfile(path) and os.path.getsize(path) < 200000:
+            own.append(io.open(path, encoding="utf-8", errors="replace").read())
+    own = flat("\n".join(own))
+    other = flat("\n".join(s_ for k in OTHER_HANDS for s_ in strings(packet.get(k))))
+    charges_builder = re.search(r"\bbuilt\b", str(f.get("where") or "")) is not None
+    spans = quoted_spans(f, packet)
+    for sp in spans:
+        if sp in own:
+            continue
+        if sp in other:
+            if charges_builder:
+                return "quotes `%s` as the builder's, but it is only in %s — %s" % (
+                    sp, " / ".join(k for k in OTHER_HANDS if sp in flat("\n".join(strings(packet.get(k))))), TESTS_NON_CLAIMS_WHOSE)
+            continue
+        return "quotes `%s`, which is nowhere in the request" % sp
+    if f.get("kind") == "claim-unverified":
+        contract = flat("\n".join(strings(packet.get("contract"))))
+        about_contract = any(sp in contract for sp in spans)
+        said = flat("%s %s" % (f.get("where") or "", f.get("record_quote") or ""))
+        for c in packet.get("checked") or []:
+            cmd = flat(" ".join(c["command"]) if isinstance(c.get("command"), list) else c.get("command") or "")
+            if cmd and c.get("exit") == 0 and not c.get("expect") and not c.get("changed_since") and cmd in said and not about_contract:
+                return "chongdae itself ran `%s` on this tree and saw exit 0 (`checked`), nothing changed since" % cmd
+    return None
+
+
+def weigh(out, packet):
+    """A verify answer, its grounded findings weighed against the request: an unfounded one (`unfounded`) is dropped from the
+    verdict's grounds and kept beside it under `unfounded`, with why; a reject that rested only on unfounded findings is an
+    accept, and says so in `summary`."""
+    kept, notes = [], []
+    for f in out.get("findings") or []:
+        why = unfounded(f, packet)
+        (notes.append(dict(f, unfounded=why)) if why else kept.append(f))
+    out["findings"] = kept
+    if notes:
+        out["unfounded"] = notes
+        if out.get("verdict") == "reject" and not kept:
+            out["verdict"] = "accept"
+            out["summary"] = "rejected only on unfounded finding(s) (%s); counted as accept%s" % (
+                "; ".join(n["unfounded"] for n in notes), " — the eyes said: " + out["summary"] if out.get("summary") else "")
+    return out
 
 
 def cmd_eyes(args):
@@ -726,7 +936,8 @@ def main(argv=None):
             p.add_argument("finding")
             p.add_argument("--as", dest="as_", choices=["accepted", "dismissed"], required=True)
             p.add_argument("--why", default=None, help="a person's words")
-            p.add_argument("--by", default=None)
+            p.add_argument("--by", default=None, help="with --why: the person whose words they are; with --delegated: who handed the finding off (`delegated-by`)")
+            p.add_argument("--approved-in", dest="approved_in", default=None, metavar="SOURCE:ID", help="where the person agreed (a mangsang source, `source:at-63`)")
             p.add_argument("--delegated", default=None, help="no person read this finding: why it was handed off (recorded as such, like a gate)")
             p.add_argument("--quote", default=None, help="a verbatim quote from the record or the tree that grounds this disposal")
     args = ap.parse_args(argv)

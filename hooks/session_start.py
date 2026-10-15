@@ -35,13 +35,9 @@ def main():
         return 0   # a review file this hook cannot read is `review`'s problem, not a session start's
     if not open_:
         return 0
-    kinds = {}
-    for f in open_:
-        k = dwitbuk.kind_of(f) or "?"   # a carried charge counts under the kind it is
-        kinds[k] = kinds.get(k, 0) + 1
     engine = os.path.join(os.path.dirname(HERE), "dwitbuk.py").replace(os.sep, "/")
     msg = ("dwitbuk: %d undisposed objection(s) in %s (%s) — `python3 \"%s\" follow --target .` lists them; `dispose <review>/<n> --as accepted|dismissed --why ... --by NAME` answers one."
-           % (len(open_), rid, ", ".join("%s %d" % kv for kv in sorted(kinds.items())), engine))
+           % (len(dwitbuk.distinct(open_)), rid, dwitbuk.count_text(open_), engine))   # each charge once, by the kind it makes; carries said after
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg}}))
     return 0
 
