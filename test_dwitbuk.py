@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import dwitbuk  # noqa: E402
 import eyes_worker as w  # noqa: E402
+sys.path.insert(0, os.path.join(HERE, "hooks"))
+import session_start  # noqa: E402
 
 
 def write(path, text):
@@ -146,7 +149,7 @@ def test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_c
         r2 = pj.latest()
         again = next(f for f in r2["findings"] if f["kind"] == "non-claim" and f["where"] == "run-20260101-000001-aaaa")
         assert again["disposition"]["why"] == "B1 was checked by hand", again   # answered when it read `[tasks C1, B1]`: the same charge
-        assert again["text"].endswith("  [tasks C1, B1; in 2 runs: run-20260101-000001-aaaa, run-20260101-000002-bbbb]"), again
+        assert again["text"].endswith("  [tasks: C1 (run-20260101-000001-aaaa), B1 (run-20260101-000001-aaaa); also in other runs: T2 (run-20260101-000002-bbbb)]"), again
         t2 = next(f for f in r2["findings"] if f["where"] == "run-20260101-000002-bbbb")
         assert dwitbuk.layer(t2) == "observation", t2
         assert "0 objection(s)" in out and "already answered, carried with their disposition: 1" in out, out
@@ -183,8 +186,8 @@ def test_review_collects_typed_findings_from_the_locks_reporters_and_groups_by_k
         assert "source" not in next(f for f in r["findings"] if f["kind"] == "unreviewed") and "reporters" not in r   # written once, read by nothing
         assert "gave no dwitbuk/findings@1" in next(f["text"] for f in r["findings"] if f["kind"] == "reporter-failed")
         nc = [f["text"] for f in r["findings"] if f["kind"] == "non-claim"]
-        assert sorted(t for t in nc if t.startswith("x untested")) == ["x untested  [task S%d; in 2 runs: run-20260101-000001-aaaa, run-20260101-000002-bbbb]" % n
-                                                                      for n in (1, 2)] and "y untested  [task S2]" in nc, nc   # one per run; the repeat named, not `[x2]`
+        assert sorted(t for t in nc if t.startswith("x untested")) == ["x untested  [tasks: S1 (run-20260101-000001-aaaa); also in other runs: S2 (run-20260101-000002-bbbb)]",
+                                                                      "x untested  [tasks: S2 (run-20260101-000002-bbbb); also in other runs: S1 (run-20260101-000001-aaaa)]"] and "y untested  [task S2]" in nc, nc   # one per run; the repeat named, not `[x2]`
         carry = next(f for f in r["findings"] if f["kind"] == "undisposed")
         assert carry["carries"][0] == "no-reporters" and carry["text"].startswith("no reporters declared") and carry["raised-in"].endswith("/0"), carry   # whole, pointing back
 
@@ -751,6 +754,18 @@ def test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_
         assert "1 undisposed objection(s)" in json.loads(out)["hookSpecificOutput"]["additionalContext"], out
         assert run("dispose", "%s/%d" % (r["id"], objections[1]), "--as", "dismissed", "--why", "no", "--by", "kim", "--target", pj.dir)[0] == 0
         assert run_hook(pj.dir) == (0, ""), "everything disposed: silent"
+    # hunsu's probe (HUNSU_SURVEY=1) runs the hook in an empty temporary project: the standing text, the same everywhere
+    empty = tempfile.mkdtemp(prefix="dwitbuk-survey-")
+    try:
+        code, out = run_hook(empty, HUNSU_SURVEY="1")
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert code == 0 and ctx == session_start.STANDING, ctx
+        assert "undisposed objection(s) in <review>" in ctx and "follow" in ctx and "dispose" in ctx and "nothing" in ctx, ctx
+        assert not re.search(r"review-\d|\d+ undisposed|" + re.escape(HERE), ctx), ctx   # no live id, count or path
+        assert run_hook(empty, HUNSU_SURVEY="1", AGENT_WORKER="1") == (0, ""), "a worker session: silent even under the probe"
+        assert os.listdir(empty) == [], "nothing written"
+    finally:
+        shutil.rmtree(empty, ignore_errors=True)
 
 
 def test_stop_hook_steps_aside_inside_a_worker_session_and_without_the_switch():
@@ -1051,8 +1066,10 @@ def test_a_grouped_non_claim_names_its_tasks_and_runs_and_the_count_is_of_distin
         code, out = run("review", "--target", pj.dir)
         r = pj.latest()
         texts = {f["where"]: f["text"] for f in r["findings"] if f["kind"] == "non-claim"}
-        assert texts == {a0ec: "no check decides this task  [tasks cache-contract, cache-tests, cache-build; in 2 runs: %s, %s]" % (a0ec, b3f0),
-                         b3f0: "no check decides this task  [task deploy; in 2 runs: %s, %s]" % (a0ec, b3f0)}, texts
+        assert texts == {a0ec: "no check decides this task  [tasks: cache-contract (%s), cache-tests (%s), cache-build (%s); also in other runs: deploy (%s)]"
+                               % (a0ec, a0ec, a0ec, b3f0),
+                         b3f0: "no check decides this task  [tasks: deploy (%s); also in other runs: cache-contract (%s), cache-tests (%s), cache-build (%s)]"
+                               % (b3f0, a0ec, a0ec, a0ec)}, texts
         assert not any("[x" in t for t in texts.values()), texts
         mine = next(f for f in r["findings"] if f["where"] == a0ec)
         assert dwitbuk.identity(mine) == dwitbuk.identity(old["findings"][0]) == ("non-claim", a0ec, "no check decides this task"), mine
@@ -1070,6 +1087,53 @@ def test_a_grouped_non_claim_names_its_tasks_and_runs_and_the_count_is_of_distin
     b = {"kind": "undisposed", "where": "run-1", "text": "no check decides this task  [x2]", "carries": ["non-claim", "run-1", "no check decides this task"]}
     assert dwitbuk.count_text([a, b]) == "non-claim 1", dwitbuk.count_text([a, b])
     assert len(dwitbuk.distinct([a, b])) == 1
+
+
+def test_a_grouped_non_claim_names_each_task_beside_its_own_run():
+    """guin-site 10-16: review f614 said `[task lexicon-descriptions; in 2 runs: run-…de3e, run-…ddee]` of a task only ddee
+    has, and ee97 listed b3f0 beside de3e's tasks — 1.14.0 listed the runs sharing the clause text, and the line read as the
+    task in each. Each task is now named with its own run; 1.14.0's form and `[xN]` stay struck from the charge, so their
+    answers still answer it, and a carry of the 1.14.0 form keeps none of its misleading list."""
+    with Project() as pj:
+        nc = "no check decides this task; done means the agent said so"
+        b3f0, de3e, ddee = "run-20261015-064403-b3f0", "run-20261015-094800-de3e", "run-20261016-022709-ddee"
+        pj.run_record(b3f0, {"deploy": {"status": "done"}})
+        pj.run_record(de3e, {t: {"status": "done"} for t in ("plugins-lock", "site-build-stale")})
+        pj.run_record(ddee, {"lexicon-descriptions": {"status": "done"}})
+        # the shapes 1.14.0 wrote (f614's and ee97's text, verbatim): ddee's answered, b3f0's open
+        old = {"artifact-type": "dwitbuk/review@1", "id": "review-20261016-113225-f614", "since": pj.base, "head": pj.base,
+               "findings": [{"kind": "non-claim", "where": ddee, "layer": "objection", "text": "no check decides this task  [task "
+                             "lexicon-descriptions; in 2 runs: %s, %s]" % (de3e, ddee),
+                             "disposition": {"as": "accepted", "why": "a lexicon entry is prose", "by": "lee"}},
+                            {"kind": "non-claim", "where": b3f0, "layer": "objection",
+                             "text": "no check decides this task  [task deploy; in 2 runs: %s, %s]" % (b3f0, de3e)}]}
+        write(os.path.join(pj.dir, dwitbuk.REVIEWS, old["id"] + ".json"), old)
+        ee97 = {"kind": "non-claim", "where": de3e, "text": "no check decides this task  [tasks plugins-lock, site-build-stale; in 2 runs: %s, %s]" % (b3f0, de3e)}
+        pj.reporter([{"kind": "non-claim", "where": de3e, "text": "%s: %s" % (t, nc)} for t in ("plugins-lock", "site-build-stale")]
+                    + [{"kind": "non-claim", "where": ddee, "text": "lexicon-descriptions: " + nc}], "chongdae")
+        code, out = run("review", "--target", pj.dir)
+        r = pj.latest()
+        texts = {f["where"]: f["text"] for f in r["findings"] if f["kind"] == "non-claim"}
+        assert texts == {ddee: "no check decides this task  [tasks: lexicon-descriptions (%s); also in other runs: plugins-lock (%s), site-build-stale (%s)]"
+                               % (ddee, de3e, de3e),
+                         de3e: "no check decides this task  [tasks: plugins-lock (%s), site-build-stale (%s); also in other runs: lexicon-descriptions (%s)]"
+                               % (de3e, de3e, ddee)}, texts
+        # every task is named beside the run that has it, and no other
+        defs = dwitbuk.run_tasks(pj.dir)
+        for text in texts.values():
+            pairs = re.findall(r"([\w-]+) \((run-[\w-]+)\)", text)
+            assert len(pairs) == 3 and all(task in defs[run_] for task, run_ in pairs), (text, pairs)
+        mine = next(f for f in r["findings"] if f["kind"] == "non-claim" and f["where"] == ddee)
+        assert dwitbuk.identity(mine) == dwitbuk.identity(old["findings"][0]) == ("non-claim", ddee, "no check decides this task"), mine
+        assert mine["disposition"]["why"] == "a lexicon entry is prose", mine   # f614's answer answers the reworded charge
+        assert dwitbuk.identity(next(f for f in r["findings"] if f["where"] == de3e and f["kind"] == "non-claim")) == dwitbuk.identity(ee97)
+        carry = next(f for f in r["findings"] if f["kind"] == "undisposed")
+        assert carry["where"] == b3f0 and carry["text"] == "no check decides this task", carry   # 1.14.0's list struck from the carry
+        assert dwitbuk.charge(carry) == dwitbuk.identity(old["findings"][1]), carry
+        assert "2 objection(s) (non-claim 2; 1 of them carried, already in the count)" in out, out
+    # one run alone: its tasks, no run named
+    one = {"run-1": [{"text": "T1: x"}, {"text": "T2: x"}]}
+    assert dwitbuk.bearing(one["run-1"], one, "run-1") == "  [tasks T1, T2]"
 
 
 if __name__ == "__main__":

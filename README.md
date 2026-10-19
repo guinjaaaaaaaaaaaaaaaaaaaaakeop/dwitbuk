@@ -102,7 +102,9 @@ of one charge are one), under the kind of the charge it makes — a carry (`undi
 many of them are carries, said as already in the count: `cq-failed 2, non-claim 10; 3 of them carried, already in the
 count` (a bare "; 3 carried" can be read as three more). Open is: layer objection, no disposition, and no disposition of the same charge in
 any review — what the reviews the runner placed still need from a person. Nothing open, no reviews, or a worker session:
-silent. Never blocks, never writes
+silent. Never blocks, never writes. Under hunsu's probe (`HUNSU_SURVEY=1`, an empty project) it answers its standing text
+— the line as a template (`N undisposed objection(s) in <review> (<kind> N, …)`, the two commands, when it is silent), no
+id, count or path — so hunsu's judge reads what dwitbuk tells a session, not the nothing an empty project gets
 
 ### Stop hook
 
@@ -167,10 +169,12 @@ neither lists nor counts it. `delegated` is an observation by kind; a reporter m
 `"layer": "observation"` and is trusted. Everything else — unknown kinds included — is an objection: fail closed.
 
 From reporters, in their own words: chongdae's `outside-run` (grouped per directory here), `unattributed`, `delegated`
-(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, its tasks and the runs sharing the clause said in words — `[tasks T1, T2; in 2
-runs: run-…, run-…]`; before 1.14.0 an `[xN]`, read as a count of tasks: "no check decides this task [x2]" stood for eight
-tasks in two runs, and three charges were told as "5건". Struck from the charge's identity, so a review that wrote `[xN]`
-still answers it; grouped across runs, a run's charge had a
+(observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, its tasks said in words —
+`[tasks T1, T2]` — and, when other runs share the clause, each task beside its own run: `[tasks: T1 (run-a); also in other
+runs: T3 (run-b)]`. 1.14.0 wrote `[task T1; in 2 runs: run-a, run-b]`, the runs sharing the clause text, and it read as T1
+in both: a guin-site review named a task beside a run it was not in. Before 1.14.0 an `[xN]`, read as a count of tasks: "no
+check decides this task [x2]" stood for eight tasks in two runs, and three charges were told as "5건". Each form is struck
+from the charge's identity, so a review that wrote `[xN]` or 1.14.0's form still answers it, and a carry keeps neither; grouped across runs, a run's charge had a
 new identity whenever a review's span changed and never kept its answer; a declared setting's note, and "no check
 decides this task" on a task no check could decide by nature — a plan-domain task or one declaring `domain` doc/record, the
 test writer's or the quibble's, or one whose files (touched and adopted, else its `scope`) are all documents (`.md`, `.txt`

@@ -212,7 +212,9 @@ def cmd_review(args):
     # A non-claim stays one finding per run: grouped across runs, its `where` listed whichever runs this review happened to
     # span, so the same run's non-claim had a new identity in the next review and never inherited its disposition — the
     # same "no check decides this task" was answered ten times on one site in a day. What it stands for is said in words —
-    # `[tasks a, b; in 2 runs: run-…, run-…]`, the run's tasks and the runs sharing the clause — and identity() strikes it:
+    # `[tasks a, b]`, the run's tasks, and with other runs sharing the clause each task beside its own run
+    # (`[tasks: a (run-x); also in other runs: c (run-y)]`; 1.14.0's `in 2 runs: …` named runs a task was not in) — and
+    # identity() strikes it:
     # an `[x2]` (1.13.0) read as a count of tasks, "no check decides this task [x2]" stood for eight tasks in two runs, and
     # two such lines and one more were told to the owner as "5건" (guin-site 10-15, reviews 666e and 4a23)
     by_dir = {}
@@ -242,7 +244,7 @@ def cmd_review(args):
                          "text": "%d file(s) changed since %s; no completed run recorded touching them" % (len(names), base or "the beginning")})
     for key, by_run in groups.items():
         for where, fs in sorted(by_run.items()):
-            f = {"kind": "non-claim", "where": where, "text": key + bearing(fs, by_run)}
+            f = {"kind": "non-claim", "where": where, "text": key + bearing(fs, by_run, where)}
             if key == NO_CHECK and all(uncheckable_by_nature(defs.get(where, {}), t, target) for x in fs for t in task_ids(x["text"])):
                 # a contract, design or plan document (domain plan) has no check that could decide prose, a test task's tests
                 # are what the build is checked against, and a task that wrote only documents or records (a Done line in
@@ -347,20 +349,31 @@ def task_ids(text):
     return [m.group(1)] if m else []
 
 
-def bearing(fs, by_run):
-    """What a grouped non-claim stands for, in words: the tasks of this run that bear it, and — when other runs share the
-    clause — how many runs and which: `  [tasks T1, T2; in 2 runs: run-a, run-b]`. Struck from identity (BEARING), like the
-    `[xN]` it replaces, so the charge is the same charge however many tasks or runs come to bear it."""
-    tasks = []
-    for x in fs:
-        tasks += [t for t in task_ids(x["text"]) if t not in tasks]
-    parts = (["task%s %s" % ("s" if len(tasks) > 1 else "", ", ".join(tasks))] if tasks else []) + \
-            (["in %d runs: %s" % (len(by_run), ", ".join(sorted(by_run)))] if len(by_run) > 1 else [])
-    return "  [%s]" % "; ".join(parts) if parts else ""
+def bearing(fs, by_run, where=None):
+    """What a grouped non-claim stands for, in words: the tasks of this run that bear it — `  [tasks T1, T2]` — and, when
+    other runs share the clause, each task named with its own run: `  [tasks: T1 (run-a); also in other runs: T3 (run-b)]`.
+    1.14.0 wrote `[task T1; in 2 runs: run-a, run-b]`, which read as T1 in both runs: guin-site review f614 said
+    `[task lexicon-descriptions; in 2 runs: …de3e, …ddee]` of a task only ddee has (the runs listed were the runs sharing
+    the clause text, not the task's). Struck from identity (BEARING), like the `[xN]` before it, so the charge is the same
+    charge however many tasks or runs come to bear it."""
+    def tasks_of(xs):
+        out = []
+        for x in xs:
+            out += [t for t in task_ids(x["text"]) if t not in out]
+        return out
+    tasks = tasks_of(fs)
+    others = [(run, tasks_of(xs)) for run, xs in sorted(by_run.items()) if run != where]
+    if not others:
+        return "  [task%s %s]" % ("s" if len(tasks) > 1 else "", ", ".join(tasks)) if tasks else ""
+    here = ", ".join("%s (%s)" % (t, where) for t in tasks) if tasks else "tasks not named (%s)" % where
+    there = ", ".join(", ".join("%s (%s)" % (t, run) for t in ts) if ts else "tasks not named (%s)" % run for run, ts in others)
+    return "  [tasks: %s; also in other runs: %s]" % (here, there)
 
 
-OLD_REPEAT = re.compile(r"\s*\[x\d+\]")
-BEARING = r"\[x\d+\]|\[(?:tasks? [^\]]*|in \d+ runs: [^\]]*)\]"   # `[x2]` (before 1.14.0) and the words that replaced it
+OLD_REPEAT = re.compile(r"\s*(?:\[x\d+\]|\[tasks? [^\]]*; in \d+ runs: [^\]]*\])")
+# `[x2]` (before 1.14.0) read as a count of tasks, and 1.14.0's `[task T; in 2 runs: …]` as T in each run listed: neither is
+# kept in a carried text (the charge is `carries`)
+BEARING = r"\[x\d+\]|\[(?:tasks? [^\]]*|tasks: [^\]]*|in \d+ runs: [^\]]*)\]"   # `[x2]`, 1.14.0's words, and the task@run list
 
 
 NO_CHECK = "no check decides this task"   # chongdae's non-claim on a task added without checks (first clause)
@@ -465,7 +478,7 @@ def carry(old, handle, rid, origin):
             c.update({k: src[k] for k in CHARGE_KEYS if k in src})
         c["text"] = OLD_REPEAT.sub("", c.get("text", ""))
         return c
-    # an `[xN]` written before 1.14.0 is struck from the carried text: it read as a count of tasks (the charge is `carries`)
+    # an `[xN]` written before 1.14.0, or 1.14.0's `[task …; in N runs: …]`, is struck from the carried text (OLD_REPEAT)
     return {"kind": "undisposed", "layer": "objection", "where": old["where"], "text": OLD_REPEAT.sub("", old["text"]),
             **{k: old[k] for k in CHARGE_KEYS if k in old},
             "carries": list(identity(old)), "first-seen": old.get("first-seen", rid), "raised-in": handle}
@@ -521,7 +534,8 @@ def lock_commit(target):
 
 def identity(f):
     """What makes a finding the same finding across reviews: its kind, where, and its text with the numbers that change
-    between reviews (counts, which tasks and runs bear a grouped non-claim — `[tasks …; in N runs: …]`, `[xN]` before it —
+    between reviews (counts, which tasks and runs bear a grouped non-claim — `[tasks …]`, `[tasks: T (run); also in other runs: …]`, 1.14.0's
+    `[tasks …; in N runs: …]`, `[xN]` —
     "since <rev>") struck — a reworded finding is a different one."""
     text = re.sub(BEARING + r"|\b\d+ file\(s\)|since [0-9a-f]{7,}|\(first seen [^)]*\)", "", f.get("text", "")).strip()
     return (f.get("kind"), f.get("where"), text)
