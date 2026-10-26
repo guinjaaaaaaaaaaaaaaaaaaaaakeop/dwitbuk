@@ -622,6 +622,29 @@ def test_one_grounding_rule_for_eyes_findings_an_anomaly_stands_on_the_tree():
     assert w.grounded is dwitbuk.grounded, "the verify path uses the same rule"
 
 
+def test_verify_packet_diffs_from_where_the_task_started_in_each_repository():
+    """sagoforce 10-26: every task's work was committed, six of them inside nested repositories the project's git ignores;
+    `git diff HEAD` at the project showed nothing, so the eyes got empty diffs (or a file as new) and accepted. chongdae's
+    `since` names the commit each repository started from: the diff runs there, in that repository, paths from the project."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, ".gitignore"), "/engine/\n")
+        eng = os.path.join(pj.dir, "engine")
+        os.makedirs(eng)
+        git(eng, "init", "-q")
+        write(os.path.join(eng, "gate.py"), "limit = 1\n")
+        git(eng, "add", "-A"); git(eng, "commit", "-q", "-m", "base")
+        start = git(eng, "rev-parse", "HEAD")
+        write(os.path.join(eng, "gate.py"), "limit = 2\n")
+        git(eng, "commit", "-q", "-am", "the task's work, committed")
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        git(pj.dir, "commit", "-q", "-am", "and at the project")
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "run": "run-1", "task": "S1", "target": pj.dir,
+               "touched": ["a.py", "engine/gate.py"], "since": {".": pj.base, "engine": start}}
+        diff = dwitbuk.verify_packet(req)["diff"]
+        assert "-limit = 1" in diff and "+limit = 2" in diff and "b/engine/gate.py" in diff, diff
+        assert "+x = 2" in diff and "(new file)" not in diff, diff
+
+
 def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():
     with Project() as pj:
         write(os.path.join(pj.dir, "a.py"), "x = 2\n")

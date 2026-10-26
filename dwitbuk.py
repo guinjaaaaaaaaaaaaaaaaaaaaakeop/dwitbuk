@@ -638,14 +638,31 @@ REVIEW_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["
                  "properties": {"verdict": {"enum": ["accept", "reject"]}, "findings": {"type": "array", "items": FINDING}}}
 
 
+def repo_of(target, path, since=None):
+    """(the repository holding `path` — "." for the project, or a nested one by its path from the project, as chongdae's
+    `since` names it — the path inside it). Without `since`, a nested repository is a directory above the file with `.git`."""
+    parts = path.split("/")
+    for i in range(len(parts) - 1, 0, -1):
+        n = "/".join(parts[:i])
+        if n in (since or {}) or (not since and os.path.exists(os.path.join(target, n, ".git"))):
+            return n, "/".join(parts[i:])
+    return ".", path
+
+
 def verify_packet(request):
     """A chongdae build request (stage verify) -> the eyes packet for a verdict. The contract, what the task touched (as a diff), the
     builder's own report. The reader is told what decides: a sentence the code contradicts, or a claim no check could have decided."""
     target = request["target"]
     touched = [t for t in request.get("touched") or [] if not t.startswith(record_paths(target))]
+    since = request.get("since") or {}
     diff = ""
     for path in touched:
-        d = git(target, "diff", "HEAD", "--", path)
+        repo, inner = repo_of(target, path, since)
+        cwd, base = os.path.join(target, repo) if repo != "." else target, since.get(repo)
+        lead = "" if repo == "." else repo + "/"
+        # from the commit the task started on (chongdae's `since`), so work it committed is in the diff; `git diff HEAD` showed it
+        # as nothing, and the file as new (sagoforce 10-26: every task's work committed, six of them in nested repositories)
+        d = git(cwd, "diff", "--src-prefix=a/" + lead, "--dst-prefix=b/" + lead, base or "HEAD", "--", inner)
         if d:
             diff += d
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:

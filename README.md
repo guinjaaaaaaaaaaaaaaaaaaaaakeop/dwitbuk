@@ -143,6 +143,10 @@ when the task's work is that change (update a plugin, lock the environment), it 
 request with `recheck` (the last reject's findings, the files changed since)
 is a re-verification: the eyes check that each finding is resolved and that what changed breaks no contract sentence,
 and do not re-read what they read at the last verdict for new findings.
+A verify request's `since` — the commit each repository the work is in started from, the project's (`.`) and any nested
+one's by its path (`engine`) — is where the diff starts: each touched file is diffed in its own repository from there, so
+work committed during the task is in the diff (`git diff HEAD` showed it as nothing and the file as new; sagoforce 10-26:
+every task committed, six of them in repositories the workspace's git ignores, and the eyes accepted 24 empty packets).
 
 The latest review is the open set: it holds every open charge, each once. A finding seen again — the same kind, `where`
 and text, the changing counts struck — inherits its disposition, from whichever earlier review answered it; an objection
