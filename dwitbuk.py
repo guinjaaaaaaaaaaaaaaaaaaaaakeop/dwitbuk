@@ -34,6 +34,8 @@ record — `delegated`, or any kind a reporter itself marks `"layer": "observati
 debt. Unknown kinds are objections: fail closed.
 """
 import argparse
+import functools
+import hashlib
 import io
 import json
 import os
@@ -41,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 REVIEWS = "reviews"
 RUNS = ".chongdae"
@@ -54,7 +57,7 @@ def record_paths(target):
     reads them for its packets), its own reviews, and hunsu's files."""
     declared = load(os.path.join(target, "hunsu.lock.json")).get("record-paths")
     others = sorted({p for ps in declared.values() for p in ps}) if isinstance(declared, dict) else [".mangsang/", ".dwitbuk/"]
-    return tuple(sorted(set(others) | {RUNS + "/", REVIEWS + "/", "hunsu", ".claude/"}))
+    return tuple(sorted(set(others) | {RUNS + "/", REVIEWS + "/", ".dwitbuk/", "hunsu", ".claude/"}))
 
 
 def layer(f):
@@ -72,9 +75,54 @@ def load(path, default=None):
 
 def save(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with io.open(path, "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
+    fd, temporary = tempfile.mkstemp(prefix=".dwitbuk-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+class ReviewLock:
+    """One mutation per checkout. Never unlink the lock inode; process exit releases it."""
+    def __init__(self, target):
+        self.path = os.path.join(os.path.realpath(target), ".dwitbuk", "review.lock")
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self.file = open(self.path, "a+b")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                if os.fstat(self.file.fileno()).st_size == 0:
+                    self.file.write(b"\0"); self.file.flush()
+                self.file.seek(0)
+                msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as err:
+            import errno
+            self.file.close()
+            if err.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                raise
+            print("dwitbuk: another review mutation is running; retry this command", file=sys.stderr)
+            raise SystemExit(4)
+        return self
+
+    def __exit__(self, *args):
+        self.file.close()
+
+
+def serialized(fn):
+    @functools.wraps(fn)
+    def locked(args):
+        with ReviewLock(args.target):
+            return fn(args)
+    return locked
 
 
 def git(target, *a):
@@ -200,6 +248,7 @@ def runs(target):
     return out
 
 
+@serialized
 def cmd_review(args):
     target = args.target
     prior = reviews(target)
@@ -566,6 +615,7 @@ def answered(prior):
     return out
 
 
+@serialized
 def cmd_dispose(args):
     rid, _, idx = args.finding.rpartition("/")
     path = os.path.join(args.target, REVIEWS, rid + ".json")
@@ -819,14 +869,117 @@ def weigh(out, packet):
     return out
 
 
+def fingerprint(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+
+
+def source_state(target, output, extra=(), records=False):
+    """Hash git-visible source contents, including initialized nested repositories.
+
+    Records and the packet directory do not invalidate their own review. Contents,
+    modes and links do: committing an edit cannot turn a changed tree into a match.
+    """
+    import stat
+    target, output = os.path.realpath(target), os.path.realpath(output)
+    skipped = tuple(p for p in record_paths(target) if p != "mangsang/")
+    state, pending, seen = {}, [""], set()
+    def excluded(path):
+        full = os.path.abspath(os.path.join(target, path))
+        return (path.startswith(skipped) or full == output or full.startswith(output + os.sep)
+                or re.search(r"(^|/)__pycache__/|\.py[co]$", path))
+    def take(path):
+        full = os.path.join(target, path)
+        try:
+            info = os.lstat(full)
+            if stat.S_ISLNK(info.st_mode):
+                state[path] = "link:" + os.readlink(full)
+            elif stat.S_ISREG(info.st_mode):
+                digest = hashlib.sha256()
+                with open(full, "rb") as fh:
+                    for block in iter(lambda: fh.read(1024 * 1024), b""):
+                        digest.update(block)
+                state[path] = [bool(info.st_mode & 0o111), digest.hexdigest()]
+            elif stat.S_ISDIR(info.st_mode) and os.path.exists(os.path.join(full, ".git")):
+                state[path] = "repository"
+                pending.append(path.rstrip("/"))
+        except FileNotFoundError:
+            state[path] = "gone"
+    for repo in pending:
+        if repo in seen:
+            continue
+        seen.add(repo)
+        cwd = os.path.join(target, repo)
+        files = git(cwd, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ".")
+        if files is None:
+            # Non-git projects still need source freshness, not an always-empty snapshot.
+            files_ = []
+            for directory, dirs, names in os.walk(cwd):
+                dirs[:] = [d for d in dirs if d != ".git" and not excluded(os.path.relpath(os.path.join(directory, d), target) + "/")]
+                files_.extend(os.path.relpath(os.path.join(directory, n), cwd) for n in names)
+        else:
+            files_ = files.split("\0")
+        for inner in set(files_) - {""}:
+            path = (repo + "/" if repo else "") + inner.rstrip("/")
+            if not excluded(path):
+                take(path)
+        # An ignored nested repository is absent from the parent's ls-files.
+        status = git(cwd, "status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=normal", "--", ".") or ""
+        prefix = (git(cwd, "rev-parse", "--show-prefix") or "").strip()
+        for entry in status.split("\0"):
+            if entry[:3] not in ("?? ", "!! ") or not entry.endswith("/"):
+                continue
+            inner = entry[3:].rstrip("/")
+            if prefix and inner.startswith(prefix):
+                inner = inner[len(prefix):]
+            path = (repo + "/" if repo else "") + inner
+            if not excluded(path) and os.path.exists(os.path.join(target, path, ".git")):
+                take(path)
+    for path in extra:
+        take(os.path.relpath(os.path.abspath(path), target))
+    return fingerprint({"tree": state, **({"runs": runs(target)} if records else {})})
+
+
+def bind_eyes(packet, output, extra=()):
+    """Bind a late-eyes packet to its target and source before a worker reads it."""
+    packet["target"] = os.path.realpath(packet["target"])
+    output = os.path.realpath(output)
+    if output == packet["target"] or packet["target"].startswith(output + os.sep):
+        raise SystemExit("eyes: --out must not contain the entire target; use a packet subdirectory")
+    records = "runs" in packet
+    packet["source"] = {"output": output, "extra": [os.path.abspath(p) for p in extra], "records": records,
+                        "digest": source_state(packet["target"], output, extra, records)}
+
+
+def check_eyes(packet, target, answer=None):
+    why = None
+    if packet.get("artifact-type") != "dwitbuk/eyes-request@1" or not isinstance(packet.get("source"), dict):
+        why = "missing request/source binding"
+    elif os.path.realpath(packet.get("target", "")) != os.path.realpath(target):
+        why = "request belongs to another target"
+    elif answer is not None and answer.get("request") != fingerprint(packet):
+        why = "answer does not match its request"
+    else:
+        source = packet["source"]
+        if not source.get("output") or source.get("digest") != source_state(target, source["output"], source.get("extra", []), source.get("records", False)):
+            why = "source changed since the request"
+    if why:
+        raise SystemExit("eyes: %s; generate a fresh request and rerun the eyes" % why)
+
+
+@serialized
 def cmd_eyes(args):
     """The judge pattern: dwitbuk packs what a reader would need and validates the answer; the reading is a fresh, read-only host session."""
     target = args.target
     if args.mode == "request":
+        plan_path = os.path.join(target, args.contract) if args.contract else os.path.join(target, "plan", "PLAN.md")
+        initial_source = source_state(target, args.out, [plan_path], records=True)
         prior = reviews(target)
         base = args.since or (prior[-1]["since"] if prior else None)   # what the latest review covered
         head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
         left_out = [p.rstrip("/") + ("*" if not p.endswith("/") else "") if p == "hunsu" else p.rstrip("/") for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
+        output_rel = os.path.relpath(os.path.realpath(args.out), os.path.realpath(target)).replace(os.sep, "/")
+        if output_rel != ".." and not output_rel.startswith("../"):
+            left_out.append(output_rel)
         excl = ["--", "."] + [":!" + x for x in left_out]
         diff = (git(target, "diff", base, *excl) if base else git(target, "diff", *excl)) or ""
         names = [n.strip().replace("\\", "/") for n in ((git(target, "diff", "--name-only", base, "--", ".") if base else "") or "").splitlines()]
@@ -862,6 +1015,9 @@ def cmd_eyes(args):
             if lens and lens not in LENSES:
                 raise SystemExit("unknown lens %s (known: %s)" % (lens, ", ".join(LENSES)))
             doc = dict(packet, lens=lens, instructions=packet["instructions"] + (" Lens: " + LENSES[lens] if lens else ""))
+            bind_eyes(doc, args.out, [plan_path])
+            if doc["source"]["digest"] != initial_source:
+                raise SystemExit("eyes: source changed while packing the request; retry request")
             save(os.path.join(args.out, "eyes-%s-request.json" % lens if lens else "eyes-request.json"), doc)
         print("eyes packet(s) -> %s (%s; diff %d chars, %d runs, contract %d chars, %d open findings). Run eyes_worker.py on each, then `eyes consume --dir %s`"
               % (args.out, ", ".join(args.lens) if args.lens else "no lens", len(diff), len(runs_), len(plan_text), len(open_), args.out))
@@ -870,7 +1026,14 @@ def cmd_eyes(args):
     prior = reviews(target)
     if not prior:
         raise SystemExit("no review to add to — `dwitbuk review` first")
-    answers = [load(os.path.join(args.dir, n)) for n in sorted(os.listdir(args.dir)) if n.startswith("eyes") and n.endswith("-response.json")]
+    answers = []
+    for name in sorted(os.listdir(args.dir)):
+        if not (name.startswith("eyes") and name.endswith("-response.json")):
+            continue
+        answer = load(os.path.join(args.dir, name))
+        request = load(os.path.join(args.dir, name[:-len("-response.json")] + "-request.json"))
+        check_eyes(request, target, answer)
+        answers.append(answer)
     if not any("findings" in a for a in answers):
         raise SystemExit("no eyes*-response.json with `findings` in %s" % args.dir)
     kept, rejected, quoted = [], [], set()

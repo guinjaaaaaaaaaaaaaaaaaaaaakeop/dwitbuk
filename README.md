@@ -126,6 +126,21 @@ findings with a tree quote only. Late eyes: `request` packs the diff, the run re
 for a bounded read-only session (`eyes_worker.py`); `consume` takes its answer into the latest review — only findings
 quoting both the record and the tree survive
 
+Late-eyes packets carry a source fingerprint; answers carry the fingerprint of the complete request in `request`.
+The worker checks source freshness before and after its call, and `consume` checks the paired request, target, answer
+binding and current source before writing any finding. A missing binding, replaced request, different target or changed
+source refuses the whole consume: create a fresh request and rerun the eyes. This also applies to older unbound answers.
+`--prompt-only` includes the required request fingerprint in the answer schema for a native reader. Source comparison
+uses contents, executable bits and symlinks of git-visible files, including initialized submodules and directly nested
+ignored repositories; without git it scans the tree. The selected contract and run records read into a late-eyes packet
+are included explicitly. Other records and the packet output directory are excluded, so recording a review does not stale itself. Use a dedicated packet directory, never a
+source directory. A repository below an ignored parent directory is not discovered automatically.
+
+`review`, `dispose` and `eyes` serialize mutations within one checkout. A competing command exits 4 and asks for a retry;
+it cannot overwrite findings from the command in progress. Readers remain available, and JSON replacement is atomic.
+The lock lives in `.dwitbuk/review.lock`; it is released when the process exits. Stop-eyes calls use separate scratch
+directories under `.dwitbuk/` so overlapping calls cannot replace one another's packets or transcripts.
+
 ## Files in your project
 
 | path | committed | what |

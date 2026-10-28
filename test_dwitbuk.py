@@ -572,7 +572,7 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         assert "mangsang/relations/R-1.json" in packet["new_files"] and "plan/PLAN.md" in packet["new_files"], "untracked files are part of the change"
         assert ".chongdae" in packet["diff_leaves_out"] and packet["runs"][0]["tasks"][0]["state"]["touched"] == ["a.py", "proposals.json"]
         assert "prints one line" in packet["plan"] and any(f["kind"] == "no-reporters" for f in packet["open_findings"])
-        write(os.path.join(out_dir, "eyes-response.json"), EYES_RESPONSE)
+        write(os.path.join(out_dir, "eyes-response.json"), dict(EYES_RESPONSE, request=dwitbuk.fingerprint(packet)))
         code, out = run("eyes", "consume", "--dir", out_dir, "--target", pj.dir)
         assert code == 0 and "2 finding(s) added" in out and "2 rejected" in out, out
         r = pj.latest()
@@ -586,6 +586,157 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         run("review", "--target", pj.dir)
         assert any(f["kind"] == "undisposed" and f["carries"][0] == "contradiction" and "record: " in f["text"] for f in pj.latest()["findings"])
         assert any(f["kind"] == "undisposed" and f["carries"][0] == "anomaly" and "bare constant" in f["text"] for f in pj.latest()["findings"])
+
+
+def eyes_answer(pj, folder, name="finding"):
+    """A host-free answer to a real packed request, bound as eyes_worker writes it."""
+    assert run("eyes", "request", "--out", folder, "--target", pj.dir)[0] == 0
+    packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+    answer = {"request": dwitbuk.fingerprint(packet), "findings": [
+        {"kind": "anomaly", "where": "a.py", "tree_quote": name, "record_quote": "", "why": name}]}
+    write(os.path.join(folder, "eyes-response.json"), answer)
+    return packet, answer
+
+
+def test_late_eyes_refuses_wrong_target_unbound_replaced_and_stale_answers():
+    with Project() as pj, Project() as other:
+        run("review", "--target", pj.dir)
+        run("review", "--target", other.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, answer = eyes_answer(pj, folder)
+        original = pj.latest()
+        code, out = run("eyes", "consume", "--dir", folder, "--target", other.dir)
+        assert code != 0 and "another target" in out, out
+        request_path = os.path.join(folder, "eyes-request.json")
+        os.unlink(request_path)
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "missing request/source" in out, out
+        write(request_path, dict(packet, instructions="a replacement request"))
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "does not match" in out, out
+        write(request_path, packet)
+        write(os.path.join(pj.dir, "a.py"), "x = 9\n")
+        for committed in (False, True):
+            if committed:
+                git(pj.dir, "add", "a.py"); git(pj.dir, "commit", "-qm", "changed source")
+            code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+            assert code != 0 and "source changed" in out, (committed, out)
+            assert pj.latest() == original
+        # A fresh review succeeds, and source-neutral record commits do not stale it.
+        eyes_answer(pj, folder)
+        git(pj.dir, "add", "reviews"); git(pj.dir, "commit", "-qm", "record only")
+        assert run("eyes", "consume", "--dir", folder, "--target", pj.dir)[0] == 0
+
+
+def test_late_eyes_sees_nested_source_and_worker_refuses_changes_during_call():
+    from unittest.mock import patch
+    with Project() as pj:
+        nested = os.path.join(pj.dir, "engine")
+        os.makedirs(nested)
+        git(nested, "init", "-q")
+        write(os.path.join(nested, "code.py"), "old\n")
+        git(nested, "add", "."); git(nested, "commit", "-qm", "nested base")
+        write(os.path.join(pj.dir, ".gitignore"), "engine/\n")
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder)
+        write(os.path.join(nested, "code.py"), "changed\n")
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "source changed" in out, out
+        eyes_answer(pj, folder)
+        response = os.path.join(folder, "eyes-response.json")
+        os.unlink(response)
+        def host(packet, schema, args):
+            assert schema["properties"]["request"]["enum"] == [dwitbuk.fingerprint(packet)]
+            write(os.path.join(pj.dir, "a.py"), "changed during worker\n")
+            return {"findings": []}
+        with patch.object(w, "claude", host), patch.object(sys, "argv", ["eyes_worker.py", "--request", os.path.join(folder, "eyes-request.json"), "--response", response]):
+            try:
+                w.main()
+                raise AssertionError("a changed source cannot receive a fresh-looking answer")
+            except SystemExit as err:
+                assert "source changed" in str(err), err
+        assert not os.path.exists(response)
+
+
+def test_late_eyes_rejects_changed_run_record_inputs():
+    with Project() as pj:
+        pj.run_record("run-example", {"S1": {"status": "done", "touched": ["a.py"]}})
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder)
+        original = pj.latest()
+        pj.run_record("run-example", {"S1": {"status": "failed", "touched": ["a.py"]}})
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "source changed" in out and pj.latest() == original, out
+
+
+def test_stop_hook_validates_before_displaying_even_without_a_review():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    import stop_eyes
+    real_run = subprocess.run
+    for has_review, stale in ((False, True), (True, True), (True, False)):
+        with Project() as pj:
+            write(os.path.join(pj.dir, "hunsu.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+            write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+            if has_review:
+                run("review", "--target", pj.dir)
+            def host(argv, **kwargs):
+                if len(argv) > 1 and str(argv[1]).endswith("eyes_worker.py"):
+                    request = dwitbuk.load(argv[argv.index("--request") + 1])
+                    write(argv[argv.index("--response") + 1], {"request": dwitbuk.fingerprint(request), "findings": [
+                        {"kind": "anomaly", "where": "a.py", "tree_quote": "x = 2", "why": "old finding", "record_quote": ""}]})
+                    if stale:
+                        write(os.path.join(pj.dir, "a.py"), "x = 3\n")
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+                return real_run(argv, **kwargs)
+            output = io.StringIO()
+            with patch.dict(os.environ, {"AGENT_WORKER": ""}), patch.object(sys, "stdin", io.StringIO(json.dumps({"cwd": pj.dir}))), \
+                    patch.object(subprocess, "run", host), contextlib.redirect_stderr(output), contextlib.redirect_stdout(io.StringIO()):
+                code = stop_eyes.main()
+            if stale:
+                assert code == 0 and "source changed" in output.getvalue() and "address each" not in output.getvalue(), output.getvalue()
+                if has_review:
+                    assert not any(f["kind"] == "anomaly" for f in pj.latest()["findings"])
+            else:
+                assert code == 2 and any(f["kind"] == "anomaly" for f in pj.latest()["findings"]), output.getvalue()
+
+
+def test_concurrent_consumers_refuse_busy_then_retain_both_findings_on_retry():
+    with Project() as pj:
+        run("review", "--target", pj.dir)
+        first, second = [os.path.join(pj.dir, ".dwitbuk", name) for name in ("first", "second")]
+        eyes_answer(pj, first, "first")
+        eyes_answer(pj, second, "second")
+        # Pause writer one after it read the review and before replacement. A second
+        # process must not read that old review and later overwrite its new finding.
+        script = """import sys
+import dwitbuk
+save = dwitbuk.save
+def pause(path, doc):
+    print('ready', flush=True)
+    sys.stdin.readline()
+    save(path, doc)
+dwitbuk.save = pause
+dwitbuk.main(sys.argv[1:])
+"""
+        proc = subprocess.Popen([sys.executable, "-c", script, "eyes", "consume", "--dir", first, "--target", pj.dir], cwd=HERE,
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            assert proc.stdout.readline().strip() == "ready"
+            attempt = subprocess.run([sys.executable, os.path.join(HERE, "dwitbuk.py"), "eyes", "consume", "--dir", second, "--target", pj.dir],
+                                     capture_output=True, text=True, timeout=10)
+            assert attempt.returncode == 4 and "retry" in attempt.stderr, attempt
+            stdout, stderr = proc.communicate("\n", timeout=10)
+            assert proc.returncode == 0, (stdout, stderr)
+        finally:
+            if proc.poll() is None:
+                proc.kill(); proc.communicate()
+        code, out = run("eyes", "consume", "--dir", second, "--target", pj.dir)
+        assert code == 0, out
+        findings = [f for f in pj.latest()["findings"] if f["kind"] == "anomaly"]
+        assert len(findings) == 2 and all(any(name in f["text"] for f in findings) for name in ("first", "second")), findings
 
 
 def test_a_standing_finding_that_stops_recurring_is_gone_not_owed():
@@ -844,7 +995,7 @@ def test_the_eyes_leave_out_the_records_the_lock_declares():
     with Project() as pj:
         assert dwitbuk.record_paths(pj.dir) == (".chongdae/", ".claude/", ".dwitbuk/", ".mangsang/", "hunsu", "reviews/"), dwitbuk.record_paths(pj.dir)
         write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": [".alpha/", "alpha.json"], "mangsang": ["mangsang/", ".mangsang/"]}})
-        assert dwitbuk.record_paths(pj.dir) == (".alpha/", ".chongdae/", ".claude/", ".mangsang/", "alpha.json", "hunsu", "mangsang/", "reviews/"), dwitbuk.record_paths(pj.dir)
+        assert dwitbuk.record_paths(pj.dir) == (".alpha/", ".chongdae/", ".claude/", ".dwitbuk/", ".mangsang/", "alpha.json", "hunsu", "mangsang/", "reviews/"), dwitbuk.record_paths(pj.dir)
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["a.py", ".alpha/x.json", "alpha.json", ".chongdae/run-1/tasks/T.json", "mangsang/relations/R-1.json"]}
         assert dwitbuk.verify_packet(req)["touched"] == ["a.py"], dwitbuk.verify_packet(req)["touched"]

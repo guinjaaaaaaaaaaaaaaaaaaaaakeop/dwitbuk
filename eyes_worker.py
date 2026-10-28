@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dwitbuk import EYES_SCHEMA, REVIEW_SCHEMA, documents_or_records, flat, grounded, strings, verify_packet, weigh  # noqa: E402
+from dwitbuk import EYES_SCHEMA, REVIEW_SCHEMA, check_eyes, fingerprint, save, documents_or_records, flat, grounded, strings, verify_packet, weigh  # noqa: E402
 from hostcall import run_claude, run_codex, claude_answer, worker_record  # noqa: E402  (vendored: the same file in each plugin of this family)
 
 PROMPT = ("This is a dwitbuk late-eyes request. Change no files. Follow the packet's `instructions` exactly. "
@@ -144,6 +144,10 @@ def main():
     elif packet.get("artifact-type") != "dwitbuk/eyes-request@1":
         raise SystemExit("not a dwitbuk eyes request or a chongdae verify request: %s" % args.request)
     schema = REVIEW_SCHEMA if verify else EYES_SCHEMA
+    if not verify:
+        check_eyes(packet, packet["target"])
+        schema = {**EYES_SCHEMA, "required": EYES_SCHEMA["required"] + ["request"],
+                  "properties": {**EYES_SCHEMA["properties"], "request": {"type": "string", "enum": [fingerprint(packet)]}}}
     if args.prompt_only:
         print(PROMPT + json.dumps(packet, ensure_ascii=False) + "\n\n# Answer\n\nYour whole final message is one JSON object, nothing else, matching this schema:\n" + json.dumps(schema))
         return 0
@@ -172,10 +176,10 @@ def main():
             if said:
                 out["non-claims"] = list(out.get("non-claims") or []) + [said]
         out = {"artifact-type": "dwitbuk/review@1", **out}
-    Path(args.response).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.response + ".tmp", "w", encoding="utf-8", newline="\n") as fh:   # LF on every host; the response is diffed and fingerprinted
-        fh.write(json.dumps(out, ensure_ascii=False, indent=2) + "\n")
-    os.replace(args.response + ".tmp", args.response)   # whole or absent: the runner polls for this file
+    else:
+        check_eyes(packet, packet["target"])
+        out["request"] = fingerprint(packet)
+    save(os.path.abspath(args.response), out)
     print("response -> %s" % args.response)
     return 0
 

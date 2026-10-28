@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -53,25 +54,33 @@ def main():
     packet["instructions"] = ("You are the eyes at the end of a session. Read what it changed (the diff) against the plan if there is one. " + dwitbuk.LENSES["fresh"] +
                               " Report contradictions with a quote from each side, anomalies with a tree quote. No quote, no finding. "
                               "Paths under `diff_leaves_out` are left out of `touched` on purpose (records, machine state, the environment); their absence is not a finding. Change no files.")
-    folder = os.path.join(cwd, ".dwitbuk")   # this machine's, like .mangsang/: not committed
-    os.makedirs(folder, exist_ok=True)
+    scratch = os.path.join(cwd, ".dwitbuk")   # this machine's, like .mangsang/: not committed
+    os.makedirs(scratch, exist_ok=True)
+    folder = tempfile.mkdtemp(prefix="stop-", dir=scratch)
     ignore = os.path.join(cwd, ".gitignore")
     lines = io.open(ignore, encoding="utf-8").read().split("\n") if os.path.exists(ignore) else []
     if ".dwitbuk/" not in lines:
         io.open(ignore, "a", encoding="utf-8", newline="\n").write(("" if not lines or lines[-1] == "" else "\n") + ".dwitbuk/\n")
-    dwitbuk.save(os.path.join(folder, "eyes-request.json"), {**packet, "artifact-type": "dwitbuk/eyes-request@1"})
+    packet["artifact-type"] = "dwitbuk/eyes-request@1"
+    dwitbuk.bind_eyes(packet, folder, [plan_path])
+    dwitbuk.save(os.path.join(folder, "eyes-request.json"), packet)
     import time
-    with io.open(os.path.join(folder, "stop.log"), "a", encoding="utf-8", newline="\n") as log:
+    with io.open(os.path.join(scratch, "stop.log"), "a", encoding="utf-8", newline="\n") as log:
         log.write("%s start touched=%s pid=%d\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), dirty, os.getpid()))   # a line before the eyes: if the host cuts the hook off, this is what remains
     done = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "eyes_worker.py"), "--request", os.path.join(folder, "eyes-request.json"),
                            "--response", os.path.join(folder, "eyes-response.json"), "--effort", os.environ.get("DWITBUK_STOP_EFFORT", "medium")],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
-    with io.open(os.path.join(folder, "stop.log"), "a", encoding="utf-8", newline="\n") as log:
+    with io.open(os.path.join(scratch, "stop.log"), "a", encoding="utf-8", newline="\n") as log:
         log.write("%s end rc=%d\n%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), done.returncode, (done.stderr or done.stdout).strip()[-600:]))
     if done.returncode:
         print("dwitbuk stop-eyes: the eyes did not answer (%s) — nothing decided; see .dwitbuk/stop.log" % (done.stderr or done.stdout).strip()[-200:], file=sys.stderr)
         return 0
     resp = dwitbuk.load(os.path.join(folder, "eyes-response.json"))
+    try:
+        dwitbuk.check_eyes(packet, cwd, resp)
+    except SystemExit as err:
+        print("dwitbuk stop-eyes: %s — nothing decided" % err, file=sys.stderr)
+        return 0
     findings = [f for f in resp.get("findings", []) if str(f.get("tree_quote", "")).strip() and str(f.get("why", "")).strip()
                 and (f.get("kind") == "anomaly" or str(f.get("record_quote", "")).strip())]
     if not findings:
@@ -79,8 +88,9 @@ def main():
     if dwitbuk.reviews(cwd):
         try:
             dwitbuk.cmd_eyes(type("Args", (), {"target": cwd, "mode": "consume", "dir": folder})())
-        except SystemExit:
-            pass
+        except SystemExit as err:
+            print("dwitbuk stop-eyes: findings were not recorded (%s); retry the review — nothing decided" % err, file=sys.stderr)
+            return 0
     lines = ["%s @ %s: %s — tree: \u201c%s\u201d" % (f["kind"], f.get("where", ""), f["why"], f["tree_quote"][:120]) for f in findings]
     print("dwitbuk stop-eyes: %d finding(s) on what this session changed — address each (fix, or say why not) before ending:\n- " % len(findings) + "\n- ".join(lines), file=sys.stderr)
     return 2
