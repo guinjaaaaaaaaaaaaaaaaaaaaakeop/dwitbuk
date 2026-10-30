@@ -47,6 +47,7 @@ import tempfile
 
 REVIEWS = "reviews"
 RUNS = ".chongdae"
+PATHSPEC_BATCH_BYTES = 32768
 OBSERVATION_KINDS = {"delegated", "review-debt"}   # facts of the record, not charges: nobody should dispose them. The debt (in
 # older reviews) was a count of charges the review already carried one by one: disposing it as well was the same charge answered twice
 
@@ -712,6 +713,28 @@ def repo_of(target, path, since=None):
     return ".", path
 
 
+def path_diff(target, names, base=(), cut=80000):
+    """Diff literal candidates in git's order, with bounded pathspec arguments."""
+    chunks, batch, size, length = [], [], 0, 0
+    for name in names:
+        spec = ":(literal)" + name
+        needed = len(os.fsencode(spec)) + 1
+        # An oversized single path travels alone; the limit bounds grouping,
+        # never which paths can be included.
+        if batch and size + needed > PATHSPEC_BATCH_BYTES:
+            chunk = git(target, "diff", "--no-renames", *base, "--", *batch) or ""
+            chunks.append(chunk)
+            length += len(chunk)
+            if length > cut:
+                return "".join(chunks)
+            batch, size = [], 0
+        batch.append(spec)
+        size += needed
+    if batch:
+        chunks.append(git(target, "diff", "--no-renames", *base, "--", *batch) or "")
+    return "".join(chunks)
+
+
 def verify_packet(request):
     """A chongdae build request (stage verify) -> the eyes packet for a verdict. The contract, what the task touched (as a diff), the
     builder's own report. The reader is told what decides: a sentence the code contradicts, or a claim no check could have decided."""
@@ -734,7 +757,13 @@ def verify_packet(request):
     # task whose whole work is `hunsu lock` or `mangsang confirm` has `touched: []`, and a verifier told nothing about these read
     # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
     excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
-    excluded_diff = "".join(git(target, "diff", "HEAD", "--", ":(literal)" + p) or "" for p in excluded)
+    # Git's literal pathspecs can recurse; declarations are judged by is_record.
+    excluded_diff = ""
+    for entry in excluded:
+        names = (git(target, "diff", "--no-renames", "--relative", "--name-only", "-z", "HEAD", "--",
+                     ":(literal)" + entry) or "").split("\0")
+        kept = [name for name in names if name and is_record(name, (entry,))]
+        excluded_diff += path_diff(target, kept, ("HEAD",), cut=40000)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
@@ -995,13 +1024,13 @@ def cmd_eyes(args):
             left_out.append(output_rel + "/")
         diff_base = [base] if base else []
         # Declarations and literal pathspecs are relative to target, even inside a larger repository.
-        names = [n for n in (git(target, "diff", "--relative", "--name-only", "-z", *diff_base, "--", ".") or "").split("\0") if n]
-        kept = [":(literal)" + n for n in names if not is_record(n, left_out)]
-        diff = (git(target, "diff", *diff_base, "--", *kept) or "") if kept else ""
+        names = [n for n in (git(target, "diff", "--no-renames", "--relative", "--name-only", "-z", *diff_base, "--", ".") or "").split("\0") if n]
+        kept = [n for n in names if not is_record(n, left_out)]
+        diff = path_diff(target, kept, diff_base)
         untracked = [n.strip().replace("\\", "/") for n in (git(target, "ls-files", "--others", "--exclude-standard", "--", ".") or "").splitlines()]
         new_files = {}   # a diff shows nothing of files git does not track yet; the change includes them
         for n in untracked:
-            if n and not is_record(n, left_out) and os.path.getsize(os.path.join(target, n)) < 20000:
+            if n and not n.endswith("/") and not is_record(n, left_out) and os.path.isfile(os.path.join(target, n)) and os.path.getsize(os.path.join(target, n)) < 20000:
                 new_files[n] = io.open(os.path.join(target, n), encoding="utf-8", errors="replace").read()
         moved = {n.split("/")[-2] for n in names + untracked if "/" in n}   # run dirs with a changed or new file since base
         runs_ = []
