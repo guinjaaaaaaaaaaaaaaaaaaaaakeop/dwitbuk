@@ -145,6 +145,11 @@ def git(target, *a):
     return done.stdout if done.returncode == 0 else None
 
 
+def git_patch(target, *a):
+    done = subprocess.run(["git", *a], cwd=target, capture_output=True)
+    return done.stdout.decode("utf-8", errors="replace") if done.returncode == 0 else None
+
+
 def install_entry(entries, target):
     """The host keeps one install record per (scope, project). The one that applies to `target` is its own project-scope
     record, else the user-scope one, else — for a project that only enabled the plugin — the first; entries[0] was the first
@@ -714,14 +719,18 @@ def repo_of(target, path, since=None):
 
 
 def path_diff(target, names, base=(), cut=80000):
-    """Diff literal candidates in git's order, with bounded pathspec arguments."""
+    """Diff literal candidates in batch order, keeping git's order within each batch.
+
+    Across batches, combined sections may follow earlier ordinary sections.
+    Keep at most cut + 1 characters so callers can declare truncation.
+    """
     prefix = (git(target, "rev-parse", "--show-prefix") or "").rstrip("\n")
 
     def batch_diff(batch):
         kept = {prefix + spec[len(":(literal)"):] for spec in batch}
         # The section parser needs plain, repository-relative per-file text
         # regardless of the user's git configuration.
-        output = git(target, "diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
+        output = git_patch(target, "diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
                      "--no-color", "--no-relative", "--submodule=short", "--no-ext-diff",
                      *base, "--", *batch) or ""
         sections = []
@@ -739,12 +748,16 @@ def path_diff(target, names, base=(), cut=80000):
                          quoted[1].encode("utf-8"))
             return raw.decode("utf-8", errors="replace")
 
-        for section in re.split(r"(?=^diff )", output, flags=re.M):
+        for section in re.split(r"(?=^(?:diff |\* Unmerged path ))", output, flags=re.M):
             if not section:
                 continue
             header = section.split("\n", 1)[0]
             try:
-                if header.startswith("diff --cc "):
+                if header.startswith("* Unmerged path "):
+                    path = header[len("* Unmerged path "):]
+                    if section != header + "\n":
+                        raise ValueError("unexpected text after unmerged path")
+                elif header.startswith("diff --cc "):
                     path = unquote(header[len("diff --cc "):])
                 elif header.startswith("diff --git "):
                     pair = header[len("diff --git "):]
@@ -788,7 +801,7 @@ def path_diff(target, names, base=(), cut=80000):
         # never which paths can be included.
         if batch and size + needed > PATHSPEC_BATCH_BYTES:
             chunk = batch_diff(batch)
-            chunks.append(chunk)
+            chunks.append(chunk[:cut + 1 - length])
             length += len(chunk)
             if length > cut:
                 return "".join(chunks)
@@ -796,7 +809,7 @@ def path_diff(target, names, base=(), cut=80000):
         batch.append(spec)
         size += needed
     if batch:
-        chunks.append(batch_diff(batch))
+        chunks.append(batch_diff(batch)[:cut + 1 - length])
     return "".join(chunks)
 
 
@@ -823,12 +836,13 @@ def verify_packet(request):
     # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
     excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
     # Git's literal pathspecs can recurse; declarations are judged by is_record.
-    excluded_diff = ""
+    excluded_names = []
     for entry in excluded:
         names = (git(target, "diff", "--no-renames", "--relative", "--name-only", "-z", "HEAD", "--",
                      ":(literal)" + entry) or "").split("\0")
         kept = [name for name in names if name and is_record(name, (entry,))]
-        excluded_diff += path_diff(target, kept, ("HEAD",), cut=40000)
+        excluded_names.extend(kept)
+    excluded_diff = path_diff(target, excluded_names, ("HEAD",), cut=40000)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
