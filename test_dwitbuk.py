@@ -2,6 +2,7 @@
 
   python test_dwitbuk.py
 """
+import argparse
 import contextlib
 import io
 import json
@@ -1963,6 +1964,140 @@ def test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_s
         for name in sources:
             assert not dwitbuk.documents_or_records([name], pj.dir), name
         assert dwitbuk.documents_or_records(list(records), pj.dir)
+
+
+
+HOSTCALL_DROPPED = ("CODEX_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "CHONGDAE_SESSION", "AI_AGENT", "CLAUDE_PROJECT_DIR", "CODEX_VERSION")
+HOSTCALL_KEPT = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CLAUDECODE", "AGENT_CODEX_SANDBOX", "PATH")
+HOSTCALL_HOSTS = {"claude": "claude-code", "codex": "codex"}
+
+
+def hostcall_parent(adapter, sandbox="workspace-write"):
+    """A parent environment that is the *other* host's session, with every identity, metadata, config and auth key set."""
+    env = {"AGENT_HOST": "codex" if adapter == "claude" else "claude-code",
+           "CODEX_THREAD_ID": "thread-parent", "CLAUDE_CODE_SESSION_ID": "session-parent", "CHONGDAE_SESSION": "chongdae-parent",
+           "AI_AGENT": "parent-agent", "CLAUDE_PROJECT_DIR": "/parent/project", "CODEX_VERSION": "0.0.parent",
+           "CLAUDE_CONFIG_DIR": "/dummy/claude-config", "CODEX_HOME": "/dummy/codex-home", "ANTHROPIC_API_KEY": "sk-ant-dummy",
+           "OPENAI_API_KEY": "sk-openai-dummy", "CLAUDECODE": "1", "AGENT_CODEX_SANDBOX": sandbox}
+    if sandbox is None:
+        del env["AGENT_CODEX_SANDBOX"]
+    return env
+
+
+def hostcall_call(adapter, parent):
+    """Call eyes_worker.<adapter>(packet, schema, args) inside `parent` (laid over this process's env, AGENT_WORKER and
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY taken out) with subprocess.run replaced by a recorder that answers exit 1, so no host
+    process starts and the adapter stops with SystemExit after the call. Returns (host call, os.environ before, after):
+    the call is {"argv": [...], "env": {...}} — the env as the child would get it (os.environ when none is passed)."""
+    calls, saved, real_run = [], dict(os.environ), subprocess.run
+    d = tempfile.mkdtemp(prefix="dwitbuk-hostcall-")
+    def recorder(cmd, *a, **kw):
+        env = kw.get("env")
+        calls.append({"argv": [str(x) for x in (cmd if isinstance(cmd, (list, tuple)) else [cmd])],
+                      "env": dict(os.environ if env is None else env)})
+        text = kw.get("text") or kw.get("universal_newlines") or kw.get("encoding")
+        return subprocess.CompletedProcess(cmd, 1, "" if text else b"", "recorded, not run" if text else b"recorded, not run")
+    try:
+        for k in ("AGENT_WORKER", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "AGENT_CODEX_SANDBOX"):
+            os.environ.pop(k, None)
+        os.environ.update(parent)
+        before = dict(os.environ)
+        args = argparse.Namespace(model=None, effort=None, max_turns=3, response=os.path.join(d, "resp.json"),
+                                  request=os.path.join(d, "req.json"), host=adapter)
+        packet = {"target": d, "instructions": "x"}
+        subprocess.run = recorder
+        try:
+            getattr(w, adapter)(packet, dwitbuk.EYES_SCHEMA, args)
+        except SystemExit:
+            pass
+        finally:
+            subprocess.run = real_run
+        after = dict(os.environ)
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+        shutil.rmtree(d, ignore_errors=True)
+    host = [c for c in calls if os.path.basename(c["argv"][0]) == adapter] if calls else []
+    assert len(host) == 1, ("exactly one %s call recorded" % adapter, [c["argv"][:2] for c in calls])
+    return host[0], before, after
+
+
+def hostcall_child_env_is_the_workers(adapter, call, parent):
+    env = call["env"]
+    assert env.get("AGENT_HOST") == HOSTCALL_HOSTS[adapter], (adapter, env.get("AGENT_HOST"), "parent says", parent["AGENT_HOST"])
+    assert env.get("AGENT_WORKER") == "1", env.get("AGENT_WORKER")
+    leaked = [k for k in HOSTCALL_DROPPED if k in env]
+    assert not leaked, ("parent identity/metadata reached the %s child" % adapter, leaked)
+    for k in HOSTCALL_KEPT:
+        want = parent.get(k, os.environ.get(k))
+        if want is not None:
+            assert env.get(k) == want, (adapter, k, env.get(k), want)
+
+
+def test_Q_hostcall_claude_child_names_claude_code_whatever_the_parent_host_and_is_a_worker():
+    parent = hostcall_parent("claude")
+    call, _, _ = hostcall_call("claude", parent)
+    assert call["env"].get("AGENT_HOST") == "claude-code", call["env"].get("AGENT_HOST")
+    assert call["env"].get("AGENT_WORKER") == "1"
+
+
+def test_Q_hostcall_codex_child_names_codex_whatever_the_parent_host_and_is_a_worker():
+    parent = hostcall_parent("codex")
+    call, _, _ = hostcall_call("codex", parent)
+    assert call["env"].get("AGENT_HOST") == "codex", call["env"].get("AGENT_HOST")
+    assert call["env"].get("AGENT_WORKER") == "1"
+
+
+def test_Q_hostcall_claude_child_carries_none_of_the_parents_identity_or_project_metadata():
+    call, _, _ = hostcall_call("claude", hostcall_parent("claude"))
+    assert not [k for k in HOSTCALL_DROPPED if k in call["env"]], [k for k in HOSTCALL_DROPPED if k in call["env"]]
+
+
+def test_Q_hostcall_codex_child_carries_none_of_the_parents_identity_or_project_metadata():
+    call, _, _ = hostcall_call("codex", hostcall_parent("codex"))
+    assert not [k for k in HOSTCALL_DROPPED if k in call["env"]], [k for k in HOSTCALL_DROPPED if k in call["env"]]
+
+
+def test_Q_hostcall_claude_child_keeps_config_auth_and_markers_and_turns_auto_memory_off():
+    parent = hostcall_parent("claude")
+    call, _, _ = hostcall_call("claude", parent)
+    hostcall_child_env_is_the_workers("claude", call, parent)
+    assert call["env"].get("CLAUDE_CODE_DISABLE_AUTO_MEMORY") == "1", call["env"].get("CLAUDE_CODE_DISABLE_AUTO_MEMORY")
+    assert call["env"].get("PATH") == os.environ.get("PATH")
+
+
+def test_Q_hostcall_codex_child_keeps_config_auth_and_markers():
+    parent = hostcall_parent("codex")
+    call, _, _ = hostcall_call("codex", parent)
+    hostcall_child_env_is_the_workers("codex", call, parent)
+    assert call["env"].get("PATH") == os.environ.get("PATH")
+
+
+def test_Q_hostcall_codex_sandbox_is_the_parents_AGENT_CODEX_SANDBOX_when_set():
+    for sandbox in ("workspace-write", "danger-full-access"):
+        parent = hostcall_parent("codex", sandbox)
+        call, _, _ = hostcall_call("codex", parent)
+        argv = call["argv"]
+        assert argv.count("-s") == 1 and argv[argv.index("-s") + 1] == sandbox, argv
+        hostcall_child_env_is_the_workers("codex", call, parent)
+
+
+def test_Q_hostcall_codex_sandbox_is_read_only_when_the_parent_sets_none():
+    parent = hostcall_parent("codex", None)
+    call, _, _ = hostcall_call("codex", parent)
+    argv = call["argv"]
+    assert argv.count("-s") == 1 and argv[argv.index("-s") + 1] == "read-only", argv
+    assert "AGENT_CODEX_SANDBOX" not in call["env"], call["env"].get("AGENT_CODEX_SANDBOX")
+    hostcall_child_env_is_the_workers("codex", call, parent)
+
+
+def test_Q_hostcall_parent_environ_is_the_same_after_each_call_as_before():
+    for adapter in ("claude", "codex", "claude"):   # the second claude call: nothing the first left behind
+        parent = hostcall_parent(adapter)
+        call, before, after = hostcall_call(adapter, parent)
+        assert before == after, (adapter, {k: (before.get(k), after.get(k)) for k in set(before) | set(after) if before.get(k) != after.get(k)})
+        assert before.get("AGENT_HOST") == parent["AGENT_HOST"] and "AGENT_WORKER" not in after
+        hostcall_child_env_is_the_workers(adapter, call, parent)
 
 
 if __name__ == "__main__":
