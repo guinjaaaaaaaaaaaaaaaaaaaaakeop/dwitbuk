@@ -2188,16 +2188,21 @@ def test_Q_review_fixes_renames_for_a_target_inside_a_larger_repository_are_spli
 
 @contextlib.contextmanager
 def recorded_git():
-    """dwitbuk.git wrapped: every call's argv recorded, the real call made."""
-    calls, real = [], dwitbuk.git
+    """dwitbuk.git and dwitbuk.git_patch, the seam path_diff's content diff calls go through, wrapped: every call's argv
+    recorded, the real call made."""
+    assert callable(getattr(dwitbuk, "git_patch", None)), "dwitbuk.git_patch(target, *args) is the patch seam"
+    calls, real, real_patch = [], dwitbuk.git, dwitbuk.git_patch
     def recorder(target, *a):
         calls.append(list(a))
         return real(target, *a)
-    dwitbuk.git = recorder
+    def patch_recorder(target, *a):
+        calls.append(list(a))
+        return real_patch(target, *a)
+    dwitbuk.git, dwitbuk.git_patch = recorder, patch_recorder
     try:
         yield calls
     finally:
-        dwitbuk.git = real
+        dwitbuk.git, dwitbuk.git_patch = real, real_patch
 
 
 @contextlib.contextmanager
@@ -2889,9 +2894,10 @@ UNATTRIBUTABLE = {
 
 @contextlib.contextmanager
 def unattributable_git(case):
-    """dwitbuk.git wrapped: each real content diff call's output also carries text outside any section header the
-    filter reads — the UNATTRIBUTABLE case named."""
-    real, (before, after) = dwitbuk.git, UNATTRIBUTABLE[case]
+    """dwitbuk.git_patch, the seam path_diff's content diff calls go through, wrapped: each real content diff call's
+    output also carries text outside any section header the filter reads — the UNATTRIBUTABLE case named."""
+    assert callable(getattr(dwitbuk, "git_patch", None)), "dwitbuk.git_patch(target, *args) is the patch seam"
+    real, (before, after) = dwitbuk.git_patch, UNATTRIBUTABLE[case]
     seen = []
     def wrapped(target, *a):
         out = real(target, *a)
@@ -2900,11 +2906,11 @@ def unattributable_git(case):
             seen.append(list(a))
             return before + out + after
         return out
-    dwitbuk.git = wrapped
+    dwitbuk.git_patch = wrapped
     try:
         yield seen
     finally:
-        dwitbuk.git = real
+        dwitbuk.git_patch = real
 
 
 def clear_about_it(text):
@@ -3068,7 +3074,12 @@ def test_Q_raw_text_a_cr_only_file_holding_lines_beginning_diff_keeps_its_whole_
             assert d == want, "limit %r: the text one plain git diff gives:\n%r\n---\n%r" % (limit, d, want)
 
 
-def test_Q_raw_text_a_conflict_sorting_after_a_modified_file_keeps_one_calls_order_with_diff_cc_first():
+def sections_of(d):
+    """`d` split at each `diff --git`, `diff --cc` or `* Unmerged path` line: the sections git printed, in order."""
+    return [part for part in re.split(r"(?m)^(?=diff --git |diff --cc |\* Unmerged path )", d) if part]
+
+
+def test_Q_bounded_raw_text_a_conflict_sorting_after_a_modified_file_keeps_each_section_once_whole_at_every_limit():
     with Project() as pj:
         write(os.path.join(pj.dir, "e.py"), "head = 1\nside = base\ntail = 1\n")
         write(os.path.join(pj.dir, "d.py"), "dmark = 1\n")
@@ -3086,12 +3097,136 @@ def test_Q_raw_text_a_conflict_sorting_after_a_modified_file_keeps_one_calls_ord
         assert not dwitbuk.reviews(pj.dir), "no prior review"
         want = unbatched(pj.dir, [], ["d.py", "e.py"])
         assert cc_headers(want) == [("", "e.py"), ("d.py", "")], "one call gives diff --cc first: %r" % cc_headers(want)
+        kept = sections_of(want)
+        assert len(kept) == 2 and kept[0].startswith("diff --cc e.py") and kept[1].startswith("diff --git a/d.py "), kept
         folder = os.path.join(pj.dir, ".dwitbuk", "packet")
-        for limit in (None, 1):
+        one = len(":(literal)d.py".encode())
+        for limit in (None, 1, one - 1, one, one + 1, 2 * one, 2 * one + 1, 3 * one):
             with (batch_bytes(limit) if limit else contextlib.nullcontext()):
                 d = conflict_packet_diff(pj, folder)
-            assert cc_headers(d) == [("", "e.py"), ("d.py", "")], "limit %r: diff --cc first, then d.py: %r\n%s" % (limit, cc_headers(d), d)
-            assert d == want, "limit %r: one unbatched call's text:\n%s\n---\n%s" % (limit, d, want)
+            where = "limit %r" % (limit,)
+            got = sections_of(d)
+            for section in kept:
+                assert got.count(section) == 1, "%s: the section once, with all its source content:\n%r\n--- in ---\n%r" % (where, section, d)
+            assert sorted(got) == sorted(kept), "%s: the kept sections and nothing else: %r" % (where, got)
+            assert d.count("diff --cc e.py") == 1 and d.count("diff --git a/d.py b/d.py") == 1, "%s: %s" % (where, d)
+            assert "side = main" in d and "side = other" in d and "+dmark = 2" in d, "%s: %s" % (where, d)
+            if limit is None:
+                assert d == want, "one batch keeps git's own order: one unbatched call's text:\n%s\n---\n%s" % (d, want)
+
+
+@contextlib.contextmanager
+def counted_subprocess_diffs():
+    """subprocess.run wrapped: every `git diff` call that asks for content (no listing flag) recorded as (argv, the length
+    of its decoded stdout); the real call made."""
+    real = subprocess.run
+    seen = []
+    listing = {"--name-only", "--name-status", "--stat", "--numstat", "--raw", "--summary", "--shortstat"}
+    def wrapped(argv, *a, **kw):
+        done = real(argv, *a, **kw)
+        args = list(argv) if isinstance(argv, (list, tuple)) else []
+        if args and os.path.basename(str(args[0])) in ("git", "git.exe") and "diff" in args and not listing & set(args):
+            if args.index("diff") < (args.index("--") if "--" in args else len(args)):
+                out = done.stdout
+                text = out.decode("utf-8", "replace") if isinstance(out, bytes) else (out or "")
+                seen.append((args, len(text)))
+        return done
+    subprocess.run = wrapped
+    try:
+        yield seen
+    finally:
+        subprocess.run = real
+
+
+def many_large_changes(pj, count, size, folder="src", ext=".py"):
+    """`count` committed files, each then rewritten in the work tree with `size` characters of new lines. No review."""
+    names = ["%s/f%03d%s" % (folder, i, ext) for i in range(count)]
+    for n in names:
+        write(os.path.join(pj.dir, n), "old = %r\n" % n)
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "many files")
+    line = "y" * 59 + "\n"
+    for n in names:
+        write(os.path.join(pj.dir, n), "new = %r\n" % n + line * (size // len(line)))
+    return names
+
+
+def test_Q_bounded_eyes_request_invokes_no_git_diff_batch_after_the_one_whose_sections_pass_the_cut():
+    with Project() as pj:
+        names = many_large_changes(pj, 60, 6000)
+        listed = git(pj.dir, "diff", "--no-renames", "--name-only").splitlines()
+        assert listed == names, listed
+        want = unbatched(pj.dir, [], listed)
+        assert len(want) > 3 * 80000, "the change set's diff is far past the cut: %d" % len(want)
+        limit = 2 * len((":(literal)" + names[0]).encode()) + 1   # two paths a batch: thirty batches
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        assert callable(getattr(dwitbuk, "git_patch", None)), "dwitbuk.git_patch(target, *args) is the patch seam"
+        with batch_bytes(limit), counted_subprocess_diffs() as seen, recorded_git() as calls:
+            code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+        assert code == 0, out
+        assert seen, "git diff content calls were made through subprocess"
+        sizes = [n for _, n in seen]
+        assert len(seen) < len(names), "fewer git diff calls than changed paths: %d calls" % len(seen)
+        assert sum(sizes[:-1]) < 80000 <= sum(sizes), \
+            "the last git diff batch invoked is the one whose sections pass the 80000-character cut: %r" % sizes
+        patched = [c for c in calls if c and c[0] == "diff" and "--name-only" not in c and "--name-status" not in c]
+        assert len(patched) == len(seen), "the content calls go through git_patch: %d vs %d" % (len(patched), len(seen))
+        packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+        d = packet["diff"]
+        assert packet.get("diff_truncated") is True, packet.get("diff_truncated")
+        assert d.startswith("diff --git a/%s b/%s\n" % (listed[0], listed[0])), d[:200]
+        assert 0 < len(d) <= 80000 and len(d) > 80000 - 2 * 6100, "cut at the limit: %d" % len(d)
+        assert want.startswith(d), "the cut text is the start of git's text, nothing else in it"
+        headers = re.findall(r"^diff --git a/(.*) b/", d, re.M)
+        assert len(headers) == len(set(headers)), "no section repeats: %r" % headers
+        assert headers == listed[:len(headers)], headers
+
+
+def test_Q_bounded_excluded_diff_invokes_no_git_diff_batch_after_the_one_whose_sections_pass_the_cut():
+    with Project() as pj:
+        names = many_large_changes(pj, 40, 6000, "notes", ".json")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        want = unbatched(pj.dir, [since], names)
+        assert len(want) > 3 * 40000, len(want)
+        limit = 2 * len((":(literal)" + names[0]).encode()) + 1
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": [], "since": {".": since}, "excluded": {"record-paths": list(names)}}
+        with batch_bytes(limit), counted_subprocess_diffs() as seen:
+            env = dwitbuk.verify_packet(req)
+        ed = env.get("excluded_diff") or ""
+        assert ed.startswith("diff --git a/%s b/%s\n" % (names[0], names[0])), ed[:200]
+        assert 0 < len(ed) <= 40000, "cut at 40000: %d" % len(ed)
+        assert want.startswith(ed), "the cut text is the start of git's text"
+        headers = re.findall(r"^diff --git a/(.*) b/", ed, re.M)
+        assert len(headers) == len(set(headers)), headers
+        seen = [(a, n) for a, n in seen if any("notes/" in x for x in a)]   # the record batches, not the touched diff
+        sizes = [n for _, n in seen]
+        assert seen and len(seen) < len(names), "fewer git diff calls than records: %d calls" % len(seen)
+        assert sum(sizes[:-1]) < 40000 <= sum(sizes), "no batch after the one passing the 40000-character cut: %r" % sizes
+
+
+CR_FILE = b"one\rtwo\r\nthree\n\xff four\r"
+
+
+def test_Q_bounded_git_keeps_universal_newlines_and_git_patch_returns_gits_bytes_untranslated():
+    assert callable(getattr(dwitbuk, "git_patch", None)), "dwitbuk.git_patch(target, *args) is the patch seam"
+    with Project() as pj:
+        with open(os.path.join(pj.dir, "cr.txt"), "wb") as fh:
+            fh.write(CR_FILE)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a CR file")
+        raw = subprocess.run(["git", "show", "HEAD:cr.txt"], cwd=pj.dir, capture_output=True).stdout
+        assert raw == CR_FILE, raw
+        decoded = raw.decode("utf-8", "replace")
+        universal = decoded.replace("\r\n", "\n").replace("\r", "\n")
+        assert dwitbuk.git(pj.dir, "show", "HEAD:cr.txt") == universal, "the generic helper: text, universal newlines"
+        assert dwitbuk.git_patch(pj.dir, "show", "HEAD:cr.txt") == decoded, "the patch helper: git's bytes, no translation"
+        assert dwitbuk.git_patch(pj.dir, "show", "HEAD:nothing-here") is None, "None on a non-zero exit"
+        assert dwitbuk.git(pj.dir, "show", "HEAD:nothing-here") is None
+        with open(os.path.join(pj.dir, "cr.txt"), "wb") as fh:
+            fh.write(CR_FILE + b"five\r")
+        patch = dwitbuk.git_patch(pj.dir, "diff", *PLAIN_DIFF, "--", "cr.txt")
+        assert patch == subprocess.run(["git", "diff", *PLAIN_DIFF, "--", "cr.txt"], cwd=pj.dir, capture_output=True).stdout.decode("utf-8", "replace")
+        assert "\rtwo\r\n" in patch and "five\r" in patch, repr(patch)
+        assert "\r" not in dwitbuk.git(pj.dir, "diff", *PLAIN_DIFF, "--", "cr.txt"), "the generic helper still translates"
 
 
 if __name__ == "__main__":
