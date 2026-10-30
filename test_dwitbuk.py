@@ -2396,11 +2396,11 @@ def gitlink(pj, rel):
     return nested
 
 
-def gitlink_stales(pj, rel):
-    """Bind a late eyes answer, edit rel/child.py, and return consume's (code, out)."""
+def gitlink_stales(pj, rel, n=2):
+    """Bind a late eyes answer, edit rel/child.py to child = n, and return consume's (code, out)."""
     folder = os.path.join(pj.dir, ".dwitbuk", "packet")
     eyes_answer(pj, folder)
-    write(os.path.join(pj.dir, rel, "child.py"), "child = 2  # edited in %s\n" % rel)
+    write(os.path.join(pj.dir, rel, "child.py"), "child = %d  # edited in %s\n" % (n, rel))
     return run("eyes", "consume", "--dir", folder, "--target", pj.dir)
 
 
@@ -2422,8 +2422,8 @@ def test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_unde
         assert code == 0, ("a gitlink under the directory declaration custom-dir/ stays excluded", out)
         code, out = gitlink_stales(pj, "custom-record.json")
         assert code != 0 and "source changed" in out, ("a gitlink at the bare declaration custom-record.json is source", out)
-        # the second time, too: a fresh answer then another edit inside the declared gitlink
-        code, out = gitlink_stales(pj, "custom-record.json")
+        # the second time, too: a fresh answer then another edit (new contents) inside the declared gitlink
+        code, out = gitlink_stales(pj, "custom-record.json", 3)
         assert code != 0 and "source changed" in out, ("again", out)
 
 

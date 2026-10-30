@@ -952,6 +952,7 @@ def source_state(target, output, extra=(), records=False):
         seen.add(repo)
         cwd = os.path.join(target, repo)
         files = git(cwd, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ".")
+        gitlinks = set()
         if files is None:
             # Non-git projects still need source freshness, not an always-empty snapshot.
             files_ = []
@@ -960,9 +961,12 @@ def source_state(target, output, extra=(), records=False):
                 files_.extend(os.path.relpath(os.path.join(directory, n), cwd) for n in names)
         else:
             files_ = files.split("\0")
+            staged = git(cwd, "ls-files", "--stage", "-z", "--", ".") or ""
+            gitlinks = {entry.split("\t", 1)[1] for entry in staged.split("\0")
+                        if entry.startswith("160000 ") and "\t" in entry}
         for inner in set(files_) - {""}:
             path = (repo + "/" if repo else "") + inner.rstrip("/")
-            if not excluded(path):
+            if not excluded(path + "/" if inner in gitlinks else path):
                 take(path)
         # An ignored nested repository is absent from the parent's ls-files.
         status = git(cwd, "status", "--porcelain", "-z", "--ignored=matching", "--untracked-files=normal", "--", ".") or ""
