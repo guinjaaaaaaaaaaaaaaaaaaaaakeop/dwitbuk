@@ -910,7 +910,9 @@ def test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_
     a fact with the review's id, silent when there is nothing, silent in a worker session, never blocking."""
     hook = os.path.join(HERE, "hooks", "session_start.py")
     def run_hook(cwd, **env):
-        done = subprocess.run([sys.executable, hook], input=json.dumps({"cwd": cwd}), capture_output=True, text=True, encoding="utf-8", env=dict(os.environ, **env))
+        # a normal session unless the call says AGENT_WORKER itself: the parent may be a worker session
+        child = {k: v for k, v in os.environ.items() if k != "AGENT_WORKER"}
+        done = subprocess.run([sys.executable, hook], input=json.dumps({"cwd": cwd}), capture_output=True, text=True, encoding="utf-8", env=dict(child, **env))
         return done.returncode, done.stdout
     with Project() as pj:
         assert run_hook(pj.dir) == (0, ""), "no reviews: silent"
