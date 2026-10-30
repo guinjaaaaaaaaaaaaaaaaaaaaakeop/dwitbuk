@@ -715,6 +715,40 @@ def repo_of(target, path, since=None):
 
 def path_diff(target, names, base=(), cut=80000):
     """Diff literal candidates in git's order, with bounded pathspec arguments."""
+    prefix = (git(target, "rev-parse", "--show-prefix") or "").rstrip("\n")
+
+    def batch_diff(batch):
+        kept = {prefix + spec[len(":(literal)"):] for spec in batch}
+        # The header parser needs fixed prefixes even with diff.noprefix or
+        # diff.mnemonicPrefix configured in the user's git environment.
+        output = git(target, "diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
+                     *base, "--", *batch) or ""
+        sections = []
+        for section in re.split(r"(?=^diff --git )", output, flags=re.M):
+            if not section:
+                continue
+            header = section.split("\n", 1)[0][len("diff --git "):]
+            # With --no-renames both header paths name the same file. Spaces
+            # are not quoted by git, so splitting the header on whitespace is
+            # ambiguous; the two unquoted names have identical lengths.
+            if header.startswith('"'):
+                quoted = re.match(r'"((?:[^"\\]|\\.)*)"', header)
+                if not quoted:
+                    continue
+                escapes = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n",
+                           b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
+                raw = re.sub(rb'\\([0-7]{3}|.)',
+                             lambda m: bytes([int(m[1], 8)]) if len(m[1]) == 3 else escapes[m[1]],
+                             quoted[1].encode("utf-8"))
+                path = raw.decode("utf-8", errors="replace")[2:]
+            else:
+                path = header[:(len(header) - 1) // 2][2:]
+            # A literal file path can also select descendants after a
+            # file/directory replacement. Only this batch's candidates count.
+            if path in kept:
+                sections.append(section)
+        return "".join(sections)
+
     chunks, batch, size, length = [], [], 0, 0
     for name in names:
         spec = ":(literal)" + name
@@ -722,7 +756,7 @@ def path_diff(target, names, base=(), cut=80000):
         # An oversized single path travels alone; the limit bounds grouping,
         # never which paths can be included.
         if batch and size + needed > PATHSPEC_BATCH_BYTES:
-            chunk = git(target, "diff", "--no-renames", *base, "--", *batch) or ""
+            chunk = batch_diff(batch)
             chunks.append(chunk)
             length += len(chunk)
             if length > cut:
@@ -731,7 +765,7 @@ def path_diff(target, names, base=(), cut=80000):
         batch.append(spec)
         size += needed
     if batch:
-        chunks.append(git(target, "diff", "--no-renames", *base, "--", *batch) or "")
+        chunks.append(batch_diff(batch))
     return "".join(chunks)
 
 
