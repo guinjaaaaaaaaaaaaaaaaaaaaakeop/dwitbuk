@@ -274,6 +274,13 @@ worker never ran.
   never a directory that took a declared file's name (`hunsu.json/child.py` is source). mangsang's `mangsang/` stays in a late-eyes
   diff on purpose: a confirmed quote is a claim about the tree. dwitbuk declares `records: ["reviews/", ".dwitbuk/"]`.
 
+- **The late eyes' diff is bounded.** It is cut at 80000 characters and says so (`diff_truncated`); git is asked for no
+  more once that is passed. Without a base, an unresolved merge conflict appears as git prints it: a combined
+  `diff --cc` section, or the line `* Unmerged path PATH` for a modify/delete conflict. Paths are given to git in
+  batches, and across batches a combined section can come after other paths' sections, where one git call would put it
+  first; nothing is lost or repeated. Git output that dwitbuk cannot attribute to a path stops the request before any
+  packet is written.
+
 ## Versioning
 
 Semver, and a version names one content: every change to the source — code, skill or command text, hooks, this README —
