@@ -2100,6 +2100,288 @@ def test_Q_hostcall_parent_environ_is_the_same_after_each_call_as_before():
         hostcall_child_env_is_the_workers(adapter, call, parent)
 
 
+def diff_files(d, lead=""):
+    """{path: "deleted" | "new" | "modified" | "renamed"} by each `diff --git` header in `d`, paths with `lead` taken off."""
+    out, cur = {}, None
+    for line in d.splitlines():
+        m = re.match(r"^diff --git a/(.*) b/(.*)$", line)
+        if m:
+            a, b = (p[len(lead):] if lead and p.startswith(lead) else p for p in m.groups())
+            cur = b
+            out[cur] = "modified" if a == b else "renamed"
+            out.setdefault("a:" + a, "a-side")
+        elif cur and line.startswith("deleted file mode"):
+            out[cur] = "deleted"
+        elif cur and line.startswith("new file mode"):
+            out[cur] = "new"
+        elif cur and line.startswith(("rename from", "rename to", "similarity index")):
+            out[cur] = "renamed"
+    return out
+
+
+def rename_project(root, sub=None):
+    """Three committed files under `root/sub`, a reviews/ record and a lock-declared custom-record.json, then (after a
+    review) three `git mv`s: a source file into reviews/, a source file to another source path, the record to a source path.
+    Returns (target, the commit before the moves)."""
+    t = os.path.join(root, sub) if sub else root
+    write(os.path.join(t, "hunsu.lock.json"), STRICT_LOCK)
+    write(os.path.join(t, "src.py"), "srcmark = 1\nsrcmark_two = 2\n")
+    write(os.path.join(t, "old.py"), "oldmark = 1\noldmark_two = 2\n")
+    write(os.path.join(t, "custom-record.json"), '{"recmark": 1, "recmark_two": 2}\n')
+    if sub:
+        write(os.path.join(root, "outer.py"), "outer = 1\n")
+    git(root, "add", "-A"); git(root, "commit", "-qm", "before the moves")
+    base = git(root, "rev-parse", "HEAD")
+    run("review", "--target", t)
+    os.makedirs(os.path.join(t, "reviews"), exist_ok=True)
+    git(t, "mv", "src.py", "reviews/src.py")
+    git(t, "mv", "old.py", "new.py")
+    git(t, "mv", "custom-record.json", "moved.json")
+    status = git(t, "status", "--porcelain", "--", ".")
+    assert "src.py -> " in status and "old.py -> " in status and "custom-record.json -> " in status, "git pairs these as renames: " + status
+    return t, base
+
+
+def renames_are_split(packet, lead=""):
+    d, new = packet["diff"], packet["new_files"]
+    files = diff_files(d, lead)
+    assert "rename from" not in d and "rename to" not in d, "renames are not paired (--no-renames): " + d
+    assert files.get("src.py") == "deleted" and "-srcmark = 1" in d, "a source file moved into reviews/ shows its deletion: %r\n%s" % (files, d)
+    assert not [k for k in files if k.endswith("reviews/src.py")] and "+srcmark = 1" not in d, "nothing of reviews/src.py: " + d
+    assert not [k for k in new if k.endswith("reviews/src.py")], list(new)
+    assert files.get("old.py") == "deleted" and "-oldmark = 1" in d, "the old path's deletion: %r\n%s" % (files, d)
+    assert files.get("new.py") == "new" and "+oldmark = 1" in d, "the new path as a new file: %r\n%s" % (files, d)
+    assert files.get("moved.json") == "new" and '+{"recmark": 1' in d, "a record moved to a source path shows the new file: %r\n%s" % (files, d)
+    assert "custom-record.json" not in files and "a:custom-record.json" not in files and '-{"recmark"' not in d, \
+        "and not the record's deletion: %r\n%s" % (files, d)
+
+
+def test_Q_review_fixes_renames_from_the_latest_reviews_base_are_split_and_judged_side_by_side():
+    with Project() as pj:
+        t, _ = rename_project(pj.dir)
+        renames_are_split(late_packet(pj, os.path.join(t, ".dwitbuk", "packet")))
+
+
+def test_Q_review_fixes_renames_with_since_are_split_and_judged_side_by_side():
+    with Project() as pj:
+        t, base = rename_project(pj.dir)
+        folder = os.path.join(t, ".dwitbuk", "packet")
+        code, out = run("eyes", "request", "--out", folder, "--since", base, "--target", t)
+        assert code == 0, out
+        renames_are_split(dwitbuk.load(os.path.join(folder, "eyes-request.json")))
+
+
+def test_Q_review_fixes_renames_for_a_target_inside_a_larger_repository_are_split_and_judged_side_by_side():
+    with Project() as pj:
+        t, base = rename_project(pj.dir, "proj")
+        assert git(t, "rev-parse", "--show-prefix") == "proj/"
+        packet = late_packet(type("Sub", (), {"dir": t}), os.path.join(t, ".dwitbuk", "packet"))
+        renames_are_split(packet, "proj/")
+        assert "outer" not in packet["diff"], packet["diff"]
+        folder = os.path.join(t, ".dwitbuk", "packet2")
+        code, out = run("eyes", "request", "--out", folder, "--since", base, "--target", t)
+        assert code == 0, out
+        renames_are_split(dwitbuk.load(os.path.join(folder, "eyes-request.json")), "proj/")
+
+
+@contextlib.contextmanager
+def recorded_git():
+    """dwitbuk.git wrapped: every call's argv recorded, the real call made."""
+    calls, real = [], dwitbuk.git
+    def recorder(target, *a):
+        calls.append(list(a))
+        return real(target, *a)
+    dwitbuk.git = recorder
+    try:
+        yield calls
+    finally:
+        dwitbuk.git = real
+
+
+@contextlib.contextmanager
+def batch_bytes(n):
+    assert hasattr(dwitbuk, "PATHSPEC_BATCH_BYTES"), "dwitbuk.PATHSPEC_BATCH_BYTES is a module-level int"
+    old = dwitbuk.PATHSPEC_BATCH_BYTES
+    assert isinstance(old, int) and not isinstance(old, bool) and 0 < old < 1048576, old
+    dwitbuk.PATHSPEC_BATCH_BYTES = n
+    try:
+        yield
+    finally:
+        dwitbuk.PATHSPEC_BATCH_BYTES = old
+
+
+def pathspec_bytes(argv):
+    """The bytes of a git call's pathspec arguments: everything after `--`."""
+    if "--" not in argv:
+        return 0
+    return sum(len(x.encode("utf-8")) for x in argv[argv.index("--") + 1:])
+
+
+def test_Q_review_fixes_batching_diffs_every_changed_file_in_gits_order_within_the_limit():
+    limit = 200
+    with Project() as pj:
+        names = ["pkg/zz_%02d.py" % i for i in range(30, 0, -1)] + ["aa/m%02d.py" % i for i in range(30)] + ["mid.py"]
+        for n in names:
+            write(os.path.join(pj.dir, n), "old %s\n" % n)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "many")
+        run("review", "--target", pj.dir)
+        for n in names:
+            write(os.path.join(pj.dir, n), "new %s\n" % n)
+        listed = git(pj.dir, "diff", "--no-renames", "--name-only", "HEAD").splitlines()
+        assert sorted(listed) == sorted(names) and len(listed) == len(names), listed
+        one = subprocess.run(["git", "diff", "--no-renames", "HEAD", "--", *listed], cwd=pj.dir, capture_output=True,
+                             text=True, encoding="utf-8").stdout
+        assert len(one) < 80000 and sum(len(n.encode()) for n in listed) > 3 * limit, "the change set needs several batches"
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        with batch_bytes(limit), recorded_git() as calls:
+            code, out = run("eyes", "request", "--out", folder, "--target", pj.dir)
+            assert dwitbuk.PATHSPEC_BATCH_BYTES == limit
+        assert code == 0, out
+        packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+        diffs = [c for c in calls if c and c[0] == "diff"]
+        over = [(pathspec_bytes(c), c[:6]) for c in diffs if pathspec_bytes(c) > limit]
+        assert not over, "every git diff call keeps its pathspec arguments within PATHSPEC_BATCH_BYTES=%d: %r" % (limit, over)
+        content = [c for c in diffs if "--name-only" not in c and "--name-status" not in c and "--stat" not in c]
+        assert len(content) >= 3, "the kept pathspecs are given to git in batches: %r" % ([c[:4] for c in content],)
+        d = packet["diff"]
+        order = [m for m in re.findall(r"^diff --git a/(\S+) b/", d, re.M)]
+        assert order == listed, "every changed file, in the order git listed them: %r" % (order,)
+        assert d == one, "the batched diff is the text one unbatched git diff gives"
+        assert not packet.get("diff_truncated"), packet.get("diff_truncated")
+
+
+def test_Q_review_fixes_batching_the_limit_is_restored_and_defaults_well_under_the_argument_limit():
+    assert hasattr(dwitbuk, "PATHSPEC_BATCH_BYTES"), "dwitbuk.PATHSPEC_BATCH_BYTES is a module-level int"
+    v = dwitbuk.PATHSPEC_BATCH_BYTES
+    assert isinstance(v, int) and not isinstance(v, bool) and 1024 <= v <= 262144, v
+    with batch_bytes(17):
+        assert dwitbuk.PATHSPEC_BATCH_BYTES == 17
+    assert dwitbuk.PATHSPEC_BATCH_BYTES == v
+
+
+def test_Q_review_fixes_batching_a_change_set_whose_names_exceed_the_argument_limit_no_longer_fails():
+    with Project() as pj:
+        deep = os.path.join(*["d%d_" % i + "x" * 200 for i in range(4)])   # ~820 bytes of directories per path
+        names = [os.path.join(deep, "f%04d.py" % i).replace(os.sep, "/") for i in range(1400)]
+        assert sum(len(n.encode()) + 1 for n in names) > 1048576 + 65536, "the names alone pass the platform's ARG_MAX"
+        for n in names:
+            write(os.path.join(pj.dir, n), "o\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "long names")
+        run("review", "--target", pj.dir)
+        for n in names:
+            write(os.path.join(pj.dir, n), "n\n")
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        code, out = run("eyes", "request", "--out", folder, "--target", pj.dir)
+        assert code == 0, out
+        packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+        assert packet.get("diff_truncated") is True, "past the 80000-character cut: %r" % (packet.get("diff_truncated"),)
+        assert packet["diff"].startswith("diff --git a/" + names[0] + " "), packet["diff"][:300]
+
+
+def test_Q_review_fixes_excluded_diff_of_a_bare_entry_holds_nothing_under_a_directory_that_took_its_name():
+    with Project() as pj:
+        files_base, dirs_base = strict_project(pj)
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 2\n")
+        write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 2\n")
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": [], "since": {".": dirs_base}, "excluded": {"record-paths": ["hunsu.json", "custom-record.json"]}}
+        env = dwitbuk.verify_packet(req)
+        assert sorted(env["excluded"]) == ["custom-record.json", "hunsu.json"], env.get("excluded")
+        ed = env.get("excluded_diff") or ""
+        assert "child.py" not in ed and "hchild" not in ed and "cchild" not in ed, \
+            "a bare entry names only that file, never files under a directory that took its name: " + ed
+        both = dwitbuk.verify_packet(dict(req, touched=["hunsu.json/child.py", "custom-record.json/child.py"]))
+        assert "+hchild = 2" in both["diff"] and "+cchild = 2" in both["diff"], "they are source, in diff when touched: " + both["diff"]
+        ed = both.get("excluded_diff") or ""
+        assert "child.py" not in ed and "hchild" not in ed and "cchild" not in ed, ed
+
+
+def test_Q_review_fixes_excluded_diff_of_a_trailing_slash_entry_shows_its_files_and_a_bare_file_its_own():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "alpha", "x.json"), '"old ax"\n')
+        write(os.path.join(pj.dir, "alpha", "deep", "y.json"), '"old ay"\n')
+        write(os.path.join(pj.dir, "notes.json"), '"old notes"\n')
+        write(os.path.join(pj.dir, "notes.json.bak"), '"old bak"\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "records")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        for rel in ("alpha/x.json", "alpha/deep/y.json", "notes.json", "notes.json.bak"):
+            write(os.path.join(pj.dir, rel), '"new %s"\n' % rel)
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": [], "since": {".": since}, "excluded": {"record-paths": ["alpha/", "notes.json"]}}
+        ed = dwitbuk.verify_packet(req).get("excluded_diff") or ""
+        assert '+"new alpha/x.json"' in ed and '+"new alpha/deep/y.json"' in ed, "an entry ending in / shows that directory's files: " + ed
+        assert '+"new notes.json"' in ed, "a bare entry that is a file shows that file: " + ed
+        assert "notes.json.bak" not in ed, "and nothing beside it: " + ed
+
+
+def nested_repo(at):
+    os.makedirs(at, exist_ok=True)
+    subprocess.run(["git", "init", "-q", at], capture_output=True)
+    write(os.path.join(at, "inside.py"), "inside = 1\n")
+
+
+def test_Q_review_fixes_an_untracked_nested_repository_is_not_a_new_file_and_the_eyes_request_completes():
+    with Project() as pj:
+        run("review", "--target", pj.dir)
+        nested_repo(os.path.join(pj.dir, "vendored"))
+        write(os.path.join(pj.dir, "fresh.py"), "fresh = 1\n")
+        assert "vendored/" in git(pj.dir, "ls-files", "--others", "--exclude-standard").splitlines(), "git lists it as a directory"
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        code, out = run("eyes", "request", "--out", folder, "--target", pj.dir)
+        assert code == 0, out
+        new = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["new_files"]
+        assert not [k for k in new if k.rstrip("/") == "vendored" or k.startswith("vendored/")], list(new)
+        assert "fresh.py" in new, list(new)
+
+
+def test_Q_review_fixes_an_untracked_nested_repository_at_a_declared_files_name_is_not_a_new_file_and_the_eyes_request_completes():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), STRICT_LOCK)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "lock")
+        run("review", "--target", pj.dir)
+        nested_repo(os.path.join(pj.dir, "custom-record.json"))
+        nested_repo(os.path.join(pj.dir, "hunsu.json"))
+        write(os.path.join(pj.dir, "fresh.py"), "fresh = 1\n")
+        others = git(pj.dir, "ls-files", "--others", "--exclude-standard").splitlines()
+        assert "custom-record.json/" in others and "hunsu.json/" in others, others
+        for since in ((), ("--since", pj.base)):
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            code, out = run("eyes", "request", "--out", folder, *since, "--target", pj.dir)
+            assert code == 0, (since, out)
+            new = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["new_files"]
+            assert not [k for k in new if k.startswith(("custom-record.json", "hunsu.json"))], list(new)
+            assert "fresh.py" in new, list(new)
+
+
+HOSTCALL_REST = {"HOME": "/dummy/home-parent", "LANG": "ko_KR.UTF-8", "XDG_CONFIG_HOME": "/dummy/xdg-config",
+                 "SSH_AUTH_SOCK": "/dummy/ssh-agent.sock", "CLAUDE_CODE_USE_BEDROCK": "1", "DWITBUK_TEST_MARKER_Q7": "marker value"}
+
+
+def hostcall_rest_of_the_parent(adapter):
+    parent = dict(hostcall_parent(adapter), **HOSTCALL_REST)
+    call, before, _ = hostcall_call(adapter, parent)
+    want = {k: v for k, v in before.items() if k not in HOSTCALL_DROPPED}
+    want.update(AGENT_HOST=HOSTCALL_HOSTS[adapter], AGENT_WORKER="1")
+    if adapter == "claude":
+        want["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    env = call["env"]
+    for k, v in HOSTCALL_REST.items():
+        assert env.get(k) == v, (adapter, k, env.get(k), v)
+    missing = sorted(set(want) - set(env))
+    extra = sorted(set(env) - set(want))
+    differ = sorted(k for k in set(want) & set(env) if want[k] != env[k])
+    assert env == want, ("the child's env is the parent's minus exactly the six keys", adapter, missing, extra, differ)
+
+
+def test_Q_review_fixes_hostcall_claude_child_env_is_the_parents_minus_exactly_the_six_keys():
+    hostcall_rest_of_the_parent("claude")
+
+
+def test_Q_review_fixes_hostcall_codex_child_env_is_the_parents_minus_exactly_the_six_keys():
+    hostcall_rest_of_the_parent("codex")
+
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
