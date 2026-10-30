@@ -57,7 +57,19 @@ def record_paths(target):
     reads them for its packets), its own reviews, and hunsu's files."""
     declared = load(os.path.join(target, "hunsu.lock.json")).get("record-paths")
     others = sorted({p for ps in declared.values() for p in ps}) if isinstance(declared, dict) else [".mangsang/", ".dwitbuk/"]
-    return tuple(sorted(set(others) | {RUNS + "/", REVIEWS + "/", ".dwitbuk/", "hunsu", ".claude/"}))
+    return tuple(sorted(set(others) | {RUNS + "/", REVIEWS + "/", ".dwitbuk/", ".claude/",
+                                      "hunsu.json", "hunsu.lock.json", "hunsu.local.json",
+                                      "hunsu-judgments.json", "hunsu-conflicts.md"}))
+
+
+def is_record(path, entries):
+    """Match a record itself or its descendants, never a same-prefix neighbour."""
+    path = str(path).replace("\\", "/")
+    path = (path[2:] if path.startswith("./") else path).rstrip("/")
+    if not path:
+        return False
+    return any(entry and (path == entry or path.startswith(entry + "/"))
+               for entry in (e.rstrip("/") for e in entries))
 
 
 def layer(f):
@@ -450,8 +462,7 @@ def documents_or_records(paths, target):
     recs = record_paths(target)
     def one(p):
         p = str(p).replace("\\", "/")
-        p = p[2:] if p.startswith("./") else p
-        return p.lower().endswith(DOC_SUFFIXES) or any(p.startswith(r) or p == r.rstrip("/") for r in recs)
+        return p.lower().endswith(DOC_SUFFIXES) or is_record(p, recs)
     return bool(paths) and all(one(p) for p in paths)
 
 
@@ -703,7 +714,7 @@ def verify_packet(request):
     """A chongdae build request (stage verify) -> the eyes packet for a verdict. The contract, what the task touched (as a diff), the
     builder's own report. The reader is told what decides: a sentence the code contradicts, or a claim no check could have decided."""
     target = request["target"]
-    touched = [t for t in request.get("touched") or [] if not t.startswith(record_paths(target))]
+    touched = [t for t in request.get("touched") or [] if not is_record(t, record_paths(target))]
     since = request.get("since") or {}
     diff = ""
     for path in touched:
@@ -720,7 +731,7 @@ def verify_packet(request):
     # what chongdae left out of `touched` by rule — the environment (hunsu's files) and the products' records — with its diff: a
     # task whose whole work is `hunsu lock` or `mangsang confirm` has `touched: []`, and a verifier told nothing about these read
     # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
-    excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not p.startswith(RUNS + "/")]
+    excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
     excluded_diff = "".join(git(target, "diff", "HEAD", "--", p) or "" for p in excluded)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
@@ -885,7 +896,7 @@ def source_state(target, output, extra=(), records=False):
     state, pending, seen = {}, [""], set()
     def excluded(path):
         full = os.path.abspath(os.path.join(target, path))
-        return (path.startswith(skipped) or full == output or full.startswith(output + os.sep)
+        return (is_record(path, skipped) or full == output or full.startswith(output + os.sep)
                 or re.search(r"(^|/)__pycache__/|\.py[co]$", path))
     def take(path):
         full = os.path.join(target, path)
@@ -976,17 +987,17 @@ def cmd_eyes(args):
         prior = reviews(target)
         base = args.since or (prior[-1]["since"] if prior else None)   # what the latest review covered
         head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
-        left_out = [p.rstrip("/") + ("*" if not p.endswith("/") else "") if p == "hunsu" else p.rstrip("/") for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
+        left_out = [p.rstrip("/") for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
         output_rel = os.path.relpath(os.path.realpath(args.out), os.path.realpath(target)).replace(os.sep, "/")
         if output_rel != ".." and not output_rel.startswith("../"):
             left_out.append(output_rel)
-        excl = ["--", "."] + [":!" + x for x in left_out]
+        excl = ["--", "."] + [":(exclude,literal)" + x for x in left_out]
         diff = (git(target, "diff", base, *excl) if base else git(target, "diff", *excl)) or ""
         names = [n.strip().replace("\\", "/") for n in ((git(target, "diff", "--name-only", base, "--", ".") if base else "") or "").splitlines()]
         untracked = [n.strip().replace("\\", "/") for n in (git(target, "ls-files", "--others", "--exclude-standard", "--", ".") or "").splitlines()]
         new_files = {}   # a diff shows nothing of files git does not track yet; the change includes them
         for n in untracked:
-            if n and not n.startswith(tuple(x.rstrip("*") for x in left_out)) and os.path.getsize(os.path.join(target, n)) < 20000:
+            if n and not is_record(n, left_out) and os.path.getsize(os.path.join(target, n)) < 20000:
                 new_files[n] = io.open(os.path.join(target, n), encoding="utf-8", errors="replace").read()
         moved = {n.split("/")[-2] for n in names + untracked if "/" in n}   # run dirs with a changed or new file since base
         runs_ = []
