@@ -1538,6 +1538,77 @@ def test_Q_sites_stop_hook_hands_a_dirty_hunsu_lookalike_to_the_eyes():
         assert "hunsu" not in leaves and "hunsu*" not in leaves and set(HUNSU_FILES) <= set(leaves), packet["diff_leaves_out"]
 
 
+def test_Q_sites_documents_or_records_a_neighbour_of_a_declared_file_is_not_a_record():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": ["alpha.json"]}})
+        assert dwitbuk.documents_or_records(["alpha.json", "hunsu.json"], pj.dir), "the declared file and hunsu's own are records"
+        for code in ("alpha.jsonl", "hunsu.json.bak"):
+            assert not dwitbuk.documents_or_records([code], pj.dir), code
+            assert not dwitbuk.documents_or_records(["alpha.json", code], pj.dir), code
+
+
+def test_Q_sites_source_state_changes_with_a_neighbour_of_a_declared_file():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": ["alpha.json"]}})
+        write(os.path.join(pj.dir, "alpha.json"), '"declared"\n')
+        for name in ("alpha.jsonl", "hunsu.json.bak"):
+            write(os.path.join(pj.dir, name), '"old"\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "neighbours")
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for name in ("alpha.jsonl", "hunsu.json.bak"):
+            eyes_answer(pj, folder)
+            write(os.path.join(pj.dir, name), '"changed %s"\n' % name)
+            code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+            assert code != 0 and "source changed" in out, (name, out)
+        eyes_answer(pj, folder)
+        write(os.path.join(pj.dir, "alpha.json"), '"declared, changed"\n')
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, "the declared file itself is a record: " + out
+
+
+def test_Q_sites_eyes_request_untracked_neighbours_of_record_entries_are_new_files():
+    with Project() as pj:
+        run("review", "--target", pj.dir)
+        neighbours = ("reviews2/a.json", ".claude-extra/x.py", ".chongdae-notes.md", "hunsu.json.bak")
+        for rel in neighbours:
+            write(os.path.join(pj.dir, rel), '"fresh %s"\n' % rel)
+        write(os.path.join(pj.dir, "hunsu.json"), "{}\n")
+        packet = late_packet(pj, os.path.join(pj.dir, ".dwitbuk", "packet"))
+        for rel in neighbours:
+            assert rel in packet["new_files"], (rel, list(packet["new_files"]))
+        assert "hunsu.json" not in packet["new_files"], list(packet["new_files"])
+
+
+def test_Q_sites_stop_hook_hands_dirty_neighbours_of_record_entries_to_the_eyes():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "alpha.json"), '"declared"\n')
+        write(os.path.join(pj.dir, "alpha.jsonl"), '"old"\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "alpha")
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": ["alpha.json"]}})
+        write(os.path.join(pj.dir, "hunsu.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+        write(os.path.join(pj.dir, "alpha.json"), '"declared, changed"\n')
+        write(os.path.join(pj.dir, "alpha.jsonl"), '"new"\n')
+        write(os.path.join(pj.dir, "hunsu.json.bak"), "{}\n")
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        touched, packet = stop_hook_touched(pj)
+        assert touched is not None and packet is not None, "the hook reached the eyes"
+        assert set(touched) == {"a.py", "alpha.jsonl", "hunsu.json.bak"}, touched
+
+
+def test_Q_sites_stop_hook_hands_a_dirty_mangsang_record_to_verify_packet():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), {"id": "R-1", "v": 1})
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "relations")
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"mangsang": ["mangsang/", ".mangsang/"]}})
+        write(os.path.join(pj.dir, "hunsu.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), {"id": "R-1", "v": 2})
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        touched, _ = stop_hook_touched(pj)
+        assert touched is not None, "the hook reached the eyes"
+        assert set(touched) == {"a.py", "mangsang/relations/R-1.json"}, touched
+
+
 def test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read():
     with Project() as pj:
         write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"mangsang": ["mangsang/", ".mangsang/"]}})
