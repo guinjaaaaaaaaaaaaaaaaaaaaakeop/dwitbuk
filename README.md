@@ -265,9 +265,13 @@ worker never ran.
 
 - `eyes_worker.py` starts its host session through `hostcall.py` — one host call for every worker of this family (hunsu's judge, mangsang's judge, dwitbuk's eyes,
   hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The umbrella checkout's `tools/same-file.py` says when the copies drift.
+  Each worker child starts as its own host (`AGENT_HOST=claude-code` or `codex`, `AGENT_WORKER=1`), without the parent
+  session's ids (`CODEX_THREAD_ID`, `CLAUDE_CODE_SESSION_ID`, `CHONGDAE_SESSION`, …); the rest of the environment is kept.
 
 - **What the eyes leave out of a diff** — the products' records and the environment — comes from the lock's `record-paths`
-  (each plugin's `records` declaration); without it, the names as they were. mangsang's `mangsang/` stays in a late-eyes
+  (each plugin's `records` declaration); without it, the names as they were. An entry ending in `/` is a directory and
+  everything in it; any other entry is that exact file — never a prefix (`hunsu.py` beside `hunsu.json` is source) and
+  never a directory that took a declared file's name (`hunsu.json/child.py` is source). mangsang's `mangsang/` stays in a late-eyes
   diff on purpose: a confirmed quote is a claim about the tree. dwitbuk declares `records: ["reviews/", ".dwitbuk/"]`.
 
 ## Versioning
@@ -277,7 +281,8 @@ bumps the version in all three manifests (`plugin.json`, `.claude-plugin/plugin.
 marketplace entries before it is used anywhere. Hosts copy a plugin at install and do not look again while the version
 stands, so an unbumped edit is a copy nobody can tell from the old one. **patch**: behavior or wording, every interface
 unchanged. **minor**: a new command, skill, field, hook or artifact key; what exists keeps working. **major**: an artifact
-type, lock or record that other products read changes shape. hunsu's `check` fails a linked plugin whose source differs
+type, lock or record that other products read changes shape, or a supported Python or host version is dropped (an
+`engines` floor rises, as `python` from 3.9 to 3.11 does). hunsu's `check` fails a linked plugin whose source differs
 from the installed copy under one version; for a locally linked plugin, `hunsu install --refresh <plugin>` re-snapshots
 after the bump.
 
