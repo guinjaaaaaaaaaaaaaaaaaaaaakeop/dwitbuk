@@ -139,7 +139,7 @@ One model call per stop with changes — the
 team's switch, not the plugin's default. Inside a worker session (`AGENT_WORKER=1`: the eyes, a judge, a builder) the
 hook does nothing, since the host runs the project's hooks in those sessions too
 
-The stop hook currently launches the worker's default `claude` adapter, including when invoked by a Codex hook.
+The stop hook launches the worker's default `claude` adapter, also when a Codex hook invokes it.
 Explicit worker calls can choose `--host codex`; the hook does not automatically select it from the session host.
 
 ### `/dwitbuk:eyes`
@@ -252,7 +252,7 @@ worker never ran.
   the first install record with that name, which on a machine with several projects is another project's older copy (a
   site's first review ran 1.1.0 reporters that way and reported 65 false `broken`/`drift`). It reads run records only
   to pack them for the eyes.
-- Reporter plugin-path lookup currently checks project-local links, then Claude's installation and marketplace
+- Reporter plugin-path lookup checks project-local links, then Claude's installation and marketplace
   records; it does not query Codex's plugin registry. For plugins installed only in Codex, supply their actual roots
   through `hunsu.local.json` links before resolving `{plugin:NAME}` reporter arguments.
 - The engine reads records and git, never code for meaning. Meaning is read by late eyes — a fresh session with
@@ -289,7 +289,7 @@ marketplace entries before it is used anywhere. Hosts copy a plugin at install a
 stands, so an unbumped edit is a copy nobody can tell from the old one. **patch**: behavior or wording, every interface
 unchanged. **minor**: a new command, skill, field, hook or artifact key; what exists keeps working. **major**: an artifact
 type, lock or record that other products read changes shape, or a supported Python or host version is dropped (an
-`engines` floor rises, as `python` from 3.9 to 3.11 does). hunsu's `check` fails a linked plugin whose source differs
+`engines` floor rises, as `python` from 3.9 to 3.11 did in 2.0.0). hunsu's `check` fails a linked plugin whose source differs
 from the installed copy under one version; for a locally linked plugin, `hunsu install --refresh <plugin>` re-snapshots
 after the bump.
 
@@ -298,7 +298,7 @@ after the bump.
 Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged.
 Keep the version equal in `plugin.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
 and `.claude-plugin/marketplace.json` (both `metadata.version` and this product's `plugins[].version`).
-`.agents/plugins/marketplace.json` currently has no version field; verify its product name and source path,
+`.agents/plugins/marketplace.json` has no version field; verify its product name and source path,
 but do not invent a version field there.
 
 Before publication, run the relevant checks in **Self-check** for behavior changes; for documentation-only
