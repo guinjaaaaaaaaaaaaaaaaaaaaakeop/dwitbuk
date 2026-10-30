@@ -1843,6 +1843,32 @@ def test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_r
         assert '"plugins"' not in d and '"r": 1' not in d, "the declared files' own deletions stay left out: " + d
 
 
+def test_Q_strict_sites_eyes_request_in_a_subdirectory_of_a_larger_repository_diffs_by_target_relative_names():
+    with Project() as pj:
+        sub = os.path.join(pj.dir, "proj")
+        write(os.path.join(pj.dir, "outer.py"), "outer = 1\n")
+        write(os.path.join(sub, "hunsu.lock.json"), STRICT_LOCK)
+        write(os.path.join(sub, "a.py"), "suba = 1\n")
+        write(os.path.join(sub, "hunsu.json", "child.py"), "hchild = 1\n")
+        write(os.path.join(sub, "custom-record.json"), '{"r": 1}\n')
+        write(os.path.join(sub, "reviews", "note.md"), "note one\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "outer file and a subdirectory project")
+        assert git(sub, "rev-parse", "--show-prefix") == "proj/", "the target is a subdirectory of the repository"
+        run("review", "--target", sub)
+        write(os.path.join(pj.dir, "outer.py"), "outer = 2\n")
+        write(os.path.join(sub, "a.py"), "suba = 2\n")
+        write(os.path.join(sub, "hunsu.json", "child.py"), "hchild = 2\n")
+        write(os.path.join(sub, "custom-record.json"), '{"r": 2}\n')
+        write(os.path.join(sub, "reviews", "note.md"), "note two\n")
+        packet = late_packet(type("Sub", (), {"dir": sub}), os.path.join(sub, ".dwitbuk", "packet"))
+        d = packet["diff"]
+        assert "-suba = 1" in d and "+suba = 2" in d, "git names changes from the repository root; the target's own a.py is kept: " + d
+        assert "-hchild = 1" in d and "+hchild = 2" in d and "hunsu.json/child.py" in d, d
+        assert '"r": 2' not in d and '"r": 1' not in d, "the declared custom-record.json stays left out: " + d
+        assert "note two" not in d and "reviews/" not in d, "reviews/ stays left out: " + d
+        assert "outer" not in d, "a file outside the target is not the target's diff: " + d
+
+
 def test_Q_strict_sites_eyes_request_leaves_out_entries_as_declared_and_only_records_make_an_empty_diff():
     with Project() as pj:
         write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"custom": ["custom-record.json", ".custom/"]}})
