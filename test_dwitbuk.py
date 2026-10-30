@@ -2467,9 +2467,10 @@ PLAIN_DIFF = ("--no-color", "--no-ext-diff", "--no-relative", "--submodule=short
 
 
 def unbatched(cwd, base, names):
-    """One `git diff --no-renames` over literal pathspecs for every name, as the batching would have it if it never split."""
+    """One `git diff --no-renames` over literal pathspecs for every name, as the batching would have it if it never split.
+    Read as git wrote it: decoded, never newline-translated, so a lone CR in a file's content stays where it is."""
     return subprocess.run(["git", "diff", *PLAIN_DIFF, "--no-renames", *base, "--", *(":(literal)" + n for n in names)], cwd=cwd,
-                          capture_output=True, text=True, encoding="utf-8").stdout
+                          capture_output=True).stdout.decode("utf-8")
 
 
 def file_became_directory(pj, lock, child, child_text="childmark = 1\n"):
@@ -2944,6 +2945,153 @@ def test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_part
             assert seen, "%s: a real diff call was made and carried the extra text" % case
             assert failure is not None, "%s: excluded_diff fails, not partial text: %r" % (case, (got or {}).get("excluded_diff"))
             assert clear_about_it(str(failure)), "%s: a clear error that says what could not be attributed: %r" % (case, failure)
+
+
+def modify_delete_project(pj, kind, other, lock=None):
+    """c.py committed beside `other`; one branch deletes c.py, the other modifies it, and the merge leaves the conflict —
+    `DU c.py` when main deleted it, `UD c.py` when the other branch did. `other` is then modified in the work tree.
+    No review is taken. Returns git's porcelain status."""
+    if lock is not None:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+    write(os.path.join(pj.dir, "c.py"), "cmark = base\n")
+    write(os.path.join(pj.dir, other), "omark = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "c and " + other)
+    deleter, modifier = ("main", "other") if kind == "DU" else ("other", "main")
+    git(pj.dir, "checkout", "-q", "-b", "other")
+    git(pj.dir, "checkout", "-q", "main")
+    for branch in (deleter, modifier):
+        git(pj.dir, "checkout", "-q", branch)
+        if branch == deleter:
+            git(pj.dir, "rm", "-q", "c.py"); git(pj.dir, "commit", "-qm", "delete c")
+        else:
+            write(os.path.join(pj.dir, "c.py"), "cmark = changed\n"); git(pj.dir, "commit", "-qam", "modify c")
+    git(pj.dir, "checkout", "-q", "main")
+    git(pj.dir, "merge", "-q", "other")
+    write(os.path.join(pj.dir, other), "omark = 2\n")
+    status = [line.strip() for line in git(pj.dir, "status", "--porcelain").splitlines()]
+    assert "%s c.py" % kind in status and "M %s" % other in status, "a modify/delete conflict and a modified file: %r" % status
+    plain = subprocess.run(["git", "diff", *PLAIN_DIFF, "--no-renames"], cwd=pj.dir, capture_output=True).stdout.decode("utf-8")
+    assert plain.count("* Unmerged path c.py\n") == 1 and "diff --cc" not in plain, "git prints the one line, no combined section: " + plain
+    assert not dwitbuk.reviews(pj.dir), "no prior review"
+    return status
+
+
+MODIFY_DELETE = [(kind, other) for kind in ("DU", "UD") for other in ("d.py", "b.py")]   # c.py sorts before d.py, after b.py
+
+
+def unmerged_lines(d):
+    return re.findall(r"^\* Unmerged path .*$", d, re.M)
+
+
+def test_Q_raw_text_a_modify_delete_conflict_is_its_own_unmerged_path_line_once_and_left_out_when_declared():
+    for kind, other in MODIFY_DELETE:
+        with Project() as pj:
+            modify_delete_project(pj, kind, other)
+            want = unbatched(pj.dir, [], ["c.py", other])
+            assert want.count("* Unmerged path c.py\n") == 1 and "diff --git a/%s b/%s" % (other, other) in want, want
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            for limit in (None, 1):
+                with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                    code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+                where = "%s c.py beside %s, limit %r" % (kind, other, limit)
+                assert code == 0, "%s: a modify/delete conflict never fails the request: %s" % (where, out)
+                d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+                assert unmerged_lines(d) == ["* Unmerged path c.py"], "%s: the line once, as its own line: %r\n%s" % (where, unmerged_lines(d), d)
+                assert d.count("Unmerged path") == 1, "%s: %s" % (where, d)
+                assert "+omark = 2" in d and d.count("diff --git a/%s b/%s" % (other, other)) == 1, "%s: %s's section stays: %s" % (where, other, d)
+                assert d == want, "%s: the text one plain git diff gives over the kept paths:\n%r\n---\n%r" % (where, d, want)
+    modify_delete_record_is_left_out()
+
+
+def modify_delete_record_is_left_out():
+    for kind, other in MODIFY_DELETE:
+        with Project() as pj:
+            modify_delete_project(pj, kind, other, {"record-paths": {"custom": ["c.py"]}})
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            for limit in (None, 1):
+                with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                    code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+                where = "%s c.py declared, beside %s, limit %r" % (kind, other, limit)
+                assert code == 0, "%s: a declared record's conflict never fails the request: %s" % (where, out)
+                d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+                assert "Unmerged path" not in d and "c.py" not in d and "cmark" not in d, "%s: nothing of the record c.py: %r" % (where, d)
+                assert "+omark = 2" in d and d == unbatched(pj.dir, [], [other]), "%s: %s's section only: %r" % (where, other, d)
+
+
+def test_Q_raw_text_the_unmerged_path_line_is_not_attached_to_the_other_paths_section():
+    for kind, other in MODIFY_DELETE:
+        with Project() as pj:
+            modify_delete_project(pj, kind, other, {"record-paths": {"custom": [other]}})
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            for limit in (None, 1):
+                with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                    code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+                where = "%s c.py beside the declared record %s, limit %r" % (kind, other, limit)
+                assert code == 0, "%s: %s" % (where, out)
+                d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+                assert d == "* Unmerged path c.py\n", "%s: c.py's line stays when %s's section is left out: %r" % (where, other, d)
+                assert d == unbatched(pj.dir, [], ["c.py"]), "%s: %r" % (where, d)
+
+
+CR_OLD = b"one\rtwo\r"
+CR_NEW = b"one\rdiff --git a/zz b/zz\rdiff these\rtwo\r"
+
+
+def test_Q_raw_text_a_cr_only_file_holding_lines_beginning_diff_keeps_its_whole_section_at_both_batch_limits():
+    with Project() as pj:
+        with open(os.path.join(pj.dir, "cr.txt"), "wb") as fh:
+            fh.write(CR_OLD)
+        write(os.path.join(pj.dir, "d.py"), "dmark = 1\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a CR-only file")
+        run("review", "--target", pj.dir)
+        with open(os.path.join(pj.dir, "cr.txt"), "wb") as fh:
+            fh.write(CR_NEW)
+        write(os.path.join(pj.dir, "d.py"), "dmark = 2\n")
+        listed = git(pj.dir, "diff", "--no-renames", "--name-only", "HEAD").splitlines()
+        assert listed == ["cr.txt", "d.py"], listed
+        want = unbatched(pj.dir, ["HEAD"], listed)
+        sections = dict(diff_sections(want))
+        assert list(sections) == ["cr.txt", "d.py"], "the raw text splits into git's two sections: %r" % list(sections)
+        section = sections["cr.txt"]
+        assert "\n-" + CR_OLD.decode() + "\n" in section and "\n+" + CR_NEW.decode() + "\n" in section, repr(section)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for limit in (None, 1):
+            with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+            assert code == 0, "limit %r: a lone CR never fails the request: %s" % (limit, out)
+            d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+            raw = d.encode("utf-8")
+            assert b"\n-" + CR_OLD + b"\n" in raw, "limit %r: the removed line, raw bytes: %r" % (limit, d)
+            assert b"\n+" + CR_NEW + b"\n" in raw, "limit %r: the added line, CRs and all: %r" % (limit, d)
+            assert section.encode("utf-8") in raw, "limit %r: cr.txt's whole section, byte for byte:\n%r\n---\n%r" % (limit, d, section)
+            assert "+dmark = 2" in d, "limit %r: %r" % (limit, d)
+            assert d == want, "limit %r: the text one plain git diff gives:\n%r\n---\n%r" % (limit, d, want)
+
+
+def test_Q_raw_text_a_conflict_sorting_after_a_modified_file_keeps_one_calls_order_with_diff_cc_first():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "e.py"), "head = 1\nside = base\ntail = 1\n")
+        write(os.path.join(pj.dir, "d.py"), "dmark = 1\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "d and e")
+        git(pj.dir, "checkout", "-q", "-b", "other")
+        write(os.path.join(pj.dir, "e.py"), "head = 1\nside = other\ntail = 1\n")
+        git(pj.dir, "commit", "-qam", "other side")
+        git(pj.dir, "checkout", "-q", "main")
+        write(os.path.join(pj.dir, "e.py"), "head = 1\nside = main\ntail = 1\n")
+        git(pj.dir, "commit", "-qam", "main side")
+        git(pj.dir, "merge", "-q", "other")
+        write(os.path.join(pj.dir, "d.py"), "dmark = 2\n")
+        status = [line.strip() for line in git(pj.dir, "status", "--porcelain").splitlines()]
+        assert "UU e.py" in status and "M d.py" in status, status
+        assert not dwitbuk.reviews(pj.dir), "no prior review"
+        want = unbatched(pj.dir, [], ["d.py", "e.py"])
+        assert cc_headers(want) == [("", "e.py"), ("d.py", "")], "one call gives diff --cc first: %r" % cc_headers(want)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for limit in (None, 1):
+            with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                d = conflict_packet_diff(pj, folder)
+            assert cc_headers(d) == [("", "e.py"), ("d.py", "")], "limit %r: diff --cc first, then d.py: %r\n%s" % (limit, cc_headers(d), d)
+            assert d == want, "limit %r: one unbatched call's text:\n%s\n---\n%s" % (limit, d, want)
 
 
 if __name__ == "__main__":
