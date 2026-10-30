@@ -63,13 +63,14 @@ def record_paths(target):
 
 
 def is_record(path, entries):
-    """Match a record itself or its descendants, never a same-prefix neighbour."""
+    """Match exact file declarations and directory declarations with their descendants."""
     path = str(path).replace("\\", "/")
-    path = (path[2:] if path.startswith("./") else path).rstrip("/")
+    path = path[2:] if path.startswith("./") else path
     if not path:
         return False
-    return any(entry and (path == entry or path.startswith(entry + "/"))
-               for entry in (e.rstrip("/") for e in entries))
+    return any(entry and (path == entry or
+                          (entry.endswith("/") and (path == entry.rstrip("/") or path.startswith(entry))))
+               for entry in entries)
 
 
 def layer(f):
@@ -79,7 +80,8 @@ def layer(f):
 
 
 def load(path, default=None):
-    if not os.path.exists(path):
+    if not os.path.exists(path) or (os.path.basename(path) in ("hunsu.json", "hunsu.lock.json", "hunsu.local.json")
+                                    and os.path.isdir(path)):
         return {} if default is None else default
     with io.open(path, encoding="utf-8") as fh:
         return json.load(fh)
@@ -723,7 +725,7 @@ def verify_packet(request):
         lead = "" if repo == "." else repo + "/"
         # from the commit the task started on (chongdae's `since`), so work it committed is in the diff; `git diff HEAD` showed it
         # as nothing, and the file as new (sagoforce 10-26: every task's work committed, six of them in nested repositories)
-        d = git(cwd, "diff", "--src-prefix=a/" + lead, "--dst-prefix=b/" + lead, base or "HEAD", "--", inner)
+        d = git(cwd, "diff", "--src-prefix=a/" + lead, "--dst-prefix=b/" + lead, base or "HEAD", "--", ":(literal)" + inner)
         if d:
             diff += d
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:
@@ -732,7 +734,7 @@ def verify_packet(request):
     # task whose whole work is `hunsu lock` or `mangsang confirm` has `touched: []`, and a verifier told nothing about these read
     # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
     excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
-    excluded_diff = "".join(git(target, "diff", "HEAD", "--", p) or "" for p in excluded)
+    excluded_diff = "".join(git(target, "diff", "HEAD", "--", ":(literal)" + p) or "" for p in excluded)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
@@ -943,7 +945,7 @@ def source_state(target, output, extra=(), records=False):
             if prefix and inner.startswith(prefix):
                 inner = inner[len(prefix):]
             path = (repo + "/" if repo else "") + inner
-            if not excluded(path) and os.path.exists(os.path.join(target, path, ".git")):
+            if not excluded(path + "/") and os.path.exists(os.path.join(target, path, ".git")):
                 take(path)
     for path in extra:
         take(os.path.relpath(os.path.abspath(path), target))
@@ -987,13 +989,15 @@ def cmd_eyes(args):
         prior = reviews(target)
         base = args.since or (prior[-1]["since"] if prior else None)   # what the latest review covered
         head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
-        left_out = [p.rstrip("/") for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
+        left_out = [p for p in record_paths(target) if p != "mangsang/"]   # records and machine/host state; everything a run may touch stays in — mangsang/ relations included: a confirmed quote is a claim about the tree
         output_rel = os.path.relpath(os.path.realpath(args.out), os.path.realpath(target)).replace(os.sep, "/")
         if output_rel != ".." and not output_rel.startswith("../"):
-            left_out.append(output_rel)
-        excl = ["--", "."] + [":(exclude,literal)" + x for x in left_out]
-        diff = (git(target, "diff", base, *excl) if base else git(target, "diff", *excl)) or ""
-        names = [n.strip().replace("\\", "/") for n in ((git(target, "diff", "--name-only", base, "--", ".") if base else "") or "").splitlines()]
+            left_out.append(output_rel + "/")
+        diff_base = [base] if base else []
+        # Declarations and literal pathspecs are relative to target, even inside a larger repository.
+        names = [n for n in (git(target, "diff", "--relative", "--name-only", "-z", *diff_base, "--", ".") or "").split("\0") if n]
+        kept = [":(literal)" + n for n in names if not is_record(n, left_out)]
+        diff = (git(target, "diff", *diff_base, "--", *kept) or "") if kept else ""
         untracked = [n.strip().replace("\\", "/") for n in (git(target, "ls-files", "--others", "--exclude-standard", "--", ".") or "").splitlines()]
         new_files = {}   # a diff shows nothing of files git does not track yet; the change includes them
         for n in untracked:
