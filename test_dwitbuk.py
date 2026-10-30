@@ -2876,17 +2876,26 @@ def test_Q_conflict_a_conflicted_path_that_is_a_declared_record_is_left_out_and_
             assert "+dmark = 2" in d and d == unbatched(pj.dir, [], ["d.py"]), d
 
 
+UNATTRIBUTABLE = {
+    # what diff.submodule=log printed for a gitlink first in a batch: text before the call's first section header
+    "before the first header": ("Submodule x 1111111..2222222:\n  > a commit no candidate owns\n", ""),
+    # a header starting `diff ` of another kind, after the last readable section
+    "a header of another kind": ("", "diff --unknown x\n+a line no candidate owns\n"),
+}
+
+
 @contextlib.contextmanager
-def unattributable_git():
-    """dwitbuk.git wrapped: each real content diff call's output also carries a trailing section no candidate path owns."""
-    real, extra = dwitbuk.git, "Submodule x 1111111..2222222:\n  > a commit no candidate owns\n"
+def unattributable_git(case):
+    """dwitbuk.git wrapped: each real content diff call's output also carries text outside any section header the
+    filter reads — the UNATTRIBUTABLE case named."""
+    real, (before, after) = dwitbuk.git, UNATTRIBUTABLE[case]
     seen = []
     def wrapped(target, *a):
         out = real(target, *a)
         listing = {"--name-only", "--name-status", "--stat", "--numstat", "--raw", "--summary", "--shortstat"}
-        if a and a[0] == "diff" and not listing & set(a) and out and "diff --" in out:
+        if a and a[0] == "diff" and not listing & set(a) and out and re.search(r"^diff --(git|cc) ", out, re.M):
             seen.append(list(a))
-            return out + extra
+            return before + out + after
         return out
     dwitbuk.git = wrapped
     try:
@@ -2896,41 +2905,43 @@ def unattributable_git():
 
 
 def clear_about_it(text):
-    return "Submodule x" in text or "section" in text.lower() or "attribut" in text.lower()
+    return "Submodule x" in text or "diff --unknown" in text or "section" in text.lower() or "attribut" in text.lower()
 
 
 def test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed():
-    with Project() as pj:
-        conflict_project(pj)
-        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
-        assert conflict_packet_diff(pj, folder), "control: the same tree gives a packet without the extra section"
-        shutil.rmtree(folder)
-        with unattributable_git() as seen:
-            code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
-        assert seen, "a real diff call was made and carried the extra section"
-        assert code != 0, "a section no candidate owns is not dropped silently: exit %r\n%s" % (code, out)
-        assert out.strip() and clear_about_it(out), "a clear error that says what could not be attributed: %r" % out
-        assert not os.path.exists(os.path.join(folder, "eyes-request.json")), "no packet is written"
+    for case in UNATTRIBUTABLE:
+        with Project() as pj:
+            conflict_project(pj)
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            assert conflict_packet_diff(pj, folder), "control: the same tree gives a packet without the extra text"
+            shutil.rmtree(folder)
+            with unattributable_git(case) as seen:
+                code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+            assert seen, "%s: a real diff call was made and carried the extra text" % case
+            assert code != 0, "%s: a section no candidate owns is not dropped silently: exit %r\n%s" % (case, code, out)
+            assert out.strip() and clear_about_it(out), "%s: a clear error that says what could not be attributed: %r" % (case, out)
+            assert not os.path.exists(os.path.join(folder, "eyes-request.json")), "%s: no packet is written" % case
 
 
 def test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text():
-    with Project() as pj:
-        write(os.path.join(pj.dir, "notes.json"), '"old notes"\n')
-        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a record")
-        since = git(pj.dir, "rev-parse", "HEAD")
-        write(os.path.join(pj.dir, "notes.json"), '"new notes"\n')
-        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
-               "touched": [], "since": {".": since}, "excluded": {"record-paths": ["notes.json"]}}
-        assert '+"new notes"' in (dwitbuk.verify_packet(req).get("excluded_diff") or ""), "control: the record's own section"
-        got, failure = None, None
-        with unattributable_git() as seen:
-            try:
-                got = dwitbuk.verify_packet(req)
-            except (Exception, SystemExit) as err:
-                failure = err
-        assert seen, "a real diff call was made and carried the extra section"
-        assert failure is not None, "excluded_diff fails, not partial text: %r" % ((got or {}).get("excluded_diff"),)
-        assert clear_about_it(str(failure)), "a clear error that says what could not be attributed: %r" % (failure,)
+    for case in UNATTRIBUTABLE:
+        with Project() as pj:
+            write(os.path.join(pj.dir, "notes.json"), '"old notes"\n')
+            git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a record")
+            since = git(pj.dir, "rev-parse", "HEAD")
+            write(os.path.join(pj.dir, "notes.json"), '"new notes"\n')
+            req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+                   "touched": [], "since": {".": since}, "excluded": {"record-paths": ["notes.json"]}}
+            assert '+"new notes"' in (dwitbuk.verify_packet(req).get("excluded_diff") or ""), "control: the record's own section"
+            got, failure = None, None
+            with unattributable_git(case) as seen:
+                try:
+                    got = dwitbuk.verify_packet(req)
+                except (Exception, SystemExit) as err:
+                    failure = err
+            assert seen, "%s: a real diff call was made and carried the extra text" % case
+            assert failure is not None, "%s: excluded_diff fails, not partial text: %r" % (case, (got or {}).get("excluded_diff"))
+            assert clear_about_it(str(failure)), "%s: a clear error that says what could not be attributed: %r" % (case, failure)
 
 
 if __name__ == "__main__":
