@@ -2381,6 +2381,75 @@ def test_Q_review_fixes_hostcall_codex_child_env_is_the_parents_minus_exactly_th
     hostcall_rest_of_the_parent("codex")
 
 
+GITLINK_LOCK = {"record-paths": {"custom": ["custom-record.json", "custom-dir/"]}}
+
+
+def gitlink(pj, rel):
+    """A nested repository at rel with child.py committed, added to the parent as a gitlink (index mode 160000)."""
+    nested = os.path.join(pj.dir, rel)
+    write(os.path.join(nested, "child.py"), "child = 1\n")
+    git(nested, "init", "-q")
+    git(nested, "add", "-A"); git(nested, "commit", "-qm", "nested")
+    git(pj.dir, "add", rel)
+    entry = git(pj.dir, "ls-files", "-s", "--", rel)
+    assert entry.startswith("160000 ") and entry.endswith("\t" + rel), (rel, entry)
+    return nested
+
+
+def gitlink_stales(pj, rel):
+    """Bind a late eyes answer, edit rel/child.py, and return consume's (code, out)."""
+    folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+    eyes_answer(pj, folder)
+    write(os.path.join(pj.dir, rel, "child.py"), "child = 2  # edited in %s\n" % rel)
+    return run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+
+
+def test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), GITLINK_LOCK)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "lock")
+        for rel in ("lib", "custom-dir/engine", "custom-record.json"):
+            gitlink(pj, rel)
+        git(pj.dir, "commit", "-qm", "gitlinks")
+        assert git(pj.dir, "status", "--porcelain") == "", git(pj.dir, "status", "--porcelain")
+        # is_record is unchanged: the bare declaration is still an exact path, whatever the disk holds there
+        rp = dwitbuk.record_paths(pj.dir)
+        assert dwitbuk.is_record("custom-record.json", rp) and not dwitbuk.is_record("custom-record.json/child.py", rp), rp
+        run("review", "--target", pj.dir)
+        code, out = gitlink_stales(pj, "lib")
+        assert code != 0 and "source changed" in out, ("control: a gitlink at undeclared lib is source", out)
+        code, out = gitlink_stales(pj, "custom-dir/engine")
+        assert code == 0, ("a gitlink under the directory declaration custom-dir/ stays excluded", out)
+        code, out = gitlink_stales(pj, "custom-record.json")
+        assert code != 0 and "source changed" in out, ("a gitlink at the bare declaration custom-record.json is source", out)
+        # the second time, too: a fresh answer then another edit inside the declared gitlink
+        code, out = gitlink_stales(pj, "custom-record.json")
+        assert code != 0 and "source changed" in out, ("again", out)
+
+
+def test_Q_gitlink_a_regular_tracked_file_at_the_bare_declaration_stays_excluded():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), GITLINK_LOCK)
+        write(os.path.join(pj.dir, "custom-record.json"), {"r": 1})
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "record as a file")
+        entry = git(pj.dir, "ls-files", "-s", "--", "custom-record.json")
+        assert entry.startswith("100644 "), entry
+        gitlink(pj, "custom-dir")
+        git(pj.dir, "commit", "-qm", "a gitlink at the directory declaration itself")
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder)
+        write(os.path.join(pj.dir, "custom-record.json"), {"r": 2})
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, ("custom-record.json as a file is a record", out)
+        code, out = gitlink_stales(pj, "custom-dir")
+        assert code == 0, ("a gitlink at custom-dir, marked custom-dir/, is the directory declaration's own", out)
+        eyes_answer(pj, folder)
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "source changed" in out, ("source beside the record still counts", out)
+
+
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
