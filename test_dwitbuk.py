@@ -2450,6 +2450,170 @@ def test_Q_gitlink_a_regular_tracked_file_at_the_bare_declaration_stays_excluded
         assert code != 0 and "source changed" in out, ("source beside the record still counts", out)
 
 
+def diff_sections(d):
+    """[(b-side path, the section's text)] for each `diff --git` header in `d`, in order."""
+    out = []
+    for part in re.split(r"(?m)^(?=diff --git )", d):
+        m = re.match(r"diff --git a/(.*) b/(.*)$", part, re.M)
+        if m:
+            out.append((m.group(2), part))
+    return out
+
+
+def unbatched(cwd, base, names):
+    """One `git diff --no-renames` over literal pathspecs for every name, as the batching would have it if it never split."""
+    return subprocess.run(["git", "diff", "--no-renames", *base, "--", *(":(literal)" + n for n in names)], cwd=cwd,
+                          capture_output=True, text=True, encoding="utf-8").stdout
+
+
+def file_became_directory(pj, lock, child, child_text="childmark = 1\n"):
+    """A committed source file `foo` (and a.py, z.py), then foo replaced by a directory holding `child`, committed with a
+    change to z.py. Returns (the commit with the file, the commit with the directory)."""
+    write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+    write(os.path.join(pj.dir, "foo"), "foomark = 1\n")
+    write(os.path.join(pj.dir, "z.py"), "zmark = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "foo as a file")
+    file_base = git(pj.dir, "rev-parse", "HEAD")
+    os.unlink(os.path.join(pj.dir, "foo"))
+    write(os.path.join(pj.dir, "foo", child), child_text)
+    write(os.path.join(pj.dir, "z.py"), "zmark = 2\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "foo replaced by a directory")
+    assert git(pj.dir, "ls-files", "foo") == "foo/" + child, git(pj.dir, "ls-files", "foo")
+    listed = git(pj.dir, "diff", "--no-renames", "--name-only", file_base).splitlines()
+    assert "foo" in listed and "foo/" + child in listed, "git lists both the file and the child: %r" % listed
+    return file_base, git(pj.dir, "rev-parse", "HEAD")
+
+
+def test_Q_exact_sections_eyes_request_diff_holds_the_replaced_files_deletion_and_nothing_of_a_declared_record_under_it():
+    with Project() as pj:
+        file_base, _ = file_became_directory(pj, {"record-paths": {"custom": ["foo/rec.json"]}}, "rec.json", '{"recmark": 1}\n')
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        code, out = run("eyes", "request", "--out", folder, "--since", file_base, "--target", pj.dir)
+        assert code == 0, out
+        packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+        d = packet["diff"]
+        files = diff_files(d)
+        assert files.get("foo") == "deleted" and "-foomark = 1" in d, "the source file foo's deletion: %r\n%s" % (files, d)
+        assert files.get("z.py") == "modified" and "+zmark = 2" in d, "control: other source is diffed: %r\n%s" % (files, d)
+        assert not [k for k in files if "rec.json" in k], "no section of the declared record foo/rec.json: %r\n%s" % (files, d)
+        assert "recmark" not in d and "rec.json" not in d, "nothing of the record's content or name: " + d
+        assert [p for p, _ in diff_sections(d)].count("foo") == 1, d
+        assert not [k for k in packet["new_files"] if "rec.json" in k], list(packet["new_files"])
+
+
+def test_Q_exact_sections_excluded_diff_of_a_bare_entry_replaced_by_a_directory_with_a_staged_child_is_the_files_deletion_only():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), STRICT_LOCK)
+        write(os.path.join(pj.dir, "custom-record.json"), '{"recmark": 1}\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "the record as a file")
+        head = git(pj.dir, "rev-parse", "HEAD")
+        os.unlink(os.path.join(pj.dir, "custom-record.json"))
+        write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 1\n")
+        git(pj.dir, "add", "custom-record.json/child.py")
+        status = git(pj.dir, "status", "--porcelain").splitlines()
+        assert "D  custom-record.json" in status and "A  custom-record.json/child.py" in status, "staged, not committed: %r" % status
+        assert git(pj.dir, "rev-parse", "HEAD") == head
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": [], "since": {".": head}, "excluded": {"record-paths": ["custom-record.json"]}}
+        env = dwitbuk.verify_packet(req)
+        assert env.get("excluded") == ["custom-record.json"], env.get("excluded")
+        ed = env.get("excluded_diff") or ""
+        files = diff_files(ed)
+        assert files.get("custom-record.json") == "deleted" and '-{"recmark": 1}' in ed, "the file's deletion: %r\n%s" % (files, ed)
+        assert list(files) == ["custom-record.json", "a:custom-record.json"], "that path's section only: %r\n%s" % (files, ed)
+        assert "child.py" not in ed and "cchild" not in ed, "nothing of the staged child.py: " + ed
+        # the second call gives the same text
+        assert (dwitbuk.verify_packet(req).get("excluded_diff") or "") == ed
+
+
+def test_Q_exact_sections_a_batch_boundary_between_foo_and_foo_child_gives_each_section_once():
+    with Project() as pj:
+        file_base, dir_base = file_became_directory(pj, {"record-paths": {}}, "a.py", "famark = 1\n")
+        run("review", "--target", pj.dir)
+        listed = git(pj.dir, "diff", "--no-renames", "--name-only", file_base).splitlines()
+        assert listed[:2] == ["foo", "foo/a.py"], listed
+        # ":(literal)foo" and ":(literal)foo/a.py" cannot share a batch of 20 bytes; foo is first in its own
+        limit = len(":(literal)foo/a.py") + 1
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        with batch_bytes(limit), recorded_git() as calls:
+            code, out = run("eyes", "request", "--out", folder, "--since", file_base, "--target", pj.dir)
+        assert code == 0, out
+        content = [c for c in calls if c and c[0] == "diff" and "--name-only" not in c and "--name-status" not in c and "--stat" not in c]
+        assert len(content) >= 2, "a boundary falls in the change set: %r" % (content,)
+        d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+        headers = re.findall(r"^diff --git a/(.*) b/", d, re.M)
+        assert len(headers) == len(set(headers)), "every diff --git header once: %r\n%s" % (headers, d)
+        assert headers == listed, "each kept path, in git's order: %r vs %r" % (headers, listed)
+        assert d.count("+famark = 1") == 1 and d.count("-foomark = 1") == 1, d
+        want = "".join(t for p, t in diff_sections(unbatched(pj.dir, [file_base], listed)) if p in listed)
+        assert d == want, "one unbatched call's text, filtered to the kept paths:\n%s\n---\n%s" % (d, want)
+        # without a file/directory change in the range the text is one unbatched call over the kept paths
+        write(os.path.join(pj.dir, "foo", "a.py"), "famark = 2\n")
+        write(os.path.join(pj.dir, "z.py"), "zmark = 3\n")
+        with batch_bytes(limit):
+            code, out = run("eyes", "request", "--out", folder, "--since", dir_base, "--target", pj.dir)
+        assert code == 0, out
+        d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+        kept = git(pj.dir, "diff", "--no-renames", "--name-only", dir_base).splitlines()
+        assert kept == ["foo/a.py", "z.py"], kept
+        assert d == unbatched(pj.dir, [dir_base], kept), d
+
+
+def test_Q_exact_sections_a_single_path_longer_than_the_batch_limit_is_diffed_beside_short_ones_in_gits_order():
+    with Project() as pj:
+        long_name = "m_" + "x" * 120 + ".py"
+        names = ["aa.py", long_name, "zz.py"]
+        for n in names:
+            write(os.path.join(pj.dir, n), "old %s\n" % n[:8])
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "short and long")
+        run("review", "--target", pj.dir)
+        for n in names:
+            write(os.path.join(pj.dir, n), "new %s\n" % n[:8])
+        listed = git(pj.dir, "diff", "--no-renames", "--name-only", "HEAD").splitlines()
+        assert listed == ["a.py", "aa.py", long_name, "zz.py"] or listed == ["aa.py", long_name, "zz.py"], listed
+        limit = 40
+        assert len((":(literal)" + long_name).encode()) > limit
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        with batch_bytes(limit), recorded_git() as calls:
+            code, out = run("eyes", "request", "--out", folder, "--target", pj.dir)
+        assert code == 0, ("an oversized path is not refused", out)
+        d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+        headers = re.findall(r"^diff --git a/(.*) b/", d, re.M)
+        assert headers == listed, "every path, the long one in its place: %r" % (headers,)
+        assert "+new m_xxxxx" in d and "-old m_xxxxx" in d, d
+        assert d == unbatched(pj.dir, ["HEAD"], listed), d
+        alone = [c for c in calls if c and c[0] == "diff" and ":(literal)" + long_name in c]
+        assert alone and all(c[c.index("--") + 1:] == [":(literal)" + long_name] for c in alone), "the long path travels alone: %r" % alone
+
+
+def test_Q_exact_sections_a_gitlink_inside_a_walked_nested_repository_is_marked_like_one_at_the_top_level():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"custom": ["vendor/rec.json"]}})
+        vendor = os.path.join(pj.dir, "vendor")
+        inner = os.path.join(vendor, "rec.json")
+        write(os.path.join(vendor, "v.py"), "v = 1\n")
+        git(vendor, "init", "-q")
+        write(os.path.join(inner, "child.py"), "child = 1\n")
+        git(inner, "init", "-q")
+        git(inner, "add", "-A"); git(inner, "commit", "-qm", "innermost")
+        git(vendor, "add", "v.py", "rec.json"); git(vendor, "commit", "-qm", "vendor")
+        entry = git(vendor, "ls-files", "-s", "--", "rec.json")
+        assert entry.startswith("160000 ") and entry.endswith("\trec.json"), entry
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "vendor as a gitlink")
+        entry = git(pj.dir, "ls-files", "-s", "--", "vendor")
+        assert entry.startswith("160000 ") and entry.endswith("\tvendor"), entry
+        rp = dwitbuk.record_paths(pj.dir)
+        assert dwitbuk.is_record("vendor/rec.json", rp) and not dwitbuk.is_record("vendor/rec.json/child.py", rp), rp
+        run("review", "--target", pj.dir)
+        code, out = gitlink_stales(pj, "vendor/rec.json")
+        assert code != 0 and "source changed" in out, ("a gitlink at vendor/rec.json inside vendor is source, as at the top level", out)
+        code, out = gitlink_stales(pj, "vendor/rec.json", 3)
+        assert code != 0 and "source changed" in out, ("again", out)
+        code, out = gitlink_stales(pj, "vendor", 4)   # control: writes vendor/child.py, a new file in vendor
+        assert code != 0 and "source changed" in out, ("control: vendor itself is walked", out)
+
+
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
