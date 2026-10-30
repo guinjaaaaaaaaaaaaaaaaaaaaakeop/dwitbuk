@@ -570,7 +570,7 @@ def test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_kee
         packet = json.load(open(os.path.join(out_dir, "eyes-request.json"), encoding="utf-8"))
         assert packet["since"] == pj.base and "+x = 2" in packet["diff"], packet["diff"]
         assert "mangsang/relations/R-1.json" in packet["new_files"] and "plan/PLAN.md" in packet["new_files"], "untracked files are part of the change"
-        assert ".chongdae" in packet["diff_leaves_out"] and packet["runs"][0]["tasks"][0]["state"]["touched"] == ["a.py", "proposals.json"]
+        assert ".chongdae/" in packet["diff_leaves_out"] and ".chongdae" not in packet["diff_leaves_out"] and packet["runs"][0]["tasks"][0]["state"]["touched"] == ["a.py", "proposals.json"]
         assert "prints one line" in packet["plan"] and any(f["kind"] == "no-reporters" for f in packet["open_findings"])
         write(os.path.join(out_dir, "eyes-response.json"), dict(EYES_RESPONSE, request=dwitbuk.fingerprint(packet)))
         code, out = run("eyes", "consume", "--dir", out_dir, "--target", pj.dir)
@@ -1326,11 +1326,12 @@ def test_Q_match_a_directory_entry_matches_itself_and_what_is_under_it_and_nothi
     assert dwitbuk.is_record(".alpha/x.json", [".alpha/"]) and dwitbuk.is_record(".chongdae/run-1/state.json", (".chongdae/",))
 
 
-def test_Q_match_an_exact_entry_matches_that_path_and_paths_under_it_only():
+def test_Q_match_an_exact_entry_matches_that_path_only():
+    # amended to Q-strict: a bare entry is an exact FILE path; a trailing / on the path names a directory, nothing is under a file
     assert dwitbuk.is_record("alpha.json", ["alpha.json"]) and dwitbuk.is_record("./alpha.json", ["alpha.json"])
-    assert dwitbuk.is_record("alpha.json/", ["alpha.json"]), "a trailing / on the path is ignored"
-    assert dwitbuk.is_record("alpha.json/inner.txt", ["alpha.json"]), "an exact entry that is a directory: what is under it"
-    assert dwitbuk.is_record("mangsang/relations/R-1.json", ["mangsang"]) and dwitbuk.is_record("mangsang", ["mangsang"])
+    assert not dwitbuk.is_record("alpha.json/", ["alpha.json"]), "a path with a trailing / is a directory, never the file alpha.json"
+    assert not dwitbuk.is_record("alpha.json/inner.txt", ["alpha.json"]), "a bare entry is a file: nothing is under it"
+    assert not dwitbuk.is_record("mangsang/relations/R-1.json", ["mangsang"]) and dwitbuk.is_record("mangsang", ["mangsang"])
     for path in ("alpha.jsonl", "alpha.json.py", "alpha.json~", "alpha", "beta/alpha.json"):
         assert not dwitbuk.is_record(path, ["alpha.json"]), path
     assert not dwitbuk.is_record("mangsang-extra/x.py", ["mangsang"])
@@ -1442,7 +1443,7 @@ def test_Q_sites_eyes_request_diff_and_new_files_leave_out_only_exact_records():
         assert not any(k.startswith(".dwitbuk/") for k in new)
         leaves = packet["diff_leaves_out"]
         assert "hunsu*" not in leaves and "hunsu" not in leaves, leaves
-        assert set(leaves) == {".alpha", ".chongdae", ".claude", ".dwitbuk", ".mangsang", "alpha.json", "x[1].json", "reviews", ".dwitbuk/packet"} | set(HUNSU_FILES), leaves
+        assert set(leaves) == {".alpha/", ".chongdae/", ".claude/", ".dwitbuk/", ".mangsang/", "alpha.json", "x[1].json", "reviews/", ".dwitbuk/packet/"} | set(HUNSU_FILES), leaves
     with Project() as pj:
         run("review", "--target", pj.dir)
         for name in HUNSU_LOOKALIKES:
@@ -1620,7 +1621,7 @@ def test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_r
         folder = os.path.join(pj.dir, ".dwitbuk", "packet")
         packet, _ = eyes_answer(pj, folder)
         assert "b/mangsang/relations/R-1.json" in packet["diff"] and "mangsang/relations/R-2.json" in packet["new_files"], (packet["diff"], list(packet["new_files"]))
-        assert set(packet["diff_leaves_out"]) == {".chongdae", ".claude", ".dwitbuk", ".mangsang", "reviews", ".dwitbuk/packet"} | set(HUNSU_FILES), packet["diff_leaves_out"]
+        assert set(packet["diff_leaves_out"]) == {".chongdae/", ".claude/", ".dwitbuk/", ".mangsang/", "reviews/", ".dwitbuk/packet/"} | set(HUNSU_FILES), packet["diff_leaves_out"]
         write(os.path.join(pj.dir, "mangsang", "relations", "R-3.json"), {"id": "R-3"})
         code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
         assert code != 0 and "source changed" in out, out
@@ -1651,6 +1652,291 @@ def test_Q_keep_run_records_count_reviews_commits_do_not_and_the_packet_director
         write(os.path.join(pj.dir, "hunsu.py"), "hp = 2\n")
         code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
         assert code != 0 and "source changed" in out, "hunsu.py beside the run records is source: " + out
+
+
+STRICT_LOCK = {"record-paths": {"custom": ["custom-record.json"]}}
+
+
+def strict_project(pj, lock=None):
+    """hunsu.json and a lock-declared bare custom-record.json, each committed as a file, then each replaced by a directory
+    holding a committed child.py. Returns (the commit with the files, the commit with the directories)."""
+    write(os.path.join(pj.dir, "hunsu.lock.json"), lock or STRICT_LOCK)
+    write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {}})
+    write(os.path.join(pj.dir, "custom-record.json"), {"r": 1})
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "records as files")
+    files_base = git(pj.dir, "rev-parse", "HEAD")
+    os.unlink(os.path.join(pj.dir, "hunsu.json"))
+    os.unlink(os.path.join(pj.dir, "custom-record.json"))
+    write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 1\n")
+    write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "records replaced by directories")
+    assert git(pj.dir, "ls-files", "hunsu.json", "custom-record.json") == "custom-record.json/child.py\nhunsu.json/child.py"
+    return files_base, git(pj.dir, "rev-parse", "HEAD")
+
+
+def test_Q_strict_a_bare_entry_is_an_exact_file_and_a_trailing_slash_entry_a_directory():
+    for path in ("hunsu.json/child.py", "hunsu.json/", "./hunsu.json/child.py", "hunsu.json\\child.py", "hunsu.json/a/b.py", ".\\hunsu.json\\child.py"):
+        assert not dwitbuk.is_record(path, ["hunsu.json"]), path
+        assert not dwitbuk.is_record(path, HUNSU_FILES), path
+    assert dwitbuk.is_record("hunsu.json", ["hunsu.json"]) and dwitbuk.is_record("./hunsu.json", ["hunsu.json"])
+    assert not dwitbuk.is_record("alpha.json/", ["alpha.json"]) and not dwitbuk.is_record("alpha.json/inner.txt", ["alpha.json"])
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), STRICT_LOCK)
+        rp = dwitbuk.record_paths(pj.dir)
+        assert "custom-record.json" in rp and "custom-record.json/" not in rp, rp
+        assert dwitbuk.is_record("custom-record.json", rp) and dwitbuk.is_record("./custom-record.json", rp)
+        for path in ("custom-record.json/child.py", "custom-record.json/", "hunsu.json/child.py", "custom-record.json\\child.py"):
+            assert not dwitbuk.is_record(path, rp), path
+    # directory entries as before, beside file entries in the same declaration
+    mixed = ["hunsu.json", "custom-record.json", "mangsang/", "x[1].json", ""]
+    for path in ("mangsang", "mangsang/", "mangsang/relations/R-1.json", "./mangsang/relations/R-1.json", "mangsang\\relations\\R-1.json", "x[1].json"):
+        assert dwitbuk.is_record(path, mixed), path
+    for path in ("mangsang-extra/x.py", "x1.json", "x[1].json/child.py", "hunsu.json.bak", "", "custom-record.jsonl"):
+        assert not dwitbuk.is_record(path, mixed), path
+
+
+def test_Q_strict_is_record_never_looks_at_the_disk():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "x = 1\n")
+        write(os.path.join(pj.dir, "alpha.json", "inner.txt"), "x\n")
+        here = os.getcwd()
+        os.chdir(pj.dir)
+        try:
+            assert os.path.isdir("hunsu.json")
+            assert not dwitbuk.is_record("hunsu.json/child.py", ["hunsu.json"]), "a declared file replaced by a directory: what it holds is source"
+            assert not dwitbuk.is_record("alpha.json/inner.txt", ["alpha.json"]) and not dwitbuk.is_record("alpha.json/", ["alpha.json"])
+            assert dwitbuk.is_record("nowhere/x.json", ["nowhere/"]), "a directory entry needs no directory on disk"
+        finally:
+            os.chdir(here)
+
+
+def test_Q_strict_sites_documents_or_records_a_replaced_file_holds_source():
+    with Project() as pj:
+        strict_project(pj)
+        for code in ("hunsu.json/child.py", "custom-record.json/child.py"):
+            assert not dwitbuk.documents_or_records([code], pj.dir), code
+            assert not dwitbuk.documents_or_records(["hunsu.lock.json", code], pj.dir), code
+        assert dwitbuk.documents_or_records(["custom-record.json", "hunsu.json", "hunsu.lock.json"], pj.dir), "the declared files themselves are records"
+
+
+def test_Q_strict_sites_verify_packet_keeps_children_of_a_replaced_file_in_touched_with_their_diff():
+    with Project() as pj:
+        files_base, dirs_base = strict_project(pj)
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 2\n")
+        write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 2\n")
+        write(os.path.join(pj.dir, "hunsu.json", "new_mod.py"), "hnew = 1\n")
+        kept = ["hunsu.json/child.py", "custom-record.json/child.py", "hunsu.json/new_mod.py"]
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": kept + ["hunsu.lock.json", "custom-record.json", "hunsu.json"], "since": {".": dirs_base}}
+        p = dwitbuk.verify_packet(req)
+        assert sorted(p["touched"]) == sorted(kept), p["touched"]
+        d = p["diff"]
+        assert "-hchild = 1" in d and "+hchild = 2" in d and "b/hunsu.json/child.py" in d, d
+        assert "-cchild = 1" in d and "+cchild = 2" in d and "b/custom-record.json/child.py" in d, d
+        assert "hunsu.json/new_mod.py (new file)" in d and "hnew = 1" in d, d
+        # from where the files were: the children are new, the records' own deletions stay out
+        d = dwitbuk.verify_packet(dict(req, since={".": files_base}))["diff"]
+        assert "+hchild = 2" in d and "+cchild = 2" in d, d
+        assert '"plugins"' not in d and '"r": 1' not in d, d
+
+
+def test_Q_strict_sites_verify_packet_gives_touched_and_excluded_to_git_literally():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "x[1].json"), '"old bracket"\n')
+        write(os.path.join(pj.dir, "x1.json"), '"old one"\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "brackets")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "x[1].json"), '"new bracket"\n')
+        write(os.path.join(pj.dir, "x1.json"), '"new one"\n')
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": ["x[1].json"], "since": {".": since}}
+        p = dwitbuk.verify_packet(req)
+        assert p["touched"] == ["x[1].json"] and '+"new bracket"' in p["diff"], p["diff"]
+        assert '"new one"' not in p["diff"] and "x1.json" not in p["diff"], "x[1].json is literal, never the glob that selects x1.json: " + p["diff"]
+        env = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["x[1].json"]}))
+        assert env["excluded"] == ["x[1].json"] and '+"new bracket"' in env["excluded_diff"], env.get("excluded_diff")
+        assert '"new one"' not in env["excluded_diff"] and "x1.json" not in env["excluded_diff"], env["excluded_diff"]
+
+
+def test_Q_strict_sites_source_state_changes_with_children_of_a_replaced_file():
+    with Project() as pj:
+        strict_project(pj)
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for rel in ("hunsu.json/child.py", "custom-record.json/child.py", "hunsu.json/new_mod.py", "custom-record.json/new_mod.py"):
+            eyes_answer(pj, folder)
+            write(os.path.join(pj.dir, rel), "changed %s\n" % rel)
+            code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+            assert code != 0 and "source changed" in out, (rel, out)
+        eyes_answer(pj, folder)
+        write(os.path.join(pj.dir, "reviews", "note.json"), {"x": 1})
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, "a record change alone does not stale the answer: " + out
+
+
+def test_Q_strict_sites_source_state_tests_an_untracked_or_ignored_directory_as_a_directory():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), STRICT_LOCK)
+        write(os.path.join(pj.dir, ".gitignore"), "/custom-record.json/\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "lock")
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 1\n")
+        nested = os.path.join(pj.dir, "custom-record.json")
+        write(os.path.join(nested, "child.py"), "cchild = 1\n")
+        git(nested, "init", "-q")
+        git(nested, "add", "-A"); git(nested, "commit", "-qm", "nested")
+        assert git(nested, "ls-files") == "child.py", "custom-record.json/ is an ignored nested repository"
+        status = git(pj.dir, "status", "--porcelain", "--ignored")
+        assert "?? hunsu.json/" in status and "!! custom-record.json/" in status, status
+        run("review", "--target", pj.dir)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for rel in ("hunsu.json/child.py", "custom-record.json/child.py"):
+            eyes_answer(pj, folder)
+            write(os.path.join(pj.dir, rel), "changed %s\n" % rel)
+            code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+            assert code != 0 and "source changed" in out, (rel, out)
+
+
+def test_Q_strict_sites_source_state_in_a_non_git_project_walks_into_a_replaced_file():
+    d = tempfile.mkdtemp(prefix="dwitbuk-nogit-")
+    try:
+        class P:
+            dir = d
+        write(os.path.join(d, "a.py"), "x = 1\n")
+        write(os.path.join(d, "hunsu.lock.json"), STRICT_LOCK)
+        write(os.path.join(d, "hunsu.json", "child.py"), "hchild = 1\n")
+        write(os.path.join(d, "custom-record.json", "child.py"), "cchild = 1\n")
+        run("review", "--target", d)
+        folder = os.path.join(d, ".dwitbuk", "packet")
+        for rel in ("hunsu.json/child.py", "custom-record.json/child.py"):
+            eyes_answer(P, folder)
+            write(os.path.join(d, rel), "changed %s\n" % rel)
+            code, out = run("eyes", "consume", "--dir", folder, "--target", d)
+            assert code != 0 and "source changed" in out, (rel, out)
+        eyes_answer(P, folder)
+        write(os.path.join(d, "reviews", "note.json"), "{}\n")
+        code, out = run("eyes", "consume", "--dir", folder, "--target", d)
+        assert code == 0, out
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_real_git_output():
+    with Project() as pj:
+        files_base, dirs_base = strict_project(pj)
+        run("review", "--target", pj.dir)
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 2\n")
+        write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 2\n")
+        write(os.path.join(pj.dir, "hunsu.json", "new_mod.py"), "hnew = 1\n")
+        write(os.path.join(pj.dir, "custom-record.json", "new_mod.py"), "cnew = 1\n")
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        code, out = run("eyes", "request", "--out", folder, "--since", dirs_base, "--target", pj.dir)
+        assert code == 0, out
+        packet = dwitbuk.load(os.path.join(folder, "eyes-request.json"))
+        d, new = packet["diff"], packet["new_files"]
+        assert "-hchild = 1" in d and "+hchild = 2" in d and "b/hunsu.json/child.py" in d, d
+        assert "-cchild = 1" in d and "+cchild = 2" in d and "b/custom-record.json/child.py" in d, d
+        assert "hunsu.json/new_mod.py" in new and "custom-record.json/new_mod.py" in new, list(new)
+        code, out = run("eyes", "request", "--out", folder, "--since", files_base, "--target", pj.dir)
+        assert code == 0, out
+        d = dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+        assert "+hchild = 2" in d and "+cchild = 2" in d, "from the files' commit the children are new: " + d
+        assert '"plugins"' not in d and '"r": 1' not in d, "the declared files' own deletions stay left out: " + d
+
+
+def test_Q_strict_sites_eyes_request_leaves_out_entries_as_declared_and_only_records_make_an_empty_diff():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"custom": ["custom-record.json", ".custom/"]}})
+        write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {}})
+        write(os.path.join(pj.dir, "custom-record.json"), {"r": 1})
+        write(os.path.join(pj.dir, ".custom", "x.json"), {"c": 1})
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "records")
+        run("review", "--target", pj.dir)
+        write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"x": {}}})
+        write(os.path.join(pj.dir, "custom-record.json"), {"r": 2})
+        write(os.path.join(pj.dir, ".custom", "x.json"), {"c": 2})
+        write(os.path.join(pj.dir, ".claude", "settings.json"), "{}\n")
+        packet = late_packet(pj, os.path.join(pj.dir, ".dwitbuk", "packet"))
+        assert packet["diff"] == "", "only records changed: the diff is empty, never an unrestricted git diff: " + packet["diff"]
+        assert not packet["new_files"], "untracked records are not new files: %r" % (list(packet["new_files"]),)
+        declared = {".chongdae/", ".claude/", ".dwitbuk/", ".custom/", "custom-record.json", "reviews/"} | set(HUNSU_FILES)
+        assert set(packet["diff_leaves_out"]) == declared | {".dwitbuk/packet/"}, packet["diff_leaves_out"]
+        outside = tempfile.mkdtemp(prefix="dwitbuk-out-")
+        try:
+            assert run("eyes", "request", "--out", outside, "--target", pj.dir)[0] == 0
+            leaves = dwitbuk.load(os.path.join(outside, "eyes-request.json"))["diff_leaves_out"]
+            assert set(leaves) == declared, "a packet directory outside the target is not named: %r" % (leaves,)
+        finally:
+            shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_Q_strict_sites_stop_hook_hands_children_of_a_replaced_file_to_the_eyes():
+    with Project() as pj:
+        strict_project(pj, lock=dict(STRICT_LOCK, settings={"dwitbuk": {"stop-eyes": True}}))
+        write(os.path.join(pj.dir, "hunsu.local.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+        write(os.path.join(pj.dir, "hunsu.json", "child.py"), "hchild = 2\n")
+        write(os.path.join(pj.dir, "custom-record.json", "child.py"), "cchild = 2\n")
+        touched, packet = stop_hook_touched(pj)
+        assert touched is not None and packet is not None, "the hook reached the eyes"
+        assert set(touched) == {"hunsu.json/child.py", "custom-record.json/child.py"}, touched
+        assert "+hchild = 2" in packet["diff"] and "+cchild = 2" in packet["diff"], packet["diff"]
+        leaves = set(packet["diff_leaves_out"])
+        assert {".chongdae/", ".claude/", ".dwitbuk/", "reviews/", "custom-record.json"} | set(HUNSU_FILES) <= leaves, leaves
+        assert not leaves & {".chongdae", ".claude", ".dwitbuk", "reviews", "custom-record.json/", "hunsu.json/"}, leaves
+
+
+def test_Q_strict_keep_mangsang_stays_in_late_eyes_and_a_record_for_verify():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"mangsang": ["mangsang/", ".mangsang/"]}})
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), {"id": "R-1", "v": 1})
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "relations")
+        run("review", "--target", pj.dir)
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), {"id": "R-1", "v": 2})
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-2.json"), {"id": "R-2"})
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder)
+        assert "b/mangsang/relations/R-1.json" in packet["diff"] and "mangsang/relations/R-2.json" in packet["new_files"], packet["diff"]
+        leaves = set(packet["diff_leaves_out"])
+        assert ".mangsang/" in leaves and "mangsang/" not in leaves and "mangsang" not in leaves and ".mangsang" not in leaves, leaves
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-3.json"), {"id": "R-3"})
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "source changed" in out, out
+        assert dwitbuk.documents_or_records(["mangsang/relations/R-3.json"], pj.dir)
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": ["mangsang/relations/R-3.json", "mangsang", "a.py"]}
+        assert dwitbuk.verify_packet(req)["touched"] == ["a.py"]
+
+
+def test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_stay_in():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": [".alpha/", "alpha.json", "x[1].json"]}})
+        for name in HUNSU_FILES[:-1] + ("hunsu.py", "alpha.json", "alpha.jsonl", "x[1].json", "x1.json", ".alpha/z.json", ".alpha-extra/y.py"):
+            write(os.path.join(pj.dir, name), '"old %s"\n' % name)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base two")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        run("review", "--target", pj.dir)
+        for name in HUNSU_FILES[:-1] + ("hunsu.py", "alpha.json", "alpha.jsonl", "x[1].json", "x1.json", ".alpha/z.json", ".alpha-extra/y.py"):
+            write(os.path.join(pj.dir, name), '"new %s"\n' % name)
+        for rel in (".claude/settings.json", ".chongdae/run-1/state.json", "reviews/r.json", ".alpha/new.json"):
+            write(os.path.join(pj.dir, rel), "{}\n")
+        sources = ("hunsu.py", "alpha.jsonl", "x1.json", ".alpha-extra/y.py")
+        records = HUNSU_FILES[:-1] + ("alpha.json", "x[1].json", ".alpha/z.json")
+        packet = late_packet(pj, os.path.join(pj.dir, ".dwitbuk", "packet"))
+        d = packet["diff"]
+        for name in sources:
+            assert '"new %s"' % name in d, (name, d)
+        for name in records:
+            assert '"new %s"' % name not in d, (name, d)
+        assert not [k for k in packet["new_files"] if k.startswith((".claude/", ".chongdae/", "reviews/", ".alpha/", ".dwitbuk/"))], list(packet["new_files"])
+        assert {".alpha/", ".claude/", "alpha.json", "x[1].json"} <= set(packet["diff_leaves_out"]) and ".alpha" not in packet["diff_leaves_out"], packet["diff_leaves_out"]
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": list(sources) + list(records) + [".claude/settings.json", "reviews/r.json"], "since": {".": since}}
+        p = dwitbuk.verify_packet(req)
+        assert sorted(p["touched"]) == sorted(sources), p["touched"]
+        for name in sources:
+            assert '"new %s"' % name in p["diff"], (name, p["diff"])
+        for name in sources:
+            assert not dwitbuk.documents_or_records([name], pj.dir), name
+        assert dwitbuk.documents_or_records(list(records), pj.dir)
 
 
 if __name__ == "__main__":
