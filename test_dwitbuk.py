@@ -2786,6 +2786,153 @@ def test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_pla
         assert "\x1b[" not in configured, configured
 
 
+def conflict_project(pj, lock=None):
+    """c.py changed on two branches and merged: `UU c.py` is left unresolved; a committed d.py is modified in the work tree.
+    No review is taken, so the eyes request's diff is the index against the work tree."""
+    if lock is not None:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+    write(os.path.join(pj.dir, "c.py"), "head = 1\nside = base\ntail = 1\n")
+    write(os.path.join(pj.dir, "d.py"), "dmark = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "c and d")
+    git(pj.dir, "checkout", "-q", "-b", "other")
+    write(os.path.join(pj.dir, "c.py"), "head = 1\nside = other\ntail = 1\n")
+    git(pj.dir, "commit", "-qam", "other side")
+    git(pj.dir, "checkout", "-q", "main")
+    write(os.path.join(pj.dir, "c.py"), "head = 1\nside = main\ntail = 1\n")
+    git(pj.dir, "commit", "-qam", "main side")
+    git(pj.dir, "merge", "-q", "other")
+    write(os.path.join(pj.dir, "d.py"), "dmark = 2\n")
+    status = git(pj.dir, "status", "--porcelain").splitlines()
+    assert "UU c.py" in status and " M d.py" in status, "an unresolved conflict and a modified file: %r" % status
+    listed = git(pj.dir, "diff", "--no-renames", "--name-only").splitlines()
+    assert listed == ["c.py", "c.py", "d.py"], "git lists c.py once per stage: %r" % listed
+    assert not dwitbuk.reviews(pj.dir), "no prior review"
+    return listed
+
+
+def run_all(*argv):
+    """run(), with stderr kept beside stdout: an error said on either is said."""
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        code, out = run(*argv)
+    return code, out + err.getvalue()
+
+
+def cc_headers(d):
+    return re.findall(r"^diff (?:--git a/(.*) b/.*|--cc (.*))$", d, re.M)
+
+
+def conflict_packet_diff(pj, folder):
+    if os.path.exists(os.path.join(folder, "eyes-request.json")):
+        os.unlink(os.path.join(folder, "eyes-request.json"))
+    code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+    assert code == 0, out
+    return dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+
+
+def assert_conflict_kept(d, want):
+    heads = cc_headers(d)
+    assert heads == [("", "c.py"), ("d.py", "")], "c.py's diff --cc section once, then d.py's: %r\n%s" % (heads, d)
+    assert d.count("diff --cc c.py") == 1, d
+    assert "side = main" in d and "side = other" in d and "<<<<<<<" in d and ">>>>>>>" in d, "both sides' conflicting text: " + d
+    assert d.count("side = other") == 1 and d.count("+dmark = 2") == 1 and "-dmark = 1" in d, d
+    assert d == want, "the text one plain git diff gives over c.py and d.py:\n%s\n---\n%s" % (d, want)
+
+
+def test_Q_conflict_eyes_request_without_a_base_keeps_the_conflicted_paths_diff_cc_section_once():
+    with Project() as pj:
+        conflict_project(pj)
+        want = unbatched(pj.dir, [], ["c.py", "d.py"])
+        assert want.count("diff --cc c.py") == 1 and "diff --git a/d.py b/d.py" in want, want
+        d = conflict_packet_diff(pj, os.path.join(pj.dir, ".dwitbuk", "packet"))
+        assert_conflict_kept(d, want)
+        assert conflict_packet_diff(pj, os.path.join(pj.dir, ".dwitbuk", "packet")) == d, "the second call gives the same text"
+
+
+def test_Q_conflict_eyes_request_keeps_the_diff_cc_section_once_wherever_batch_boundaries_fall():
+    with Project() as pj:
+        conflict_project(pj)
+        want = unbatched(pj.dir, [], ["c.py", "d.py"])
+        one = len(":(literal)c.py".encode())
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for limit in sorted({1, one - 1, one, one + 1, 2 * one - 1, 2 * one, 2 * one + 1, 2 * one + 2, 3 * one, 3 * one + 3}):
+            with batch_bytes(limit):
+                d = conflict_packet_diff(pj, folder)
+            try:
+                assert_conflict_kept(d, want)
+            except AssertionError as err:
+                raise AssertionError("PATHSPEC_BATCH_BYTES=%d: %s" % (limit, err))
+
+
+def test_Q_conflict_a_conflicted_path_that_is_a_declared_record_is_left_out_and_the_rest_stays():
+    with Project() as pj:
+        conflict_project(pj, {"record-paths": {"custom": ["c.py"]}})
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        for limit in (None, len(":(literal)c.py"), 2 * len(":(literal)c.py") + 1):
+            with (batch_bytes(limit) if limit else contextlib.nullcontext()):
+                d = conflict_packet_diff(pj, folder)
+            assert cc_headers(d) == [("d.py", "")], "only d.py's section (limit %r): %r\n%s" % (limit, cc_headers(d), d)
+            assert "c.py" not in d and "side = " not in d and "<<<<<<<" not in d, "nothing of the record c.py: " + d
+            assert "+dmark = 2" in d and d == unbatched(pj.dir, [], ["d.py"]), d
+
+
+@contextlib.contextmanager
+def unattributable_git():
+    """dwitbuk.git wrapped: each real content diff call's output also carries a trailing section no candidate path owns."""
+    real, extra = dwitbuk.git, "Submodule x 1111111..2222222:\n  > a commit no candidate owns\n"
+    seen = []
+    def wrapped(target, *a):
+        out = real(target, *a)
+        listing = {"--name-only", "--name-status", "--stat", "--numstat", "--raw", "--summary", "--shortstat"}
+        if a and a[0] == "diff" and not listing & set(a) and out and "diff --" in out:
+            seen.append(list(a))
+            return out + extra
+        return out
+    dwitbuk.git = wrapped
+    try:
+        yield seen
+    finally:
+        dwitbuk.git = real
+
+
+def clear_about_it(text):
+    return "Submodule x" in text or "section" in text.lower() or "attribut" in text.lower()
+
+
+def test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed():
+    with Project() as pj:
+        conflict_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        assert conflict_packet_diff(pj, folder), "control: the same tree gives a packet without the extra section"
+        shutil.rmtree(folder)
+        with unattributable_git() as seen:
+            code, out = run_all("eyes", "request", "--out", folder, "--target", pj.dir)
+        assert seen, "a real diff call was made and carried the extra section"
+        assert code != 0, "a section no candidate owns is not dropped silently: exit %r\n%s" % (code, out)
+        assert out.strip() and clear_about_it(out), "a clear error that says what could not be attributed: %r" % out
+        assert not os.path.exists(os.path.join(folder, "eyes-request.json")), "no packet is written"
+
+
+def test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "notes.json"), '"old notes"\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a record")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "notes.json"), '"new notes"\n')
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": [], "since": {".": since}, "excluded": {"record-paths": ["notes.json"]}}
+        assert '+"new notes"' in (dwitbuk.verify_packet(req).get("excluded_diff") or ""), "control: the record's own section"
+        got, failure = None, None
+        with unattributable_git() as seen:
+            try:
+                got = dwitbuk.verify_packet(req)
+            except (Exception, SystemExit) as err:
+                failure = err
+        assert seen, "a real diff call was made and carried the extra section"
+        assert failure is not None, "excluded_diff fails, not partial text: %r" % ((got or {}).get("excluded_diff"),)
+        assert clear_about_it(str(failure)), "a clear error that says what could not be attributed: %r" % (failure,)
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
