@@ -719,30 +719,57 @@ def path_diff(target, names, base=(), cut=80000):
 
     def batch_diff(batch):
         kept = {prefix + spec[len(":(literal)"):] for spec in batch}
-        # The header parser needs fixed prefixes even with diff.noprefix or
-        # diff.mnemonicPrefix configured in the user's git environment.
+        # The section parser needs plain, repository-relative per-file text
+        # regardless of the user's git configuration.
         output = git(target, "diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/",
+                     "--no-color", "--no-relative", "--submodule=short", "--no-ext-diff",
                      *base, "--", *batch) or ""
         sections = []
-        for section in re.split(r"(?=^diff --git )", output, flags=re.M):
+
+        def unquote(token):
+            if not token.startswith('"'):
+                return token
+            quoted = re.fullmatch(r'"((?:[^"\\]|\\.)*)"', token)
+            if not quoted:
+                raise ValueError("unreadable quoted path")
+            escapes = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n",
+                       b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
+            raw = re.sub(rb'\\([0-7]{3}|.)',
+                         lambda m: bytes([int(m[1], 8)]) if len(m[1]) == 3 else escapes[m[1]],
+                         quoted[1].encode("utf-8"))
+            return raw.decode("utf-8", errors="replace")
+
+        for section in re.split(r"(?=^diff )", output, flags=re.M):
             if not section:
                 continue
-            header = section.split("\n", 1)[0][len("diff --git "):]
-            # With --no-renames both header paths name the same file. Spaces
-            # are not quoted by git, so splitting the header on whitespace is
-            # ambiguous; the two unquoted names have identical lengths.
-            if header.startswith('"'):
-                quoted = re.match(r'"((?:[^"\\]|\\.)*)"', header)
-                if not quoted:
-                    continue
-                escapes = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n",
-                           b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
-                raw = re.sub(rb'\\([0-7]{3}|.)',
-                             lambda m: bytes([int(m[1], 8)]) if len(m[1]) == 3 else escapes[m[1]],
-                             quoted[1].encode("utf-8"))
-                path = raw.decode("utf-8", errors="replace")[2:]
-            else:
-                path = header[:(len(header) - 1) // 2][2:]
+            header = section.split("\n", 1)[0]
+            try:
+                if header.startswith("diff --cc "):
+                    path = unquote(header[len("diff --cc "):])
+                elif header.startswith("diff --git "):
+                    pair = header[len("diff --git "):]
+                    # Unquoted names may contain spaces; with --no-renames
+                    # both paths name the same file and have equal lengths.
+                    if pair.startswith('"'):
+                        quoted = re.match(r'"(?:[^"\\]|\\.)*" ', pair)
+                        if not quoted:
+                            raise ValueError("unreadable header paths")
+                        left = unquote(pair[:quoted.end() - 1])
+                        right = unquote(pair[quoted.end():])
+                    else:
+                        middle = (len(pair) - 1) // 2
+                        left, right = pair[:middle], pair[middle + 1:]
+                        if pair[middle:middle + 1] != " ":
+                            raise ValueError("missing path separator")
+                    if not left.startswith("a/") or right != "b/" + left[2:]:
+                        raise ValueError("unreadable header paths")
+                    path = left[2:]
+                else:
+                    raise ValueError("unsupported section header")
+                if not path:
+                    raise ValueError("empty path")
+            except (ValueError, KeyError) as err:
+                raise SystemExit("cannot attribute git diff section %r: %s" % (header, err))
             # A literal file path can also select descendants after a
             # file/directory replacement. Only this batch's candidates count.
             if path in kept:
@@ -750,7 +777,11 @@ def path_diff(target, names, base=(), cut=80000):
         return "".join(sections)
 
     chunks, batch, size, length = [], [], 0, 0
+    seen = set()
     for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
         spec = ":(literal)" + name
         needed = len(os.fsencode(spec)) + 1
         # An oversized single path travels alone; the limit bounds grouping,
