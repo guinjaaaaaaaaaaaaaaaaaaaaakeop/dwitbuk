@@ -2460,9 +2460,13 @@ def diff_sections(d):
     return out
 
 
+# git's plain per-file form whatever a global configuration says: what the comparisons below ask git for
+PLAIN_DIFF = ("--no-color", "--no-ext-diff", "--no-relative", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/")
+
+
 def unbatched(cwd, base, names):
     """One `git diff --no-renames` over literal pathspecs for every name, as the batching would have it if it never split."""
-    return subprocess.run(["git", "diff", "--no-renames", *base, "--", *(":(literal)" + n for n in names)], cwd=cwd,
+    return subprocess.run(["git", "diff", *PLAIN_DIFF, "--no-renames", *base, "--", *(":(literal)" + n for n in names)], cwd=cwd,
                           capture_output=True, text=True, encoding="utf-8").stdout
 
 
@@ -2613,6 +2617,173 @@ def test_Q_exact_sections_a_gitlink_inside_a_walked_nested_repository_is_marked_
         code, out = gitlink_stales(pj, "vendor", 4)   # control: writes vendor/child.py, a new file in vendor
         assert code != 0 and "source changed" in out, ("control: vendor itself is walked", out)
 
+
+HOSTILE_GIT_CONFIG = ("[color]\n\tui = always\n[diff]\n\trelative = true\n\tsubmodule = log\n"
+                      "\tnoprefix = true\n\tmnemonicPrefix = true\n")
+
+
+@contextlib.contextmanager
+def global_git_config(text):
+    """GIT_CONFIG_GLOBAL pointed at a temporary file holding `text` (no system configuration), restored afterwards."""
+    d = tempfile.mkdtemp(prefix="dwitbuk-gitconfig-")
+    path = os.path.join(d, "gitconfig")
+    write(path, text)
+    old = {k: os.environ.get(k) for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
+    os.environ["GIT_CONFIG_GLOBAL"], os.environ["GIT_CONFIG_NOSYSTEM"] = path, "1"
+    try:
+        yield path
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def changed_gitlink(nested):
+    """A new commit in the nested repository: its gitlink in the parent now differs from the committed one."""
+    write(os.path.join(nested, "child.py"), "child = 2\n")
+    git(nested, "add", "-A"); git(nested, "commit", "-qm", "nested moves")
+
+
+def plain_and_configured(produce):
+    """produce() under an empty global configuration, then under the hostile one; both texts."""
+    with global_git_config(""):
+        plain = produce()
+    with global_git_config(HOSTILE_GIT_CONFIG):
+        assert git(os.getcwd(), "config", "--global", "--get", "diff.relative") == "true", "the hostile configuration is read"
+        configured = produce()
+    return plain, configured
+
+
+def sections_once(d, must):
+    headers = re.findall(r"^diff --git a/(.*) b/", d, re.M)
+    assert len(headers) == len(set(headers)), "each kept path's section once: %r\n%s" % (headers, d)
+    for path in must:
+        assert headers.count(path) == 1, "%s's section, once: %r\n%s" % (path, headers, d)
+    return headers
+
+
+def gitconfig_project(pj, root):
+    """Under `root` (pj.dir or a subdirectory): a source file, a lock-declared record, and a committed gitlink lib; a review;
+    then the source file, the record and the gitlink all change. Returns (target, the nested repository)."""
+    write(os.path.join(root, "hunsu.lock.json"), STRICT_LOCK)
+    write(os.path.join(root, "src.py"), "srcmark = 1\n")
+    write(os.path.join(root, "custom-record.json"), '{"r": 1}\n')
+    if root != pj.dir:
+        write(os.path.join(pj.dir, "outer.py"), "outer = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "before")
+    nested = os.path.join(root, "lib")
+    write(os.path.join(nested, "child.py"), "child = 1\n")
+    git(nested, "init", "-q"); git(nested, "add", "-A"); git(nested, "commit", "-qm", "nested")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "gitlink")
+    rel = os.path.relpath(nested, pj.dir).replace(os.sep, "/")
+    assert git(pj.dir, "ls-files", "-s", "--", rel).startswith("160000 "), "lib is a gitlink"
+    run("review", "--target", root)
+    write(os.path.join(root, "src.py"), "srcmark = 2\n")
+    write(os.path.join(root, "custom-record.json"), '{"r": 2}\n')
+    if root != pj.dir:
+        write(os.path.join(pj.dir, "outer.py"), "outer = 2\n")
+    changed_gitlink(nested)
+    return root, nested
+
+
+def eyes_diff_under_both(target, since=()):
+    folder = os.path.join(target, ".dwitbuk", "packet")
+    def produce():
+        code, out = run("eyes", "request", "--out", folder, *since, "--target", target)
+        assert code == 0, out
+        return dwitbuk.load(os.path.join(folder, "eyes-request.json"))["diff"]
+    return plain_and_configured(produce)
+
+
+def test_Q_git_config_eyes_request_diff_of_a_top_level_target_is_the_same_text_whatever_the_global_configuration():
+    with global_git_config(""), Project() as pj:
+        target, _ = gitconfig_project(pj, pj.dir)
+        plain, configured = eyes_diff_under_both(target)
+        assert plain, "the diff is not empty"
+        headers = sections_once(plain, ("src.py", "lib"))
+        assert "+srcmark = 2" in plain and "Subproject commit" in plain, plain
+        assert "custom-record.json" not in headers, plain
+        assert "\x1b[" not in configured, "no colour: %r" % configured
+        assert configured == plain, "the same text as with an empty global configuration:\n%s\n---\n%s" % (configured, plain)
+        sections_once(configured, ("src.py", "lib"))
+        # from the commit holding the gitlink: the gitlink is modified, not new
+        plain, configured = eyes_diff_under_both(target, ("--since", git(pj.dir, "rev-parse", "HEAD")))
+        assert "-Subproject commit" in plain and "+Subproject commit" in plain, plain
+        sections_once(plain, ("src.py", "lib"))
+        assert configured == plain, "a modified gitlink, the same text:\n%s\n---\n%s" % (configured, plain)
+
+
+def test_Q_git_config_eyes_request_diff_of_a_target_inside_a_larger_repository_is_the_same_text_whatever_the_global_configuration():
+    with global_git_config(""), Project() as pj:
+        target, _ = gitconfig_project(pj, os.path.join(pj.dir, "proj"))
+        assert git(target, "rev-parse", "--show-prefix") == "proj/"
+        plain, configured = eyes_diff_under_both(target)
+        assert plain, "the diff is not empty"
+        assert "+srcmark = 2" in plain and "Subproject commit" in plain and "outer" not in plain, plain
+        headers = re.findall(r"^diff --git a/(.*) b/", plain, re.M)
+        assert len(headers) == len(set(headers)) and len(headers) == 2, headers
+        assert all(h.endswith(("src.py", "lib")) for h in headers), headers
+        assert "\x1b[" not in configured, "no colour: %r" % configured
+        assert configured == plain, "the same text as with an empty global configuration:\n%s\n---\n%s" % (configured, plain)
+
+
+def test_Q_git_config_eyes_request_diff_is_the_same_on_the_second_call_under_the_configuration():
+    with global_git_config(""), Project() as pj:
+        target, nested = gitconfig_project(pj, pj.dir)
+        plain, first = eyes_diff_under_both(target)
+        _, second = eyes_diff_under_both(target)
+        assert first == second == plain, "again:\n%s\n---\n%s" % (second, plain)
+
+
+def test_Q_git_config_verify_packet_excluded_diff_is_the_same_text_whatever_the_global_configuration():
+    with global_git_config(""), Project() as pj:
+        write(os.path.join(pj.dir, "notes.json"), '"old notes"\n')
+        write(os.path.join(pj.dir, "recs", "x.json"), '"old x"\n')
+        write(os.path.join(pj.dir, "recs", "deep", "y.json"), '"old y"\n')
+        write(os.path.join(pj.dir, "src.py"), "srcmark = 1\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "records")
+        nested = os.path.join(pj.dir, "lib")
+        write(os.path.join(nested, "child.py"), "child = 1\n")
+        git(nested, "init", "-q"); git(nested, "add", "-A"); git(nested, "commit", "-qm", "nested")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "gitlink")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        for rel in ("notes.json", "recs/x.json", "recs/deep/y.json"):
+            write(os.path.join(pj.dir, rel), '"new %s"\n' % rel)
+        write(os.path.join(pj.dir, "src.py"), "srcmark = 2\n")
+        changed_gitlink(nested)
+        req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
+               "touched": ["src.py", "lib"], "since": {".": since}, "excluded": {"record-paths": ["recs/", "notes.json"]}}
+        def produce():
+            return dwitbuk.verify_packet(req).get("excluded_diff") or ""
+        old_cwd = os.getcwd()
+        os.chdir(os.path.join(pj.dir, "recs"))   # a caller standing in a subdirectory: diff.relative has something to bite on
+        try:
+            plain, configured = plain_and_configured(produce)
+        finally:
+            os.chdir(old_cwd)
+        assert plain, "excluded_diff is not empty"
+        sections_once(plain, ("notes.json", "recs/x.json", "recs/deep/y.json"))
+        assert '+"new notes.json"' in plain and "srcmark" not in plain, plain
+        assert "\x1b[" not in configured, "no colour: %r" % configured
+        assert configured == plain, "the same text as with an empty global configuration:\n%s\n---\n%s" % (configured, plain)
+        sections_once(configured, ("notes.json", "recs/x.json", "recs/deep/y.json"))
+
+
+def test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_plain_form():
+    with global_git_config(""), Project() as pj:
+        target, _ = gitconfig_project(pj, os.path.join(pj.dir, "proj"))
+        names = git(pj.dir, "diff", "--no-renames", "--name-only", "HEAD").splitlines()
+        assert names, names
+        with global_git_config(""):
+            plain = unbatched(pj.dir, ["HEAD"], names)
+        with global_git_config(HOSTILE_GIT_CONFIG):
+            configured = unbatched(pj.dir, ["HEAD"], names)
+        assert plain and "diff --git a/proj/src.py b/proj/src.py" in plain and "Subproject commit" in plain, plain
+        assert configured == plain, configured
+        assert "\x1b[" not in configured, configured
 
 
 if __name__ == "__main__":
