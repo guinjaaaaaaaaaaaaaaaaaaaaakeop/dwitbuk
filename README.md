@@ -7,6 +7,8 @@ never judged by its author, and recurs until disposed. It never fixes; it finds.
 
 ## Install
 
+Requires **Python 3.11 or later**. CLI and hook examples invoke `python3`; ensure that command resolves to a supported interpreter.
+
 ```
 claude plugin marketplace add guinjaaaaaaaaaaaaaaaaaaaaakeop/dwitbuk
 claude plugin install dwitbuk@dwitbuk
@@ -14,6 +16,26 @@ claude plugin install dwitbuk@dwitbuk
 
 Codex: `codex plugin marketplace add guinjaaaaaaaaaaaaaaaaaaaaakeop/dwitbuk`, `codex plugin add dwitbuk@dwitbuk` (the
 skill is `$dwitbuk:review`).
+
+## Shared guidance and hosts
+
+[skills/review/SKILL.md](skills/review/SKILL.md) is the shared installed procedure for Claude Code and Codex. Both use
+this same file. The Python CLI works from either host; replace these quoted paths with the plugin and project directories:
+
+```sh
+python3 "/path/to/dwitbuk/dwitbuk.py" follow --target "/path/to/project"
+python3 "/path/to/dwitbuk/eyes_worker.py" --help
+```
+
+The existing Claude `commands/` files invoke specific CLI actions and show their output. In particular,
+`/dwitbuk:review` collects a review; it does not stand in for the entire review/disposition skill. Keep each action's
+semantics when adapting entry points. Installation, permissions and hook configuration remain host-specific in their
+manifests and host settings; `eyes_worker.py --host claude` or `--host codex` selects the worker adapter.
+
+[AGENTS.md](AGENTS.md) holds source-repository maintenance guidance. It is not automatically injected into a project
+that installs this plugin. Codex discovers repository guidance along its project path. [Codex guidance loading](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+Claude Code's direct `AGENTS.md` support depends on version and settings; [CLAUDE.md](CLAUDE.md) contains only
+`@AGENTS.md` as a compatibility import, so the maintainer rules still have one source. [Claude memory and imports](https://code.claude.com/docs/en/memory#share-one-file-with-other-coding-tools).
 
 ## Commands
 
@@ -110,21 +132,25 @@ id, count or path — so hunsu's judge reads what dwitbuk tells a session, not t
 
 The eyes placed by the environment: when the project sets `settings.dwitbuk.stop-eyes: true` in hunsu.json (read
 there, with this machine's overlay from hunsu.local.json on top; a lock that carries it still counts), a session that
-tries to end with a dirty tree gets its diff read (lens `fresh`, the plan as contract if there is one); findings
-refuse the stop once and reach the session, and land in the latest review. One model call per stop with changes — the
+tries to end with a dirty tree gets its diff read (lens `fresh`, the plan as contract if there is one). Current, bound
+findings refuse the stop once and reach the session; when a review exists, they are added there first. A stale or
+unmatched response, or a failed consume such as a busy review lock, says nothing was decided and does not block the stop.
+One model call per stop with changes — the
 team's switch, not the plugin's default. Inside a worker session (`AGENT_WORKER=1`: the eyes, a judge, a builder) the
 hook does nothing, since the host runs the project's hooks in those sessions too
 
+The stop hook currently launches the worker's default `claude` adapter, including when invoked by a Codex hook.
+Explicit worker calls can choose `--host codex`; the hook does not automatically select it from the session host.
+
 ### `/dwitbuk:eyes`
 
-`--contract PATH` reads the diff against any document (a spec, a PR text) when there is no plan; `--lens contract
-
-record
-
-fresh` writes one packet per lens (a generic reader inherits the author's blind spot); `fresh` yields `anomaly`
-findings with a tree quote only. Late eyes: `request` packs the diff, the run records, the plan and the open findings
-for a bounded read-only session (`eyes_worker.py`); `consume` takes its answer into the latest review — only findings
-quoting both the record and the tree survive
+`eyes request --contract PATH` reads the diff against that document (a spec, a PR text) instead of the default
+`plan/PLAN.md`. Repeat `--lens` for several lenses: `--lens contract --lens record --lens fresh` writes one packet
+per lens, named `eyes-contract-request.json`, `eyes-record-request.json` and `eyes-fresh-request.json` under `--out`.
+Without `--lens`, the packet is `eyes-request.json`. Run `eyes_worker.py` for each packet, using the matching
+`eyes-<lens>-response.json` filename, then `eyes consume --dir DIR`. `fresh` yields `anomaly` findings with a tree
+quote only; other findings require both a record and a tree quote. Requests include the diff, run records, contract
+and open findings; the worker reads them in a fresh host session. Claude's turn bound is described under [Limits](#limits).
 
 Late-eyes packets carry a source fingerprint; answers carry the fingerprint of the complete request in `request`.
 The worker checks source freshness before and after its call, and `consume` checks the paired request, target, answer
@@ -176,8 +202,10 @@ whose `seen-in` lists the reviews that hold it, and read those to recognize it a
 relations are on record once, not in every review (they were 58 KB of every 96 KB review on a site), and what a review
 writes in full is what is new since the last one. A fact whose text changed is a new fact, written in full: a relation
 judged again is a new judgment. Older reviews (an `unchanged` line per holding review, `undisposed` text cut behind a
-prefix, the answer copied into every review, a `review-debt` line) are read as they are. `eyes request` puts its packet and the worker's
-transcript under `--out` (default `dwitbuk-eyes/`; a reviewer keeps them under `reviews/`).
+prefix, the answer copied into every review, a `review-debt` line) are read as they are. `eyes request` puts its packets
+under `--out` (default `dwitbuk-eyes/`); `eyes_worker.py` writes the response at `--response` and the transcript beside
+it. Use the same packet directory for both so `consume` can pair them. Keep reviewer packets in a subdirectory such as
+`reviews/eyes/`, rather than alongside the top-level `reviews/<id>.json` ledger files.
 
 ## Kinds of finding
 
@@ -208,8 +236,8 @@ counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`,
 previous review's open count) is no longer written: the carried charges are the debt, each once, and the line restated
 their count in every review; older reviews keep theirs, read as an observation.
 
-`eyes_worker.py --prompt-only --request <file> --response <file>` prints the exact prompt a call would send (the
-skill/eyes text, the request, the answer schema) and exits — for a session that dispatches its host's own subagent
+`eyes_worker.py --prompt-only --request <file> --response <file>` prints the worker instructions, request and answer
+schema and exits — for a session that dispatches its host's own subagent
 instead of this worker (a `native:` provider in chongdae). The subagent's answer is then written by the session; this
 worker never ran.
 
@@ -224,9 +252,13 @@ worker never ran.
   the first install record with that name, which on a machine with several projects is another project's older copy (a
   site's first review ran 1.1.0 reporters that way and reported 65 false `broken`/`drift`). It reads run records only
   to pack them for the eyes.
+- Reporter plugin-path lookup currently checks project-local links, then Claude's installation and marketplace
+  records; it does not query Codex's plugin registry. For plugins installed only in Codex, supply their actual roots
+  through `hunsu.local.json` links before resolving `{plugin:NAME}` reporter arguments.
 - The engine reads records and git, never code for meaning. Meaning is read by late eyes — a fresh session with
-  Read/Grep/Glob only, a fixed answer schema, and the rule that a finding without a quote from each side is dropped on
-  consume. The reader is a model on the person's own host account.
+  Read/Grep/Glob on Claude, or the Codex adapter's default read-only sandbox, and a fixed answer schema. Other than
+  tree-only `anomaly` findings, a finding without a quote from each side is dropped on consume. `AGENT_CODEX_SANDBOX`
+  can override the sandbox passed by the adapter. The reader uses the selected host's account.
 - "Same kind of non-claim" is the first clause of the sentence, not a judgment — except a provider's own (`(provider) …`),
   kept whole: it leads with the contract sentence and says the gap after the dash, and cut there it read as a bare quote. A
   disposal written for the cut form (before 1.13.0) answers the whole sentence.
@@ -240,20 +272,32 @@ worker never ran.
 
 ## Versioning
 
-Semver, and a version names one content: every change to the source — code, skill or command text, hooks, this README
-— bumps
-the version in all three manifests (`plugin.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) and the
+Semver, and a version names one content: every change to the source — code, skill or command text, hooks, this README —
+bumps the version in all three manifests (`plugin.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) and the
 marketplace entries before it is used anywhere. Hosts copy a plugin at install and do not look again while the version
-stands,
-so an unbumped edit is a copy nobody can tell from the old one. **patch**: behavior or wording, every interface
-unchanged.
-**minor**: a new command, skill, field, hook or artifact key; what exists keeps working. **major**: an artifact type,
-lock or
-record that other products read changes shape. hunsu's `check` fails a linked plugin whose source differs from the
-installed
-copy under one version; `hunsu install --refresh <plugin>` recopies after the bump.
+stands, so an unbumped edit is a copy nobody can tell from the old one. **patch**: behavior or wording, every interface
+unchanged. **minor**: a new command, skill, field, hook or artifact key; what exists keeps working. **major**: an artifact
+type, lock or record that other products read changes shape. hunsu's `check` fails a linked plugin whose source differs
+from the installed copy under one version; for a locally linked plugin, `hunsu install --refresh <plugin>` re-snapshots
+after the bump.
+
+### Release and adoption
+
+Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged.
+Keep the version equal in `plugin.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+and `.claude-plugin/marketplace.json` (both `metadata.version` and this product's `plugins[].version`).
+`.agents/plugins/marketplace.json` currently has no version field; verify its product name and source path,
+but do not invent a version field there.
+
+Before publication, run the relevant checks in **Self-check** for behavior changes; for documentation-only
+changes, verify links, command examples, imports and manifest consistency, plus `git diff --check`.
+Publish the checked commit using this repository's existing release convention. Publication does not update
+consumer installations: update the plugin through the host's supported workflow, reconcile the consuming
+project's declared environment and lock if managed, and start a new host session to apply the installation.
+Report publication, project adoption and live-host verification separately. Refreshing a locally linked
+plugin is not an update procedure for every remote installation.
 
 ## Self-check
 
-`python test_dwitbuk.py` — a temp project; every stop, rejection and kind of finding fires once, with recorded
+`python3 test_dwitbuk.py` — a temp project; every stop, rejection and kind of finding fires once, with recorded
 provider responses where a model would have answered. No model calls.

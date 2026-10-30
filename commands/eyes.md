@@ -4,4 +4,4 @@ argument-hint: request --out DIR [--since COMMIT] | consume --dir DIR
 ---
 !`python3 "${CLAUDE_PLUGIN_ROOT}/dwitbuk.py" eyes $ARGUMENTS --target .`
 
-Show the output above to the user as is. After `request`, run `python "${CLAUDE_PLUGIN_ROOT}/eyes_worker.py" --request DIR/eyes-request.json --response DIR/eyes-response.json` and then `consume`. Do not interpret or act on findings unless asked.
+Show the output above to the user as is. After `request`, run `python3 "${CLAUDE_PLUGIN_ROOT}/eyes_worker.py" --request "DIR/eyes-request.json" --response "DIR/eyes-response.json"` and then `consume`. With `--lens`, run the worker for each generated `eyes-<lens>-request.json`, writing the matching `eyes-<lens>-response.json` in the same directory before consuming. Do not interpret or act on findings unless asked.
