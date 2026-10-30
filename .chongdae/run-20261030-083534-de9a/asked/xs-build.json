@@ -1,0 +1,77 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "xs-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix Q-exact-sections in dwitbuk.py only: the diff composed from candidate paths (path_diff, used by the eyes request's diff and verify_packet's excluded_diff) must hold, for each kept candidate, that path's own diff section exactly once and nothing else — a literal pathspec :(literal)N still reaches N/child when N changed between file and directory, so do not rely on pathspec magic to separate them. Either keep only the sections of git's output whose path is one of the batch's kept names (git's diff --git headers are repository-root relative while the candidates are target-relative via --relative, and git C-quotes unusual names in headers — handle both), or isolate such a name with exclusions taken from git's own candidate listing; whichever you choose, the text without any file/directory change stays exactly what one unbatched call gives (the existing batching, rename, subdirectory-target and ARG_MAX tests hold it). Keep everything else as it is: is_record, PATHSPEC_BATCH_BYTES, an oversized path alone in its own call, --no-renames, untracked directories skipped, the gitlink marker, mangsang/ handling. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-exact-sections"
+  ],
+  "contract": {
+    "Q-exact-sections": "contract/Q-exact-sections-9e6b570c.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/xs-build.response.json",
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "Updated only dwitbuk.py: path_diff filters each batch to exact candidate sections, handling repository-relative and C-quoted headers. All tests passed; protected files remain unchanged.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 0
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        }
+      ],
+      "decisions": [],
+      "non-claims": [],
+      "retried": {
+        "by": "chongdae",
+        "auto": "the verifier rejected: 1 finding(s)",
+        "at": "2026-10-30T10:09:13+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "review": {
+        "artifact-type": "dwitbuk/review@1",
+        "verdict": "reject",
+        "findings": [
+          {
+            "kind": "plan-vs-code",
+            "where": "contract.Q-exact-sections",
+            "record_quote": "`2. Without such a file/directory change the text is what it was: one unbatched call over the kept paths.`",
+            "tree_quote": "`output = git(target, \"diff\", \"--no-renames\", *base, \"--\", *batch) or \"\"` … `path = header[:(len(header) - 1) // 2][2:]` … `if path in kept:`",
+            "why": "The new filter assumes every header has a two-character `a/`/`b/`-style prefix, but the diff call does not pin the prefixes. The `git` helper runs plain `git` with the user's config, so with `diff.noprefix=true` the header is `diff --git X X`. Then `[2:]` cuts the first two characters off the real path, nothing matches `kept`, and every section is dropped. The eyes `diff` and `excluded_diff` come out empty where one unbatched call gives the full diff. The same file already guards against this at line 782 (`git(cwd, \"diff\", \"--src-prefix=a/\" + lead, \"--dst-prefix=b/\" + lead, ...)`). batch_diff needs `--src-prefix=a/ --dst-prefix=b/` (or an equivalent) before its header parsing can be trusted."
+          }
+        ],
+        "worker": {
+          "host": "claude-code",
+          "model": "claude-opus-5-5",
+          "turns": 5,
+          "cost_usd": 0.12465319999999999,
+          "session": "f20991f0-db29-4ca7-957d-2e4429bd5b03",
+          "transcript": "xs-build.verify.response.transcript.jsonl"
+        }
+      },
+      "disputed-tests": [],
+      "reopened": null
+    }
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ]
+}

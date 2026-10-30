@@ -1,0 +1,181 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rb-build",
+    "role": "implementer",
+    "brief": "Correct raw-build's dwitbuk.py to Q-bounded (read that section and the two paragraphs it supersedes). (1) Restore the generic git(target, *args) helper to its previous semantics exactly (text with universal newlines, as at 39e2a7b), and add a narrowly named patch helper git_patch(target, *args) — git's stdout decoded as UTF-8 with errors replaced, no newline translation, None on a non-zero exit — used only by path_diff's content diff calls. (2) Bounded work: once the composed text has passed its limit (80000 for the eyes diff, 40000 for excluded_diff), invoke no later git diff batch and keep no later patch; cut at the limit and keep the truncation declared. (3) Keep git's own order within a batch; across batches UU combined sections may follow batch order (documented limit). (4) Keep everything else: DU/UD '* Unmerged path' lines as their path's own section in every position, a lone \\r neither starting nor ending a section, explicit failure on unattributable output before any packet is written, exact attribution, no declared record's section, no repeated section, the canonical diff flags, an oversized path alone in its call. test_dwitbuk.py is the contract and protected: do not edit it, hooks/, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite as env -u AGENT_WORKER python3 test_dwitbuk.py.",
+    "closes": [
+      "Q-bounded"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py"
+    ]
+  },
+  "seq": 28,
+  "added": "2026-10-30T11:05:38+00:00",
+  "response": {
+    "status": "done",
+    "summary": "Updated dwitbuk.py for Q-bounded: restored universal-newline git(), added git_patch(), bounded diff batching, and preserved git’s within-batch order. Full suite passed.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Replaced the prior implementation’s global raw reads and cross-batch sorting as Q-bounded requires. Protected tests and other files were not edited."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T11:07:29+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "update ./dwitbuk.py"
+      ],
+      "commands-run": 8,
+      "commands-failed": 0
+    }
+  },
+  "non-claims": [
+    "(provider) Replaced the prior implementation’s global raw reads and cross-batch sorting as Q-bounded requires. Protected tests and other files were not edited."
+  ],
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T11:08:31+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T11:08:32+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 7,
+      "cost_usd": 0.1569236
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T11:09:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "dwitbuk.py": "d93897a678d923aeb5a8e9d4b514cd9d6532257c"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 7,
+    "cost_usd": 0.1569236,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "seen-non-claims": {
+    "by": "verifier of rb-build",
+    "texts": [
+      "(provider) Replaced the prior implementation’s global raw reads and cross-batch sorting as Q-bounded requires. Protected tests and other files were not edited."
+    ],
+    "at": "2026-10-30T11:09:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T11:09:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

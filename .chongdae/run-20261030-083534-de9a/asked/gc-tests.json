@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "gc-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write tests for Q-git-config into test_dwitbuk.py (free functions named test_Q_git_config_..., this file's helpers, its own __main__ runner) on real temporary git repositories: point GIT_CONFIG_GLOBAL (restored afterwards) at a temporary file setting color.ui=always, diff.relative=true, diff.submodule=log, diff.noprefix=true and diff.mnemonicPrefix=true, and assert that the eyes request's diff (a top-level target, and a target inside a larger repository) — with a changed gitlink among the changes — and verify_packet's excluded_diff are the same text as with an empty global configuration, non-empty, and each kept path's section once. Also make the existing helper unbatched pin --src-prefix=a/ --dst-prefix=b/ (and the same plain form) so the exact-sections comparisons do not depend on a maintainer's global configuration; change nothing else in the earlier tests. The new tests fail on the current tree (colour and diff.relative empty the diff); show that with the real suite or a focused python3 -c run, never python3 -m unittest. No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-git-config"
+  ],
+  "contract": {
+    "Q-git-config": "contract/Q-git-config-01678b8b.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/gc-tests.response.json"
+}

@@ -1,0 +1,67 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "gl-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write the regression for Q-gitlink into test_dwitbuk.py (free functions named test_Q_gitlink_..., this file's Project/write/git/run/eyes_answer helpers, its own __main__ runner), on real temporary git repositories: a parent repository with a lock declaring the bare custom-record.json, and a nested child repository (git init inside it, child.py committed) at custom-record.json added to the parent as a gitlink (assert git ls-files -s reports mode 160000). After a review, editing custom-record.json/child.py must make eyes consume refuse with 'source changed'. Compare in the same test or beside it: a control gitlink at an undeclared lib (also refused), a gitlink under a true directory declaration custom-dir/ (consume still succeeds: excluded), and a regular tracked file custom-record.json at the bare declaration (changing it still does not stale the answer). The first case fails on the current tree; show that with the real suite or a focused python3 -c run, never python3 -m unittest. No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-gitlink"
+  ],
+  "contract": {
+    "Q-gitlink": "contract/Q-gitlink-d2a6b0dd.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/gl-tests.response.json",
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "I added the Q-gitlink regression tests to test_dwitbuk.py. They use the file's own Project, write, git, run and eyes_answer helpers and its own __main__ runner. Each test builds real temporary git repositories: a nested repository with child.py committed is added to the parent as a gitlink, and the test asserts that git ls-files -s reports mode 160000.\n\ntest_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path uses a lock declaring custom-record.json and custom-dir/, with gitlinks at lib, custom-dir/engine and custom-record.json. It checks three cases in order:\n- Editing lib/child.py makes eyes consume refuse with 'source changed' (the control; this passes now).\n- Editing custom-dir/engine/child.py still lets consume succeed (excluded; this passes now).\n- Editing custom-record.json/child.py makes consume refuse with 'source changed', and again on a second edit after a fresh answer. This fails on the current tree. Running `python3 test_dwitbuk.py` gives: FAIL ... ('a gitlink at the bare declaration custom-record.json is source', 'eyes: 0 finding(s) added to review-... · 0 rejected').\n\ntest_Q_gitlink_a_regular_tracked_file_at_the_bare_declaration_stays_excluded uses a regular tracked file at custom-record.json (mode 100644). Changing that file does not stale the answer, a gitlink at custom-dir itself is excluded, and a change to a.py still stales the answer. This test passes now, since it is the comparison that pins the exclusions.\n\nOne other test in the suite fails, both with and without my change (I checked by stashing it): test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else, with JSONDecodeError. So the check `python3 test_dwitbuk.py` will still exit 1 after the build unless that is fixed too. I changed no file except test_dwitbuk.py and committed nothing.",
+      "verified": null,
+      "decisions": null,
+      "non-claims": [
+        "\"The type comes from git's own report of the entry, not from `is_record` looking at the disk; `is_record` and every other site are unchanged.\" I can only test this indirectly. The new test checks that is_record still treats custom-record.json as an exact path while a directory is on disk there, and the existing Q_strict/Q_match/Q_sites tests pin the other sites. No test can show that the marker comes from the 160000 mode in ls-files rather than some other way of finding the gitlink.",
+        "\"mangsang's `mangsang/` still counts for freshness\" is decided by the existing test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read. I added no new mangsang test.",
+        "\"`python3 test_dwitbuk.py` passes as a whole on Python 3.11 or later\": test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else already fails on the unmodified tree (JSONDecodeError) here on Python 3.12, so this check will not exit 0 unless that is fixed too. I checked only Python 3.12.",
+        "\"No other behaviour changes\" can only be decided by the existing suite. No new test claims it.",
+        "The second test passes before the build, by design: the brief asks for comparisons beside the failing case. It also treats a gitlink at custom-dir itself as covered by the custom-dir/ directory declaration, because the new trailing-slash marker gives it that path."
+      ],
+      "retried": null,
+      "review": null,
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path",
+          "contract_quote": "No other behaviour changes",
+          "why": "The second gitlink_stales call writes the same child.py contents already present when the fresh answer was bound, yet expects source changed. Passing this assertion would require changing the existing content-fingerprint behavior to invalidate an identical-content rewrite."
+        }
+      ],
+      "reopened": {
+        "by": "chongdae",
+        "auto": "tests disputed by gl-build",
+        "at": "2026-10-30T09:47:38+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "amending": [
+    {
+      "test": "test_dwitbuk.py::test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path",
+      "contract_quote": "No other behaviour changes",
+      "why": "The second gitlink_stales call writes the same child.py contents already present when the fresh answer was bound, yet expects source changed. Passing this assertion would require changing the existing content-fingerprint behavior to invalidate an identical-content rewrite."
+    }
+  ]
+}

@@ -1,0 +1,409 @@
+{
+  "artifact-type": "dwitbuk/review@1",
+  "id": "review-20261030-202009-53ce",
+  "since": "3506b04407598ec4c2296798bb2f2dabf20455d6",
+  "head": "0513591872898781ebb610b65c6a16fe4de7ac68",
+  "findings": [
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['carrying out a stated goal or plan']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['reviewing, disputing or testing a change']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['asking what happened or what is open']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "subagent",
+      "where": "run-20261030-111703-184e/v2-review",
+      "text": "done by the session's sub-agent (claude-code claude-opus-5-5) — declared hands, not self-performed; chongdae saw the session's tree, not the sub-agent; scope .maint-evidence/run5/review",
+      "layer": "observation"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "no check decides this task  [tasks: rp-tests (run-20261030-074412-044b), rp-review (run-20261030-074412-044b), rp-tests-2 (run-20261030-074412-044b); also in other runs: adopt-prior (run-20261030-083534-de9a), adopt-env (run-20261030-083534-de9a), rs-tests (run-20261030-083534-de9a), rs-tests-fix (run-20261030-083534-de9a), rs-tests-sub (run-20261030-083534-de9a), hc-tests (run-20261030-083534-de9a), docs-align (run-20261030-083534-de9a), final-review (run-20261030-083534-de9a), fx-tests (run-20261030-083534-de9a), gl-tests (run-20261030-083534-de9a), fix-review (run-20261030-083534-de9a), xs-tests (run-20261030-083534-de9a), xs-review (run-20261030-083534-de9a), gc-tests (run-20261030-083534-de9a), cc-tests (run-20261030-083534-de9a), cc-tests-fix (run-20261030-083534-de9a), fixture-tests (run-20261030-083534-de9a), parser-review (run-20261030-083534-de9a), raw-tests (run-20261030-083534-de9a), rb-tests (run-20261030-083534-de9a), closure-review (run-20261030-083534-de9a), docs-limit (run-20261030-083534-de9a), v2-meta (run-20261030-111703-184e), v2-review (run-20261030-111703-184e)]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "no check decides this task  [tasks: adopt-prior (run-20261030-083534-de9a), adopt-env (run-20261030-083534-de9a), rs-tests (run-20261030-083534-de9a), rs-tests-fix (run-20261030-083534-de9a), rs-tests-sub (run-20261030-083534-de9a), hc-tests (run-20261030-083534-de9a), docs-align (run-20261030-083534-de9a), final-review (run-20261030-083534-de9a), fx-tests (run-20261030-083534-de9a), gl-tests (run-20261030-083534-de9a), fix-review (run-20261030-083534-de9a), xs-tests (run-20261030-083534-de9a), xs-review (run-20261030-083534-de9a), gc-tests (run-20261030-083534-de9a), cc-tests (run-20261030-083534-de9a), cc-tests-fix (run-20261030-083534-de9a), fixture-tests (run-20261030-083534-de9a), parser-review (run-20261030-083534-de9a), raw-tests (run-20261030-083534-de9a), rb-tests (run-20261030-083534-de9a), closure-review (run-20261030-083534-de9a), docs-limit (run-20261030-083534-de9a); also in other runs: rp-tests (run-20261030-074412-044b), rp-review (run-20261030-074412-044b), rp-tests-2 (run-20261030-074412-044b), v2-meta (run-20261030-111703-184e), v2-review (run-20261030-111703-184e)]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-111703-184e",
+      "text": "no check decides this task  [tasks: v2-meta (run-20261030-111703-184e), v2-review (run-20261030-111703-184e); also in other runs: rp-tests (run-20261030-074412-044b), rp-review (run-20261030-074412-044b), rp-tests-2 (run-20261030-074412-044b), adopt-prior (run-20261030-083534-de9a), adopt-env (run-20261030-083534-de9a), rs-tests (run-20261030-083534-de9a), rs-tests-fix (run-20261030-083534-de9a), rs-tests-sub (run-20261030-083534-de9a), hc-tests (run-20261030-083534-de9a), docs-align (run-20261030-083534-de9a), final-review (run-20261030-083534-de9a), fx-tests (run-20261030-083534-de9a), gl-tests (run-20261030-083534-de9a), fix-review (run-20261030-083534-de9a), xs-tests (run-20261030-083534-de9a), xs-review (run-20261030-083534-de9a), gc-tests (run-20261030-083534-de9a), cc-tests (run-20261030-083534-de9a), cc-tests-fix (run-20261030-083534-de9a), fixture-tests (run-20261030-083534-de9a), parser-review (run-20261030-083534-de9a), raw-tests (run-20261030-083534-de9a), rb-tests (run-20261030-083534-de9a), closure-review (run-20261030-083534-de9a), docs-limit (run-20261030-083534-de9a)]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "rp-review: done on the session's word by name (`run rp-review`), with nothing of its own in the tree and no `did`  [task rp-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "rp-review: done by the session's sub-agent  [task rp-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) The new tests pass on the current tree (build 05023c8), as the brief asks, so they are not red before a build. Their red evidence is the five single-site startswith mutations run in copies outside the repository.  [task rp-tests-2]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) The mutations put back the form `path.startswith(entry)` with each site's own entries. No new test targets a prefix rule that strips a trailing '/' from directory entries before comparing at the source_state or stop-hook sites (for example `.claude-extra` against `.claude/`). The eyes-request test does cover that case, because its left_out entries are already stripped.  [task rp-tests-2]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) I did not mutate verify_packet's touched filter or its excluded filter. The brief does not list them, and the existing test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff is what decides them.  [task rp-tests-2]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) Q-keep: 'String prefixes that are not about record paths stay as they are', 'hostcall.py, eyes_worker.py, the manifests and README.md are not part of this change; no version bump' — these are about how the change was made and what it left alone; no test in this file can see them.  [task rp-tests-2]",
+      "layer": "objection",
+      "first-seen": "review-20261030-173021-1aeb"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) Behaviour that has not changed (directory entries, same-prefix neighbours, literal wildcards, empty entries) cannot fail on its own today. It is asserted inside tests that also check a new part of the contract, so each test still fails now, rather than as one test per unchanged sentence.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) 'Pathspec magic alone is not a correct exclusion' and 'never an unrestricted git diff': no test watches the git argv. They are decided only by output: a changed hunsu.json/child.py must appear in the diff, and an eyes request where only records changed must have diff == ''.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) 'Each touched path and each excluded path is given to git as a literal pathspec (:(literal)PATH)': this is decided only by the x[1].json / x1.json output test. A different way of escaping that selects only x[1].json would also pass.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) 'No stat and no other look at the disk': the test runs is_record from a working directory where hunsu.json and alpha.json are directories. It does not patch os.stat, so a lookup that ignores its result would go unseen.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The stop-hook test enables stop-eyes through the lock's settings and hunsu.local.json, because hunsu.json is a directory in that fixture. It assumes the hook reads at least one of those sources, as README.md says it does.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The untracked/ignored-directory test assumes source_state examines git-ignored directory entries, as Q-strict-sites 3 says ('an untracked or ignored directory entry from git status').  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) 'python3 test_dwitbuk.py passes as a whole on Python 3.11 or later': tests were run only on Python 3.12, and the pre-existing failure of test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError) is outside this contract and was left alone.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) 'No version bump; README.md, the manifests, eyes_worker.py and hostcall.py are not part of this build': no test checks this.  [task rs-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The new test covers only the subdirectory case of Q-strict-sites item 4: \"The diff is composed from the candidate file paths git reports as changed against the same base (`git diff --name-only`), each judged with `is_record` against `left_out`; only the kept paths are diffed, as literal pathspecs.\" The section's other sentences are covered by the existing test_Q_strict_sites_* tests, which I did not change.  [task rs-tests-sub]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The red evidence comes from one hand-made change (removing --relative from the eyes request's name listing), not a mutation campaign. The test does not cover verify_packet, source_state or hooks/stop_eyes.py when the target is a subdirectory.  [task rs-tests-sub]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) `python3 test_dwitbuk.py` exits 1 in this session because AGENT_WORKER=1 is set in the environment, which silences hooks/session_start.py. That makes test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fail with JSONDecodeError, with or without my change. Run without AGENT_WORKER, the whole suite passes. I did not change that test or the environment.  [task rs-tests-sub]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "final-review: done on the session's word by name (`run final-review`), with nothing of its own in the tree and no `did`  [task final-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "final-review: done by the session's sub-agent  [task final-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "fix-review: done on the session's word by name (`run fix-review`), with nothing of its own in the tree and no `did`  [task fix-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "fix-review: done by the session's sub-agent  [task fix-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "xs-review: done on the session's word by name (`run xs-review`), with nothing of its own in the tree and no `did`  [task xs-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "xs-review: done by the session's sub-agent  [task xs-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) Q-git-config item 2 (\"The tests' unbatched comparison asks git for the same pinned form\") is met by my change to the `unbatched` helper in the test file. Its test, test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_plain_form, therefore passes already and decides nothing about the build.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) \"no external diff driver\": no test configures diff.external or a per-path diff driver. The tests cover only the five settings the contract names; whether the builder uses --no-ext-diff (or turns off textconv) is not checked.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The tests compare output only, not how git is called. A build that unsets the user's configuration some other way (for example `-c` overrides, or GIT_CONFIG_GLOBAL=/dev/null) passes too, which the contract allows.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) verify_packet's touched-file `diff` is not compared across configurations: the contract names only `excluded_diff`.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) Documented limits not tested, as the contract says: the `diff --cc` merge-conflict section, diff.orderFile ordering across batch boundaries, the first review's findings 7 and 9, and verify_packet's one literal pathspec per touched path.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else also fails in `python3 test_dwitbuk.py`, and it fails the same way on the HEAD version of the test file. This worker session sets AGENT_WORKER=1, so the SessionStart hook is silent, as it should be in a worker session. The check will fail in this environment until that variable is unset; my change did not cause it.  [task gc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) Q-conflict item 3, \"With a base (`--since`, or a prior review's base) the conflicted path's text is what git gives against that base, as now. Q-exact-sections and Q-git-config hold as written.\", has no new test. It describes how things work now, so a new test would pass before the build and decide nothing. The existing Q-exact-sections and Q-git-config tests are what hold it.  [task cc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) \"a clear error\" is checked loosely: the message (stdout, stderr or the exception text) must name the injected `Submodule x` text or use the word 'section' or 'attribut…'. A failure that escapes main() as an uncaught traceback, not an exit code and message, fails the eyes-request test. No test can judge whether the wording is actually clear to a reader.  [task cc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) \"before any packet is written\" is checked only as: no eyes-request.json in a fresh --out folder. Other files the command might write elsewhere are not checked.  [task cc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The unattributable section is created by wrapping dwitbuk.git and appending a trailing Submodule block to each real content diff call's output. No other kind of unattributable output (for example a stray line in the middle, or a header of an unknown kind) is tested.  [task cc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) These test_dwitbuk.py failures predate this task and are not Q-conflict's: the four test_Q_git_config_* tests other than ..._unbatched_comparison_..., and test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else. They also fail with HEAD's unchanged test file, so the check `python3 test_dwitbuk.py` will not exit 0 until they are fixed as well.  [task cc-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) Sentences 2–3 ('the production guard ... is not changed, and no test changes the live process's environment globally'; 'The test passes run from a normal parent and from a worker parent') are shown by the diff (only test_dwitbuk.py changed, and only the env construction) and by the two focused runs. No test asserts them.  [task fixture-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) The test name does not contain the section id Q-fixture: the brief forbids renaming or changing any other test, so a selector by section id will not find it.  [task fixture-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "(provider) This is a fixture correction, so the corrected test passes now. Its red was the unchanged test failing under a worker parent, reproduced before the edit.  [task fixture-tests]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "parser-review: done on the session's word by name (`run parser-review`), with nothing of its own in the tree and no `did`  [task parser-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "parser-review: done by the session's sub-agent  [task parser-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "closure-review: done on the session's word by name (`run closure-review`), with nothing of its own in the tree and no `did`  [task closure-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-083534-de9a",
+      "text": "closure-review: done by the session's sub-agent  [task closure-review]",
+      "layer": "objection",
+      "first-seen": "review-20261030-201551-f5c2"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-111703-184e",
+      "text": "v2-review: done on the session's word by name (`run v2-review`), with nothing of its own in the tree and no `did`  [task v2-review]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-111703-184e",
+      "text": "v2-review: done by the session's sub-agent  [task v2-review]",
+      "layer": "objection"
+    },
+    {
+      "kind": "unchanged",
+      "layer": "observation",
+      "where": "2 earlier review(s)",
+      "seen-in": [
+        "review-20261030-173021-1aeb",
+        "review-20261030-201551-f5c2"
+      ],
+      "text": "19 observation(s) written in full in 2 earlier review(s) and unchanged since (operation-mention 4, seen-non-claims 1, self-performed 1, session-judged 4, subagent 6, verifier-non-claim 1, verifier-reject 2)"
+    },
+    {
+      "kind": "undisposed",
+      "layer": "objection",
+      "where": "AGENTS.md, CLAUDE.md, README.md, plugin.json",
+      "text": "4 file(s) changed since the beginning; no completed run recorded touching them",
+      "carries": [
+        "outside-run",
+        "AGENTS.md, CLAUDE.md, README.md, plugin.json",
+        "changed since the beginning; no completed run recorded touching them"
+      ],
+      "first-seen": "review-20261030-173021-1aeb",
+      "raised-in": "review-20261030-173021-1aeb/5"
+    },
+    {
+      "kind": "undisposed",
+      "layer": "objection",
+      "where": ".claude-plugin/plugin.json",
+      "text": "1 file(s) changed since the beginning; no completed run recorded touching them",
+      "carries": [
+        "outside-run",
+        ".claude-plugin/plugin.json",
+        "changed since the beginning; no completed run recorded touching them"
+      ],
+      "first-seen": "review-20261030-173021-1aeb",
+      "raised-in": "review-20261030-173021-1aeb/6"
+    },
+    {
+      "kind": "undisposed",
+      "layer": "objection",
+      "where": "commands/eyes.md",
+      "text": "1 file(s) changed since the beginning; no completed run recorded touching them",
+      "carries": [
+        "outside-run",
+        "commands/eyes.md",
+        "changed since the beginning; no completed run recorded touching them"
+      ],
+      "first-seen": "review-20261030-173021-1aeb",
+      "raised-in": "review-20261030-173021-1aeb/7"
+    }
+  ]
+}

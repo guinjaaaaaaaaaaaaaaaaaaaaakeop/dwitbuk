@@ -1,0 +1,83 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "verify",
+  "run": "run-20261030-083534-de9a",
+  "task": "pc-build",
+  "role": "verifier",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix Q-git-config and Q-conflict in dwitbuk.py's path_diff only. (a) The git diff calls whose output path_diff parses ask for plain, repository-relative, per-file text whatever the user's configuration says: no colour, no relative headers, gitlinks in the short form, no external diff driver, the a/ b/ prefixes already pinned (e.g. --no-color --no-relative --submodule=short --no-ext-diff). (b) An unresolved path's 'diff --cc PATH' section (no a/ b/ prefix; the path may be C-quoted) is that path's own section: kept once when the path is kept — git lists an unmerged path once per stage, so a repeated candidate must not repeat its section across batches — and left out when the path is a declared record. (c) No silent drop: text before the first diff --git/diff --cc header of a call's output, or under a header starting 'diff ' of another kind or with an unreadable path, makes the eyes request and verify_packet's excluded_diff fail with a clear error before any packet is written (a SystemExit with a message is fine); a readable section whose path is not a kept candidate is still left out as Q-exact-sections says, and text inside a readable section is not validated line by line. Keep everything else as it is. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-git-config",
+    "Q-conflict"
+  ],
+  "contract": {
+    "Q-git-config": "contract/Q-git-config-01678b8b.md",
+    "Q-conflict": "contract/Q-conflict-5f4b4b47.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/pc-build.verify.response.json",
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "built": {
+    "summary": "Updated only dwitbuk.py’s path_diff: pinned Git output format, preserved conflict sections once across batches, and added clear failures for unattributable output. Full protected suite passed.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      }
+    ],
+    "non-claims": [
+      "Protected tests and all other files were unchanged. No commits were made."
+    ]
+  },
+  "excluded": {
+    "record-paths": [
+      ".dwitbuk/review.lock",
+      "reviews/review-20261030-173021-1aeb.json"
+    ]
+  },
+  "touched_since": [],
+  "since": {
+    ".": "9657f443de69bd0030d5b86418002c06df6082c2"
+  },
+  "tests_non_claims": {
+    "cc-tests-fix": [
+      "The unreadable text is added by wrapping dwitbuk.git around real git output, not produced by a real diff.submodule=log gitlink, so it is a simulation of what git printed.",
+      "No test covers the clarified form 'a header … whose path cannot be read' on its own; the two cases tested are text before the first header and a 'diff --unknown x' header.",
+      "'A clear error' is checked loosely: the message must name the foreign text or mention 'section' or 'attribut'."
+    ]
+  },
+  "checked": [
+    {
+      "command": "python3 test_dwitbuk.py",
+      "exit": 0,
+      "tail": [
+        "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+        "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+        "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+        "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+        "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+        "all passed"
+      ],
+      "at": "2026-10-30T10:32:56+00:00",
+      "chongdae": "chongdae 1.24.0",
+      "source": "the task's checks, run by chongdae to decide it",
+      "changed_since": []
+    }
+  ]
+}

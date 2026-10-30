@@ -1,0 +1,121 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rp-tests-2",
+    "role": "nitpick",
+    "brief": "Strengthen test_dwitbuk.py where an independent review showed that putting a prefix check back at one site still passes the whole suite. The build stands (commit 05023c8); these tests must decide each site against a prefix rule. Add free-function tests (test_Q_sites_... names, the file's Project harness and helpers, collected by its own __main__ runner) so that each of these fails if that site goes back to startswith and passes on the current tree: (1) documents_or_records: with a lock declaring alpha.json, ['alpha.jsonl'] and ['hunsu.json.bak'] are not all documents or records; (2) source_state: with alpha.json declared, changing alpha.jsonl, or hunsu.json.bak, after an eyes request makes eyes consume refuse with 'source changed'; (3) eyes request: untracked reviews2/a.json, .claude-extra/x.py, .chongdae-notes.md and hunsu.json.bak are in new_files; (4) stop hook: a dirty alpha.jsonl (alpha.json declared) and hunsu.json.bak reach the hook's touched, and with a lock declaring mangsang/ a dirty mangsang/relations/R-1.json is in the touched the hook hands to verify_packet. Red evidence is the real suite, never python3 -m unittest (it collects nothing here): in copies outside the repository, put back startswith at one site at a time (documents_or_records, source_state's skip, the eyes request's new_files filter, the stop hook's dirty filter; and for (4) also left_out = tuple(dwitbuk.record_paths(cwd)) in the hook) and show your new tests fail there; on the current tree env -u AGENT_WORKER python3 test_dwitbuk.py must pass. Report those runs in your summary. Change no repository file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-sites",
+      "Q-keep"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 4,
+  "added": "2026-10-30T08:14:35+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) The new tests pass on the current tree (build 05023c8), as the brief asks, so they are not red before a build. Their red evidence is the five single-site startswith mutations run in copies outside the repository.",
+    "(provider) The mutations put back the form `path.startswith(entry)` with each site's own entries. No new test targets a prefix rule that strips a trailing '/' from directory entries before comparing at the source_state or stop-hook sites (for example `.claude-extra` against `.claude/`). The eyes-request test does cover that case, because its left_out entries are already stripped.",
+    "(provider) I did not mutate verify_packet's touched filter or its excluded filter. The brief does not list them, and the existing test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff is what decides them.",
+    "(provider) Q-keep: 'String prefixes that are not about record paths stay as they are', 'hostcall.py, eyes_worker.py, the manifests and README.md are not part of this change; no version bump' — these are about how the change was made and what it left alone; no test in this file can see them."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added five free-function tests to test_dwitbuk.py. They use the file's Project, eyes_answer, late_packet and stop_hook_touched helpers and are picked up by the file's own __main__ runner. Each one fails if its site goes back to a prefix rule. (1) test_Q_sites_documents_or_records_a_neighbour_of_a_declared_file_is_not_a_record: the lock declares alpha.json, so ['alpha.jsonl'], ['hunsu.json.bak'] and each of them beside alpha.json are not all documents or records. (2) test_Q_sites_source_state_changes_with_a_neighbour_of_a_declared_file: with alpha.json declared, changing a committed alpha.jsonl or hunsu.json.bak after an eyes request makes `eyes consume` refuse with 'source changed'. Changing alpha.json itself does not. (3) test_Q_sites_eyes_request_untracked_neighbours_of_record_entries_are_new_files: untracked reviews2/a.json, .claude-extra/x.py, .chongdae-notes.md and hunsu.json.bak are in new_files, and hunsu.json is not. (4a) test_Q_sites_stop_hook_hands_dirty_neighbours_of_record_entries_to_the_eyes: with alpha.json declared, the hook's touched is exactly {a.py, alpha.jsonl, hunsu.json.bak}, and the dirty alpha.json is left out. (4b) test_Q_sites_stop_hook_hands_a_dirty_mangsang_record_to_verify_packet: with a lock declaring mangsang/, the touched handed to verify_packet is exactly {a.py, mangsang/relations/R-1.json}. The dirty a.py in both hook tests keeps the hook from returning early, so a mutation fails on the touched assertion itself.\n\nRed evidence: each mutation ran the real suite (env -u AGENT_WORKER python3 test_dwitbuk.py) in a copy under <tmp>/rp-mut/<name>, outside the repository, with exactly one site changed.\n- documents_or_records (is_record(p, recs) → any(p.startswith(e) for e in recs)): 3 failed — my new test 'AssertionError: alpha.jsonl', plus the existing test_Q_sites_documents_or_records_decides_records_by_the_one_rule and test_a_documents_or_records_task_with_no_check_is_said_not_charged_and_its_old_carry_stops.\n- source_state skip (is_record(path, skipped) → any(path.startswith(e) for e in skipped)): 1 failed — test_Q_sites_source_state_changes_with_a_neighbour_of_a_declared_file; consume accepted the answer after alpha.jsonl changed.\n- eyes request new_files filter (→ any(n.startswith(x) for x in left_out)): 1 failed — test_Q_sites_eyes_request_untracked_neighbours_of_record_entries_are_new_files, ('reviews2/a.json', []).\n- stop hook dirty filter (→ any(p.startswith(e) for e in left_out)): 1 failed — test_Q_sites_stop_hook_hands_dirty_neighbours_of_record_entries_to_the_eyes, touched was ['a.py'].\n- stop hook left_out = tuple(dwitbuk.record_paths(cwd)): 1 failed — test_Q_sites_stop_hook_hands_a_dirty_mangsang_record_to_verify_packet, touched was ['a.py'].\n\nOn the current tree, env -u AGENT_WORKER python3 test_dwitbuk.py prints 'all passed'; an earlier run of the same command exited 0. The same command under ~/.local/bin/python3.11 also prints 'all passed'. The only repository file I changed is test_dwitbuk.py, and nothing was committed.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-sites",
+        "tests": [
+          "test_Q_sites_documents_or_records_a_neighbour_of_a_declared_file_is_not_a_record",
+          "test_Q_sites_source_state_changes_with_a_neighbour_of_a_declared_file",
+          "test_Q_sites_eyes_request_untracked_neighbours_of_record_entries_are_new_files",
+          "test_Q_sites_stop_hook_hands_dirty_neighbours_of_record_entries_to_the_eyes",
+          "test_Q_sites_stop_hook_hands_a_dirty_mangsang_record_to_verify_packet",
+          "test_Q_sites_documents_or_records_decides_records_by_the_one_rule",
+          "test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff",
+          "test_Q_sites_eyes_request_diff_and_new_files_leave_out_only_exact_records",
+          "test_Q_sites_source_state_changes_with_a_hunsu_lookalike_and_not_with_hunsus_own_files",
+          "test_Q_sites_source_state_in_a_non_git_project_prunes_only_record_directories",
+          "test_Q_sites_stop_hook_hands_a_dirty_hunsu_lookalike_to_the_eyes"
+        ]
+      },
+      {
+        "section": "Q-keep",
+        "tests": [
+          "test_Q_sites_stop_hook_hands_a_dirty_mangsang_record_to_verify_packet",
+          "test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read",
+          "test_Q_keep_run_records_count_reviews_commits_do_not_and_the_packet_directory_is_left_out"
+        ]
+      }
+    ],
+    "non-claims": [
+      "The new tests pass on the current tree (build 05023c8), as the brief asks, so they are not red before a build. Their red evidence is the five single-site startswith mutations run in copies outside the repository.",
+      "The mutations put back the form `path.startswith(entry)` with each site's own entries. No new test targets a prefix rule that strips a trailing '/' from directory entries before comparing at the source_state or stop-hook sites (for example `.claude-extra` against `.claude/`). The eyes-request test does cover that case, because its left_out entries are already stripped.",
+      "I did not mutate verify_packet's touched filter or its excluded filter. The brief does not list them, and the existing test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff is what decides them.",
+      "Q-keep: 'String prefixes that are not about record paths stay as they are', 'hostcall.py, eyes_worker.py, the manifests and README.md are not part of this change; no version bump' — these are about how the change was made and what it left alone; no test in this file can see them."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 16,
+      "cost_usd": 0.6311614000000001
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T08:22:27+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 16,
+    "cost_usd": 0.6311614000000001,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "edit ./test_dwitbuk.py"
+      ],
+      "commands-run": 13,
+      "commands-failed": 1
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T08:22:27+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

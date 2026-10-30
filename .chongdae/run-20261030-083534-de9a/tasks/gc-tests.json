@@ -1,0 +1,108 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "gc-tests",
+    "role": "nitpick",
+    "brief": "Write tests for Q-git-config into test_dwitbuk.py (free functions named test_Q_git_config_..., this file's helpers, its own __main__ runner) on real temporary git repositories: point GIT_CONFIG_GLOBAL (restored afterwards) at a temporary file setting color.ui=always, diff.relative=true, diff.submodule=log, diff.noprefix=true and diff.mnemonicPrefix=true, and assert that the eyes request's diff (a top-level target, and a target inside a larger repository) — with a changed gitlink among the changes — and verify_packet's excluded_diff are the same text as with an empty global configuration, non-empty, and each kept path's section once. Also make the existing helper unbatched pin --src-prefix=a/ --dst-prefix=b/ (and the same plain form) so the exact-sections comparisons do not depend on a maintainer's global configuration; change nothing else in the earlier tests. The new tests fail on the current tree (colour and diff.relative empty the diff); show that with the real suite or a focused python3 -c run, never python3 -m unittest. No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-git-config"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 19,
+  "added": "2026-10-30T10:19:32+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Q-git-config item 2 (\"The tests' unbatched comparison asks git for the same pinned form\") is met by my change to the `unbatched` helper in the test file. Its test, test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_plain_form, therefore passes already and decides nothing about the build.",
+    "(provider) \"no external diff driver\": no test configures diff.external or a per-path diff driver. The tests cover only the five settings the contract names; whether the builder uses --no-ext-diff (or turns off textconv) is not checked.",
+    "(provider) The tests compare output only, not how git is called. A build that unsets the user's configuration some other way (for example `-c` overrides, or GIT_CONFIG_GLOBAL=/dev/null) passes too, which the contract allows.",
+    "(provider) verify_packet's touched-file `diff` is not compared across configurations: the contract names only `excluded_diff`.",
+    "(provider) Documented limits not tested, as the contract says: the `diff --cc` merge-conflict section, diff.orderFile ordering across batch boundaries, the first review's findings 7 and 9, and verify_packet's one literal pathspec per touched path.",
+    "(provider) test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else also fails in `python3 test_dwitbuk.py`, and it fails the same way on the HEAD version of the test file. This worker session sets AGENT_WORKER=1, so the SessionStart hook is silent, as it should be in a worker session. The check will fail in this environment until that variable is unset; my change did not cause it."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added the Q-git-config tests to test_dwitbuk.py as free functions and pinned the `unbatched` helper. They run on real temporary git repositories.\n\n**How the tests work:** a `global_git_config` context manager points GIT_CONFIG_GLOBAL at a temporary file (it also sets GIT_CONFIG_NOSYSTEM) and restores both afterwards. Each test builds its fixture under an empty global config, then produces the same output twice: once with the empty config and once with color.ui=always, diff.relative=true, diff.submodule=log, diff.noprefix=true and diff.mnemonicPrefix=true. It asserts the two texts are identical, the plain one is non-empty, and each kept path's section appears exactly once.\n\n**What the new tests check:**\n- The eyes request diff of a top-level target, with a source file and a changed gitlink `lib` (a declared record is changed too and must stay out). It is checked twice: from the review base, where `lib` is a new gitlink, and with `--since` the gitlink commit, where `lib` is modified.\n- The same for a target `proj/` inside a larger repository.\n- A second eyes request under the same configuration gives the same text.\n- `verify_packet`'s `excluded_diff` for a directory declaration (`recs/`) and a bare declaration (`notes.json`), with a touched source file and gitlink. It is called from a subdirectory so diff.relative has something to change.\n\n**The helper:** `unbatched` now passes `--no-color --no-ext-diff --no-relative --submodule=short --src-prefix=a/ --dst-prefix=b/` (the `PLAIN_DIFF` tuple). A test checks that its output is the same under both configurations. No earlier test was changed.\n\n**Results from `python3 test_dwitbuk.py`:** the four new tests on dwitbuk's output fail as intended. Under the hostile configuration the eyes diffs and `excluded_diff` come back empty, while the plain text is the expected per-file sections. The new helper test passes, as it must, because the change it checks is the helper edit itself. One earlier test also fails, `test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else`; it fails the same way on the HEAD copy (see non-claims). The only file changed is test_dwitbuk.py, and nothing was committed.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-git-config",
+        "tests": [
+          "test_Q_git_config_eyes_request_diff_of_a_top_level_target_is_the_same_text_whatever_the_global_configuration",
+          "test_Q_git_config_eyes_request_diff_of_a_target_inside_a_larger_repository_is_the_same_text_whatever_the_global_configuration",
+          "test_Q_git_config_eyes_request_diff_is_the_same_on_the_second_call_under_the_configuration",
+          "test_Q_git_config_verify_packet_excluded_diff_is_the_same_text_whatever_the_global_configuration",
+          "test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_plain_form"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Q-git-config item 2 (\"The tests' unbatched comparison asks git for the same pinned form\") is met by my change to the `unbatched` helper in the test file. Its test, test_Q_git_config_the_tests_unbatched_comparison_asks_git_for_the_pinned_plain_form, therefore passes already and decides nothing about the build.",
+      "\"no external diff driver\": no test configures diff.external or a per-path diff driver. The tests cover only the five settings the contract names; whether the builder uses --no-ext-diff (or turns off textconv) is not checked.",
+      "The tests compare output only, not how git is called. A build that unsets the user's configuration some other way (for example `-c` overrides, or GIT_CONFIG_GLOBAL=/dev/null) passes too, which the contract allows.",
+      "verify_packet's touched-file `diff` is not compared across configurations: the contract names only `excluded_diff`.",
+      "Documented limits not tested, as the contract says: the `diff --cc` merge-conflict section, diff.orderFile ordering across batch boundaries, the first review's findings 7 and 9, and verify_packet's one literal pathspec per touched path.",
+      "test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else also fails in `python3 test_dwitbuk.py`, and it fails the same way on the HEAD version of the test file. This worker session sets AGENT_WORKER=1, so the SessionStart hook is silent, as it should be in a worker session. The check will fail in this environment until that variable is unset; my change did not cause it."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 14,
+      "cost_usd": 0.6954904000000001
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:22:41+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 14,
+    "cost_usd": 0.6954904000000001,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 12,
+      "commands-failed": 1
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:22:41+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

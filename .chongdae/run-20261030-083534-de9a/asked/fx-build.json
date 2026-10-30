@@ -1,0 +1,73 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "fx-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix the independent review's findings in dwitbuk.py only (contract section Q-review-fixes): (1) the eyes request's candidate listing and its diff use --no-renames, so each side of a rename is judged by is_record on its own; (2) the kept literal pathspecs go to git in batches whose pathspec arguments stay within a new module-level int dwitbuk.PATHSPEC_BATCH_BYTES (default between 1024 and 262144), concatenated in git's order to the same text one call would give, possibly stopping once the diff passes its 80000-character cut with diff_truncated still true; (3) verify_packet's excluded_diff holds exactly what each excluded entry names under the strict rule — a bare entry only that file, never files under a directory that took its name — and an entry ending in / that directory's files; (4) an untracked entry git lists as a directory (an untracked nested repository) is never read as a file and is not in new_files. Keep everything Q-strict, Q-strict-sites and Q-strict-keep say. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-review-fixes"
+  ],
+  "contract": {
+    "Q-review-fixes": "contract/Q-review-fixes-bc6afded.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/fx-build.response.json",
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "Changed only dwitbuk.py: disabled rename pairing, bounded diff pathspec batches, enforced exact excluded-file matching, and skipped untracked directories. All tests pass.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 0
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        },
+        {
+          "check": "git diff --stat",
+          "exit": 0
+        }
+      ],
+      "decisions": [
+        {
+          "what": "A single pathspec exceeds the configured batch limit.",
+          "chosen": "Raise ValueError rather than exceed the limit.",
+          "alternatives": [
+            "Terminate with a CLI-specific error."
+          ]
+        }
+      ],
+      "non-claims": [
+        "The suite does not exercise the oversized-single-pathspec error.",
+        "The contract's explicitly deferred issues remain unchanged."
+      ],
+      "retried": {
+        "by": {
+          "agent": "claude-code claude-opus-5-5"
+        },
+        "at": "2026-10-30T09:39:00+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "review": null,
+      "disputed-tests": [],
+      "reopened": null
+    }
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ]
+}

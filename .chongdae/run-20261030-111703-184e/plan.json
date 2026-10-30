@@ -1,0 +1,10 @@
+{
+  "artifact-type": "chongdae/plan@1",
+  "written_by": "chongdae 1.24.0",
+  "goal": "Prepare dwitbuk 2.0.0 metadata for the root's release coordination: set the five authoritative version values to 2.0.0 (dropping Python 3.9/3.10 support is major under Versioning), make README timeless, check docs consistency, commit selectively; no push, tag, install, release, cache change or adoption of the new version in this project's own environment",
+  "kind": "session",
+  "tasks": [],
+  "providers": {
+    "session": "session"
+  }
+}

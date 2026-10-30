@@ -1,0 +1,154 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "hc-sync",
+    "role": "session",
+    "brief": "Vendor hacheong's reviewed hostcall.py (commit 7aa70c6 of ../hacheong, sha256 fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b) as dwitbuk's hostcall.py, byte for byte: read with git show from the sibling's object store, no import of the sibling, no change to the sibling or to any installed cache. Workers then start with their own host identity and without the parent's session ids. The second check pins the digest.",
+    "closes": [
+      "Q-hostcall"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ],
+      [
+        "python3",
+        "-c",
+        "import hashlib,sys; sys.exit(hashlib.sha256(open('hostcall.py','rb').read()).hexdigest() != 'fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b')"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "hostcall.py"
+    ]
+  },
+  "seq": 8,
+  "added": "2026-10-30T09:09:03+00:00",
+  "self-performed": {
+    "instead-of": "implementer",
+    "why": "mechanical exact copy, owner-authorized: hostcall.py becomes hacheong's reviewed file at 7aa70c6 byte for byte (sha256 fa06077c…); there is nothing to build — a hired builder could only retype the reviewed file, and the checks and verifier decide the copy",
+    "by": {
+      "agent": "claude-code claude-opus-5-5"
+    },
+    "at": "2026-10-30T09:09:03+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T09:09:57+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      {
+        "command": "python3 -c 'import hashlib,sys; sys.exit(hashlib.sha256(open('\"'\"'hostcall.py'\"'\"','\"'\"'rb'\"'\"').read()).hexdigest() != '\"'\"'fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b'\"'\"')'",
+        "exit": 0,
+        "tail": [
+          ""
+        ],
+        "at": "2026-10-30T09:09:57+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T09:09:58+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 5,
+      "cost_usd": 0.1151458
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T09:10:10+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "hostcall.py": "d7b8249dd926bda2f8d86bd2776fd35cbfeb07c5"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 5,
+    "cost_usd": 0.1151458,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ],
+    [
+      "python3",
+      "-c",
+      "import hashlib,sys; sys.exit(hashlib.sha256(open('hostcall.py','rb').read()).hexdigest() != 'fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b')"
+    ]
+  ],
+  "touched": [
+    "hostcall.py"
+  ],
+  "performed_by": {
+    "provider": "session",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 3,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T09:09:03+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T09:10:10+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

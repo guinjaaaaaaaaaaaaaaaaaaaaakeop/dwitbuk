@@ -1,0 +1,28 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-074412-044b",
+  "task": "rp-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Fix record-path overmatching in dwitbuk: record_paths returns bare hunsu and its startswith users hide hunsu.py, hunsu_helper.py and hunsu-notes.md; replace prefix semantics at every record-matching site with exact-file / directory-boundary matching (lock-declared entries included), keep real environment records excluded, sibling directory prefixes as source, and mangsang model records' late-review/source-freshness handling unchanged",
+  "brief": "Write the contract's tests into test_dwitbuk.py, this project's existing free-function suite: module-level functions named test_Q_<section>_..., using its Project harness and its write/run/git helpers, collected by the file's own __main__ runner. Red evidence is the real suite: python3 test_dwitbuk.py (a focused run: python3 -c 'import test_dwitbuk as t; t.test_Q_match_x()'); python3 -m unittest collects no tests from this file and decides nothing. Cover every acceptance fixture: is_record on hunsu.py, hunsu_helper.py, hunsu-notes.md against the five exact hunsu environment files; a lock-declared file record vs a same-prefix source (alpha.json vs alpha.jsonl); a declared directory and a true descendant vs a directory-prefix sibling (.alpha/ and .alpha/x.json vs .alpha-extra/y.py; mangsang/ vs mangsang-extra/); verify_packet keeping hunsu.py, hunsu_helper.py and hunsu-notes.md in touched with their change present in diff; documents_or_records; late eyes (eyes request diff, new_files and diff_leaves_out; source_state so that eyes consume refuses with 'source changed' after hunsu.py changes); the stop hook's touched; and Q-keep: a change under mangsang/ after an eyes request still makes consume refuse with 'source changed', and mangsang/ stays in the late-eyes diff and new_files. Amend test_the_eyes_leave_out_the_records_the_lock_declares to the Q-hunsu record_paths result (no bare hunsu). Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-match",
+    "Q-hunsu",
+    "Q-sites",
+    "Q-keep"
+  ],
+  "contract": {
+    "Q-match": "contract/Q-match-3c3873c8.md",
+    "Q-hunsu": "contract/Q-hunsu-e147f166.md",
+    "Q-sites": "contract/Q-sites-2b9b04d8.md",
+    "Q-keep": "contract/Q-keep-69286cd4.md"
+  },
+  "checks": [],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-074412-044b/local/rp-tests.response.json"
+}

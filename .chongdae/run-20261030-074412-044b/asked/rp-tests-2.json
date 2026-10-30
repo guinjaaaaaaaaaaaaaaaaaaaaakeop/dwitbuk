@@ -1,0 +1,29 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-074412-044b",
+  "task": "rp-tests-2",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Fix record-path overmatching in dwitbuk: record_paths returns bare hunsu and its startswith users hide hunsu.py, hunsu_helper.py and hunsu-notes.md; replace prefix semantics at every record-matching site with exact-file / directory-boundary matching (lock-declared entries included), keep real environment records excluded, sibling directory prefixes as source, and mangsang model records' late-review/source-freshness handling unchanged",
+  "brief": "Strengthen test_dwitbuk.py where an independent review showed that putting a prefix check back at one site still passes the whole suite. The build stands (commit 05023c8); these tests must decide each site against a prefix rule. Add free-function tests (test_Q_sites_... names, the file's Project harness and helpers, collected by its own __main__ runner) so that each of these fails if that site goes back to startswith and passes on the current tree: (1) documents_or_records: with a lock declaring alpha.json, ['alpha.jsonl'] and ['hunsu.json.bak'] are not all documents or records; (2) source_state: with alpha.json declared, changing alpha.jsonl, or hunsu.json.bak, after an eyes request makes eyes consume refuse with 'source changed'; (3) eyes request: untracked reviews2/a.json, .claude-extra/x.py, .chongdae-notes.md and hunsu.json.bak are in new_files; (4) stop hook: a dirty alpha.jsonl (alpha.json declared) and hunsu.json.bak reach the hook's touched, and with a lock declaring mangsang/ a dirty mangsang/relations/R-1.json is in the touched the hook hands to verify_packet. Red evidence is the real suite, never python3 -m unittest (it collects nothing here): in copies outside the repository, put back startswith at one site at a time (documents_or_records, source_state's skip, the eyes request's new_files filter, the stop hook's dirty filter; and for (4) also left_out = tuple(dwitbuk.record_paths(cwd)) in the hook) and show your new tests fail there; on the current tree env -u AGENT_WORKER python3 test_dwitbuk.py must pass. Report those runs in your summary. Change no repository file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-sites",
+    "Q-keep"
+  ],
+  "contract": {
+    "Q-sites": "contract/Q-sites-2b9b04d8.md",
+    "Q-keep": "contract/Q-keep-69286cd4.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-074412-044b/local/rp-tests-2.response.json"
+}

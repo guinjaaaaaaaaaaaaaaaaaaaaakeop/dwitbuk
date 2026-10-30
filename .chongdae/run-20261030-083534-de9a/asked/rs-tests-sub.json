@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "rs-tests-sub",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Add one free-function test (test_Q_strict_sites_..., this file's Project harness and helpers, its own __main__ runner) for a case rs-build's verifier found and the suite does not hold: the eyes request when --target is a subdirectory of a larger git repository. Git reports changed names from the repository root while declarations and literal pathspecs are relative to the target; a listing without --relative turned every kept name into a pathspec that matched nothing, so the late-eyes diff was empty. In a repository whose root holds an outer file and a subdirectory project (its own hunsu.lock.json declaring a bare custom-record.json, a hunsu.json replaced by a directory holding a committed child.py, a.py), after a review of the subdirectory and changes to a.py, hunsu.json/child.py, custom-record.json, a reviews/ file and the outer file: the subdirectory's eyes request diff holds a.py's and hunsu.json/child.py's changes, not custom-record.json's, reviews/'s or the outer file's. The build stands (commit 4531a10), so the test passes on the current tree; its red evidence is the same test failing in a copy outside the repository whose dwitbuk.py lacks --relative in the eyes request's name listing (one site, one change — no mutation campaign). Use the real suite or a focused python3 -c run, never python3 -m unittest. Change no repository file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-strict-sites"
+  ],
+  "contract": {
+    "Q-strict-sites": "contract/Q-strict-sites-68216246.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/rs-tests-sub.response.json"
+}

@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "xs-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write tests for Q-exact-sections into test_dwitbuk.py (free functions named test_Q_exact_sections_..., this file's helpers, its own __main__ runner), on real temporary git repositories: (1) eyes request with --since: a lock declaring the bare foo/rec.json, a committed source file foo later replaced by a directory holding foo/rec.json (committed) — the diff holds foo's deletion and nothing of foo/rec.json (assert by diff headers and by the record's content); (2) verify_packet's excluded_diff for the excluded bare custom-record.json when HEAD has it as a file and the work tree has replaced it with a directory whose child.py is staged (not committed) — the file's deletion only, nothing of child.py; (3) with dwitbuk.PATHSPEC_BATCH_BYTES lowered so a boundary falls between foo and foo/a.py (source foo replaced by a directory holding source foo/a.py), every diff --git header appears once and the diff equals one unbatched call's text filtered to the kept paths; (4) a single path longer than a lowered PATHSPEC_BATCH_BYTES is in the diff beside short ones, in git's order; (5) a gitlink inside a nested repository the traversal walks into (vendor is a gitlink in the parent holding the gitlink rec.json; the lock declares the bare vendor/rec.json): editing a file in vendor/rec.json makes eyes consume refuse with 'source changed'. (1), (2) and (3) fail on the current tree; (4) and (5) pass there — show each failing against a copy outside the repository with one site changed (path_diff raising or dropping an oversized path; gitlinks marked only at the top level), no broader campaign. Red evidence is the real suite or focused python3 -c runs, never python3 -m unittest. Change no repository file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-exact-sections"
+  ],
+  "contract": {
+    "Q-exact-sections": "contract/Q-exact-sections-9e6b570c.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/xs-tests.response.json"
+}

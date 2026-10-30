@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "hc-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write the tests for Q-hostcall into test_dwitbuk.py (free functions named test_Q_hostcall_..., this file's helpers, its own __main__ runner). Drive dwitbuk's two real adapter entry points, eyes_worker.claude(packet, schema, args) and eyes_worker.codex(packet, schema, args), with subprocess.run replaced by a recorder so no host process starts (give each adapter what it needs to finish or catch its SystemExit after the call is recorded). With a parent environment that sets AGENT_HOST to the other host, CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID, CHONGDAE_SESSION, AI_AGENT, CLAUDE_PROJECT_DIR and CODEX_VERSION, plus CLAUDE_CONFIG_DIR, CODEX_HOME, ANTHROPIC_API_KEY, OPENAI_API_KEY, CLAUDECODE and AGENT_CODEX_SANDBOX (dummy values), assert the env each child got: AGENT_HOST=claude-code for claude and codex for codex, AGENT_WORKER=1, none of the six parent identity/metadata keys, every config/auth/marker key kept with its value, CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 on the claude call, the codex argv's -s value equal to AGENT_CODEX_SANDBOX when set and read-only when unset; and os.environ equal before and after each call. The current hostcall.py predates this contract, so these tests fail now: show that with the real suite (python3 test_dwitbuk.py) or a focused python3 -c run, never python3 -m unittest. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-hostcall"
+  ],
+  "contract": {
+    "Q-hostcall": "contract/Q-hostcall-32cecdbc.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/hc-tests.response.json"
+}

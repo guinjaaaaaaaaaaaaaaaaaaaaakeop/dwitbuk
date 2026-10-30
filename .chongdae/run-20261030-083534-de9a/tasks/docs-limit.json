@@ -1,0 +1,51 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "docs-limit",
+    "role": "session",
+    "brief": "Documentation only (owner direction: document the exact cross-batch limit). README's Limits bullet on the late eyes' diff says: the diff is cut at 80000 characters and says so (diff_truncated), and git is asked for no more once that is passed; without a base, an unresolved merge conflict appears as git prints it (a combined diff --cc section, or the line '* Unmerged path PATH' for a modify/delete conflict); and across pathspec batches a combined section can come after other paths' sections, where one git call would put it first — nothing is lost or repeated. Checked by its diff and git diff --check, not by the suite.",
+    "closes": [],
+    "needs": [],
+    "checks": [],
+    "tests": [],
+    "gate": null,
+    "scope": [
+      "README.md"
+    ]
+  },
+  "seq": 30,
+  "added": "2026-10-30T11:15:26+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so"
+  ],
+  "checks": [],
+  "touched": [
+    "README.md"
+  ],
+  "performed_by": {
+    "provider": "session",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "edit ./README.md"
+      ],
+      "commands-run": 1,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T11:15:26+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T11:15:45+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

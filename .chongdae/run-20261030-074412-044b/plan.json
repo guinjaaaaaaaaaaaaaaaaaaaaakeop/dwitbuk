@@ -1,0 +1,11 @@
+{
+  "artifact-type": "chongdae/plan@1",
+  "written_by": "chongdae 1.24.0",
+  "goal": "Fix record-path overmatching in dwitbuk: record_paths returns bare hunsu and its startswith users hide hunsu.py, hunsu_helper.py and hunsu-notes.md; replace prefix semantics at every record-matching site with exact-file / directory-boundary matching (lock-declared entries included), keep real environment records excluded, sibling directory prefixes as source, and mangsang model records' late-review/source-freshness handling unchanged",
+  "kind": "session",
+  "tasks": [],
+  "providers": {
+    "session": "session"
+  },
+  "from": ".maint-evidence/record-paths-contract.md"
+}

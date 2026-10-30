@@ -1,0 +1,347 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rs-build",
+    "role": "implementer",
+    "brief": "Implement the strict-declaration clarification in dwitbuk.py and hooks/stop_eyes.py only. is_record: a trailing-slash entry is a directory (itself, with or without /, and everything under it); a bare entry is that exact file path only — never F/ or anything under it — decided from the declaration alone, with no look at the disk. Apply it at every record-matching site so they agree: documents_or_records; verify_packet's touched and excluded filters, with each touched and excluded path given to git as a literal pathspec (:(literal)PATH); source_state, where a directory it examines (the non-git walk, and untracked or ignored directory entries from git status) is tested with its trailing /; the eyes request, whose left_out keeps entries as declared (directories with /) plus the packet directory as '<rel>/', whose diff is composed from the candidate paths git diff --name-only reports against the same base, judged by is_record against left_out, with only the kept paths diffed as literal pathspecs and an empty diff when none remain (never an unrestricted git diff; :(exclude,literal) and :(exclude,glob) both hide files under a directory named like a bare entry), and whose new_files filter uses the same rule; and the stop hook's dirty filter. In the fixtures hunsu.json itself is a directory, so reading hunsu.json / hunsu.lock.json / hunsu.local.json as settings must treat a directory there as absent rather than crash. Keep mangsang/ late-review handling, same-prefix and wildcard literal cases, and non-record prefixes as they are. test_dwitbuk.py is the contract and protected: do not edit it, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+    "closes": [
+      "Q-strict",
+      "Q-strict-sites",
+      "Q-strict-keep"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py",
+      "hooks/stop_eyes.py"
+    ]
+  },
+  "seq": 5,
+  "added": "2026-10-30T08:46:23+00:00",
+  "touched_by_provider": [
+    "dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "update ./dwitbuk.py"
+      ],
+      "commands-run": 8,
+      "commands-failed": 0
+    }
+  },
+  "attempts": [
+    {
+      "status": "blocked",
+      "summary": "Implemented strict declaration matching in dwitbuk.py. All tests pass except one disputed late-eyes fixture/base assertion. Protected files remain unchanged.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 1
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        }
+      ],
+      "decisions": [],
+      "non-claims": [
+        "The full suite does not pass.",
+        "hooks/stop_eyes.py needs no direct change: its existing filter uses the corrected shared matcher."
+      ],
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_real_git_output",
+          "contract_quote": "The diff is composed from the candidate file paths git reports as changed against the same base",
+          "why": "The fixture's first review starts at the lock commit, before child.py files existed. late_packet supplies no --since override, so eyes uses that review's since. Git correctly reports both children as new files, but the test requires '-hchild = 1' and '-cchild = 1', which require the later directory commit as base. The fixture should explicitly select dirs_base for those assertions; changing production base selection would exceed this slice."
+        }
+      ],
+      "worker": {
+        "host": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium"
+      },
+      "retried": {
+        "by": "chongdae",
+        "auto": "tests disputed; rs-tests-fix reopened to amend test_dwitbuk.py",
+        "at": "2026-10-30T08:49:26+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "trace": {
+        "changed": [
+          "update ./dwitbuk.py",
+          "update ./hooks/stop_eyes.py"
+        ],
+        "commands-run": 15,
+        "commands-failed": 3
+      },
+      "answered": {
+        "at": "2026-10-30T08:49:26+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    },
+    {
+      "status": "done",
+      "summary": "Retained the prior strict-declaration implementation; no additional edits were needed. The full suite passes, including the corrected real-git late-eyes test.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 0
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        },
+        {
+          "check": "shasum -a 256 test_dwitbuk.py",
+          "exit": 0
+        }
+      ],
+      "decisions": [],
+      "non-claims": [
+        "No files were edited in this attempt. The protected test file's SHA-256 was identical before and after verification.",
+        "hooks/stop_eyes.py needs no direct change because its existing filter uses the corrected shared matcher."
+      ],
+      "disputed-tests": [],
+      "worker": {
+        "host": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium"
+      },
+      "retried": {
+        "by": "chongdae",
+        "auto": "the verifier rejected: 1 finding(s)",
+        "at": "2026-10-30T08:54:17+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "trace": {
+        "changed": [],
+        "commands-run": 8,
+        "commands-failed": 0
+      },
+      "review": {
+        "artifact-type": "dwitbuk/review@1",
+        "verdict": "reject",
+        "findings": [
+          {
+            "kind": "anomaly",
+            "where": "dwitbuk.py:997-999 (cmd_eyes request diff)",
+            "record_quote": "",
+            "tree_quote": "`names = [n for n in (git(target, \"diff\", \"--name-only\", \"-z\", *diff_base, \"--\", \".\") or \"\").split(\"\\0\") if n]` / `kept = [\":(literal)\" + n for n in names if not is_record(n, left_out)]` / `diff = (git(target, \"diff\", *diff_base, \"--\", *kept) or \"\") if kept else \"\"`",
+            "why": "`git diff --name-only` prints paths relative to the repository root, but `:(literal)` pathspecs are resolved relative to cwd (`target`). When the target is a subdirectory of a larger repository (a case dwitbuk handles elsewhere: source_state strips `rev-parse --show-prefix`, and verify_packet uses `lead`), every kept name (`sub/a.py`) becomes the pathspec `sub/sub/a.py`, which matches nothing, so the late-eyes diff comes back empty. Because the names still carry the prefix, `is_record` against root-relative `left_out` entries such as `hunsu.json` or `reviews/` also never matches them. The old code (`-- . :(exclude,literal)...`) was cwd-relative, so this slice introduced the regression. A fix is either `--relative` on the name listing or `:(top,literal)` pathspecs with the prefix stripped before `is_record`."
+          }
+        ],
+        "worker": {
+          "host": "claude-code",
+          "model": "claude-opus-5-5",
+          "turns": 6,
+          "cost_usd": 0.175821
+        }
+      },
+      "rejected": {
+        "by": "verifier",
+        "why": "1 finding(s)"
+      },
+      "reviewed_tree": {
+        "dwitbuk.py": "a09d0e46b58de118aed7f9b42d2acc9098efe2a3",
+        "test_dwitbuk.py": "7856fc57b92affb00cb85f3d127df12dc5bbbc9a"
+      },
+      "answered": {
+        "at": "2026-10-30T08:53:10+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "verdict-given": {
+        "at": "2026-10-30T08:54:17+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "checks-passed": {
+        "ran": [
+          {
+            "command": "python3 test_dwitbuk.py",
+            "exit": 0,
+            "tail": [
+              "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+              "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+              "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+              "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+              "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+              "all passed"
+            ],
+            "at": "2026-10-30T08:53:48+00:00",
+            "chongdae": "chongdae 1.24.0"
+          }
+        ],
+        "at": "2026-10-30T08:53:49+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "rebaselined": [
+    {
+      "tests": [
+        "test_dwitbuk.py"
+      ],
+      "at": "2026-10-30T08:52:01+00:00",
+      "chongdae": "chongdae 1.24.0"
+    }
+  ],
+  "non-claims": [
+    "(provider) Only dwitbuk.py was edited in this attempt; the protected test file’s hash remained unchanged.",
+    "(provider) hooks/stop_eyes.py needs no direct edit because it uses the corrected shared matcher."
+  ],
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 3,
+    "cost_usd": 0.11193220000000001,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "response": {
+    "status": "done",
+    "summary": "Retained the strict-declaration implementation and fixed late-eyes candidate paths for targets inside larger repositories using --relative. The full suite passes.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      },
+      {
+        "check": "shasum -a 256 test_dwitbuk.py",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Only dwitbuk.py was edited in this attempt; the protected test file’s hash remained unchanged.",
+      "hooks/stop_eyes.py needs no direct edit because it uses the corrected shared matcher."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T08:55:42+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T08:56:20+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T08:56:21+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 3,
+      "cost_usd": 0.11193220000000001
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T08:56:33+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "dwitbuk.py": "9561fcb7b84f114a150794a70e413edaef747b3f",
+    "test_dwitbuk.py": "7856fc57b92affb00cb85f3d127df12dc5bbbc9a"
+  },
+  "seen-non-claims": {
+    "by": "verifier of rs-build",
+    "texts": [
+      "(provider) Only dwitbuk.py was edited in this attempt; the protected test file’s hash remained unchanged.",
+      "(provider) hooks/stop_eyes.py needs no direct edit because it uses the corrected shared matcher."
+    ],
+    "at": "2026-10-30T08:56:33+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T08:56:34+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

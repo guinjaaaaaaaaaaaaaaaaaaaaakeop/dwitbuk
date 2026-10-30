@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "cc-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write tests for Q-conflict into test_dwitbuk.py (free functions named test_Q_conflict_..., this file's helpers, its own __main__ runner) on real temporary git conflict fixtures (two branches changing c.py, git merge leaving UU c.py, plus a modified d.py): (1) eyes request with no --since and no prior review: the packet's diff holds c.py's diff --cc section exactly once with both sides' conflicting text and d.py's section, and equals what one plain git diff (no base, the pinned plain form) gives over those paths; also with dwitbuk.PATHSPEC_BATCH_BYTES lowered so batch boundaries fall around c.py, each section still once; (2) a conflicted path that is a declared bare record (lock) is left out while d.py stays; (3) no silent drop: with dwitbuk.git wrapped so that a real diff call's output also carries a section the filter cannot attribute to a candidate (for example a trailing 'Submodule x 1111111..2222222:' block), eyes request fails with a clear message and writes no eyes-request.json in --out, and verify_packet's excluded_diff path fails rather than returning partial text. Assert actual output or explicit failure; do not copy the parser's logic into the tests. (1) and (3) fail on the current tree; show that with the real suite or a focused python3 -c run, never python3 -m unittest. No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-conflict"
+  ],
+  "contract": {
+    "Q-conflict": "contract/Q-conflict-62298de8.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/cc-tests.response.json"
+}

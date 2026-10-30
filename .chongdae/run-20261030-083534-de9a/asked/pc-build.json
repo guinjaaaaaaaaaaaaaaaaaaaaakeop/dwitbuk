@@ -1,0 +1,29 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "pc-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix Q-git-config and Q-conflict in dwitbuk.py's path_diff only. (a) The git diff calls whose output path_diff parses ask for plain, repository-relative, per-file text whatever the user's configuration says: no colour, no relative headers, gitlinks in the short form, no external diff driver, the a/ b/ prefixes already pinned (e.g. --no-color --no-relative --submodule=short --no-ext-diff). (b) An unresolved path's 'diff --cc PATH' section (no a/ b/ prefix; the path may be C-quoted) is that path's own section: kept once when the path is kept — git lists an unmerged path once per stage, so a repeated candidate must not repeat its section across batches — and left out when the path is a declared record. (c) No silent drop: text before the first diff --git/diff --cc header of a call's output, or under a header starting 'diff ' of another kind or with an unreadable path, makes the eyes request and verify_packet's excluded_diff fail with a clear error before any packet is written (a SystemExit with a message is fine); a readable section whose path is not a kept candidate is still left out as Q-exact-sections says, and text inside a readable section is not validated line by line. Keep everything else as it is. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-git-config",
+    "Q-conflict"
+  ],
+  "contract": {
+    "Q-git-config": "contract/Q-git-config-01678b8b.md",
+    "Q-conflict": "contract/Q-conflict-5f4b4b47.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/pc-build.response.json"
+}

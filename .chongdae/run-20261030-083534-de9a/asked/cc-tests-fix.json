@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "cc-tests-fix",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Amend two tests cc-tests wrote, before any build, to Q-conflict item 2 as clarified at the end of the contract: test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed and test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text append the foreign 'Submodule x 1111111..2222222:' block after the last section, where it becomes part of that readable section's text; the clarified contract does not validate text inside a readable section. Inject instead the forms it names: the block before the first diff --git header of a real diff call's output (what diff.submodule=log printed for a gitlink first in a batch), and, as a second case, a header starting 'diff ' of another kind (for example 'diff --unknown x'). Keep the assertions (a clear message, exit non-zero, no eyes-request.json written; excluded_diff fails rather than returning text) and change nothing else. Both must still fail on the current tree; show that with a focused python3 -c run, never python3 -m unittest. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-conflict"
+  ],
+  "contract": {
+    "Q-conflict": "contract/Q-conflict-5f4b4b47.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/cc-tests-fix.response.json"
+}

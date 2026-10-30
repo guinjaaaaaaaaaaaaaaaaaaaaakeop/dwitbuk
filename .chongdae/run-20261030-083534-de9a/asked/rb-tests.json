@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "rb-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Amend and add tests in test_dwitbuk.py for Q-bounded (the latest root direction; read that section and the two paragraphs it supersedes). (a) In test_Q_raw_text_a_conflict_sorting_after_a_modified_file_keeps_one_calls_order_with_diff_cc_first, remove only the exact cross-batch global order requirement: keep asserting, at every batch limit where the text is not cut, that each kept section (the diff --cc of the UU path and the modified file's) is present exactly once with all its source content. (b) Point the tests that observe or inject path_diff's content diff calls (unattributable_git, recorded_git and their users) at the new seam dwitbuk.git_patch(target, *args) or at subprocess invocation, keeping their assertions. (c) Add a focused cap regression on a real repository: enough changed source files, with PATHSPEC_BATCH_BYTES lowered so they need many batches and their diffs pass the 80000-character cut early; instrument at subprocess invocation (wrap subprocess.run and count the git diff content calls) and assert that after the batch whose sections pass the cut no further git diff batch is invoked, diff_truncated is true, the diff begins with git's first path, and no section repeats. (d) Add a test that the generic dwitbuk.git keeps its previous newline semantics while dwitbuk.git_patch returns git's bytes untranslated, on a real CR-containing file. Keep the DU/UD, raw-CR, conflict, git-config and exact-section tests otherwise as they are; do not copy the parser's logic into tests. Show the new and amended tests failing on the current tree where they should (focused python3 -c runs; never python3 -m unittest). No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-bounded"
+  ],
+  "contract": {
+    "Q-bounded": "contract/Q-bounded-9f095b74.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/rb-tests.response.json"
+}

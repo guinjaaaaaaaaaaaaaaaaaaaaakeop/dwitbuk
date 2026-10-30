@@ -1,0 +1,66 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "gl-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix Q-gitlink in dwitbuk.py's source_state only: in the tracked traversal (the git ls-files loop), an entry git itself reports as a gitlink (index mode 160000, e.g. from git ls-files --stage) is marked with a trailing / before it is tested as a record — the same marker the status loop already gives untracked and ignored directories — so a nested repository at a bare exact-file declaration such as custom-record.json is source, while one under a directory declaration (custom-dir/) and a regular file at a bare declaration stay excluded. The type comes from git's report, not from is_record looking at the disk; is_record and every other site stay as they are, and mangsang/ still counts for freshness. No other change. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-gitlink"
+  ],
+  "contract": {
+    "Q-gitlink": "contract/Q-gitlink-d2a6b0dd.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/gl-build.response.json",
+  "attempts": [
+    {
+      "status": "blocked",
+      "summary": "Implemented the bounded source_state gitlink fix. The suite has one failure caused by a repeated identical write in a protected test.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 1
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        }
+      ],
+      "decisions": [],
+      "non-claims": [
+        "The full suite does not pass. Protected tests were not edited; implementation changes are confined to source_state in dwitbuk.py."
+      ],
+      "retried": {
+        "by": "chongdae",
+        "auto": "tests disputed; gl-tests reopened to amend test_dwitbuk.py",
+        "at": "2026-10-30T09:47:38+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "review": null,
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path",
+          "contract_quote": "No other behaviour changes",
+          "why": "The second gitlink_stales call writes the same child.py contents already present when the fresh answer was bound, yet expects source changed. Passing this assertion would require changing the existing content-fingerprint behavior to invalidate an identical-content rewrite."
+        }
+      ],
+      "reopened": null
+    }
+  ],
+  "touched": [
+    "dwitbuk.py",
+    "test_dwitbuk.py"
+  ]
+}

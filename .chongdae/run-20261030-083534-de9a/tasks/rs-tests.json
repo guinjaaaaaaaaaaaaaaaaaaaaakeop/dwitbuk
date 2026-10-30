@@ -1,0 +1,136 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rs-tests",
+    "role": "nitpick",
+    "brief": "Write the tests for the owner's strict-declaration clarification into test_dwitbuk.py (this project's free-function suite: module-level test_Q_strict_... functions, its Project harness and write/run/git helpers, collected by the file's own __main__ runner). A bare record entry is an exact FILE path; a trailing-slash entry is a directory; nothing is inferred from the disk. Cover: is_record (hunsu.json/child.py and hunsu.json/ are not records of the bare hunsu.json; custom-record.json/child.py of a lock-declared bare custom-record.json; directory entries unchanged). On real git output, in a project where hunsu.json and a lock-declared custom-record.json were each committed as files, then replaced by directories holding a committed child.py that is then changed: the eyes request's diff holds both child.py changes and an untracked file inside such a directory is in new_files; verify_packet keeps them in touched with their diff; eyes consume refuses with 'source changed' after child.py changes; the stop hook's touched and packet diff hold them; documents_or_records says they are not records; a project without git walks into such a directory. Also: diff_leaves_out keeps declared entries as declared (directories with trailing /) and the packet directory as '<rel>/'; when only records changed the eyes request's diff is empty; verify_packet diffs a touched x[1].json literally (a changed x1.json is not in its diff). Amend, do not delete, the earlier assertions this clarification supersedes (bare alpha.json covering alpha.json/inner.txt and alpha.json/, bare mangsang covering mangsang/relations/R-1.json, and diff_leaves_out sets written without trailing slashes, including test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_keeps_only_quoted_contradictions). Keep mangsang/ late-review behaviour and same-prefix / wildcard literal cases as they are. Red evidence is the real suite: python3 test_dwitbuk.py, or a focused python3 -c 'import test_dwitbuk as t; t.test_Q_strict_x()'; python3 -m unittest collects nothing here. No mutation campaign is needed. Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-strict",
+      "Q-strict-sites",
+      "Q-strict-keep"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 3,
+  "added": "2026-10-30T08:37:40+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Behaviour that has not changed (directory entries, same-prefix neighbours, literal wildcards, empty entries) cannot fail on its own today. It is asserted inside tests that also check a new part of the contract, so each test still fails now, rather than as one test per unchanged sentence.",
+    "(provider) 'Pathspec magic alone is not a correct exclusion' and 'never an unrestricted git diff': no test watches the git argv. They are decided only by output: a changed hunsu.json/child.py must appear in the diff, and an eyes request where only records changed must have diff == ''.",
+    "(provider) 'Each touched path and each excluded path is given to git as a literal pathspec (:(literal)PATH)': this is decided only by the x[1].json / x1.json output test. A different way of escaping that selects only x[1].json would also pass.",
+    "(provider) 'No stat and no other look at the disk': the test runs is_record from a working directory where hunsu.json and alpha.json are directories. It does not patch os.stat, so a lookup that ignores its result would go unseen.",
+    "(provider) The stop-hook test enables stop-eyes through the lock's settings and hunsu.local.json, because hunsu.json is a directory in that fixture. It assumes the hook reads at least one of those sources, as README.md says it does.",
+    "(provider) The untracked/ignored-directory test assumes source_state examines git-ignored directory entries, as Q-strict-sites 3 says ('an untracked or ignored directory entry from git status').",
+    "(provider) 'python3 test_dwitbuk.py passes as a whole on Python 3.11 or later': tests were run only on Python 3.12, and the pre-existing failure of test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError) is outside this contract and was left alone.",
+    "(provider) 'No version bump; README.md, the manifests, eyes_worker.py and hostcall.py are not part of this build': no test checks this."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I updated test_dwitbuk.py and changed no other file. I added 14 module-level `test_Q_strict_*` functions, plus `STRICT_LOCK` and a `strict_project` fixture. The fixture commits hunsu.json and a lock-declared bare custom-record.json as files, then replaces each with a directory holding a committed child.py.\n\nI also amended the four tests whose assertions this clarification supersedes; none was deleted:\n- `test_Q_match_an_exact_entry_matches_that_path_and_paths_under_it_only` is renamed to `test_Q_match_an_exact_entry_matches_that_path_only`. alpha.json/ and alpha.json/inner.txt under the bare alpha.json, and mangsang/relations/R-1.json under the bare mangsang, are now asserted NOT to be records.\n- The `diff_leaves_out` sets in `test_Q_sites_eyes_request_diff_and_new_files_leave_out_only_exact_records` and `test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read` now use trailing slashes, and the packet folder appears as `.dwitbuk/packet/`.\n- `test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_keeps_only_quoted_contradictions` now expects `.chongdae/` and never a bare `.chongdae`.\n\nThe mangsang/ late-review cases and the same-prefix / wildcard cases are unchanged.\n\nRed evidence: I ran `python3 test_dwitbuk.py` on Python 3.12. It reports 18 failed. Seventeen are the new and amended tests, and each fails because the feature is missing:\n- the bare entry still covers paths under it in is_record and documents_or_records;\n- verify_packet drops the children from touched;\n- the eyes request's diff is empty for the changed child.py on real git output;\n- consume accepts after child.py changes, in git, in untracked/ignored and in non-git projects;\n- the verify diff for touched x[1].json also shows x1.json;\n- diff_leaves_out has no trailing slashes;\n- the stop hook raises IsADirectoryError reading hunsu.json once it is a directory.\n\nThe 18th failure, `test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else` (JSONDecodeError), was already failing before I made any change. It is not mine and it is not part of this contract. Nothing committed.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-strict",
+        "tests": [
+          "test_Q_strict_a_bare_entry_is_an_exact_file_and_a_trailing_slash_entry_a_directory",
+          "test_Q_strict_is_record_never_looks_at_the_disk",
+          "test_Q_match_an_exact_entry_matches_that_path_only"
+        ]
+      },
+      {
+        "section": "Q-strict-sites",
+        "tests": [
+          "test_Q_strict_sites_documents_or_records_a_replaced_file_holds_source",
+          "test_Q_strict_sites_verify_packet_keeps_children_of_a_replaced_file_in_touched_with_their_diff",
+          "test_Q_strict_sites_verify_packet_gives_touched_and_excluded_to_git_literally",
+          "test_Q_strict_sites_source_state_changes_with_children_of_a_replaced_file",
+          "test_Q_strict_sites_source_state_tests_an_untracked_or_ignored_directory_as_a_directory",
+          "test_Q_strict_sites_source_state_in_a_non_git_project_walks_into_a_replaced_file",
+          "test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_real_git_output",
+          "test_Q_strict_sites_eyes_request_leaves_out_entries_as_declared_and_only_records_make_an_empty_diff",
+          "test_Q_strict_sites_stop_hook_hands_children_of_a_replaced_file_to_the_eyes",
+          "test_Q_sites_eyes_request_diff_and_new_files_leave_out_only_exact_records",
+          "test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_keeps_only_quoted_contradictions"
+        ]
+      },
+      {
+        "section": "Q-strict-keep",
+        "tests": [
+          "test_Q_strict_keep_mangsang_stays_in_late_eyes_and_a_record_for_verify",
+          "test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_stay_in",
+          "test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Behaviour that has not changed (directory entries, same-prefix neighbours, literal wildcards, empty entries) cannot fail on its own today. It is asserted inside tests that also check a new part of the contract, so each test still fails now, rather than as one test per unchanged sentence.",
+      "'Pathspec magic alone is not a correct exclusion' and 'never an unrestricted git diff': no test watches the git argv. They are decided only by output: a changed hunsu.json/child.py must appear in the diff, and an eyes request where only records changed must have diff == ''.",
+      "'Each touched path and each excluded path is given to git as a literal pathspec (:(literal)PATH)': this is decided only by the x[1].json / x1.json output test. A different way of escaping that selects only x[1].json would also pass.",
+      "'No stat and no other look at the disk': the test runs is_record from a working directory where hunsu.json and alpha.json are directories. It does not patch os.stat, so a lookup that ignores its result would go unseen.",
+      "The stop-hook test enables stop-eyes through the lock's settings and hunsu.local.json, because hunsu.json is a directory in that fixture. It assumes the hook reads at least one of those sources, as README.md says it does.",
+      "The untracked/ignored-directory test assumes source_state examines git-ignored directory entries, as Q-strict-sites 3 says ('an untracked or ignored directory entry from git status').",
+      "'python3 test_dwitbuk.py passes as a whole on Python 3.11 or later': tests were run only on Python 3.12, and the pre-existing failure of test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError) is outside this contract and was left alone.",
+      "'No version bump; README.md, the manifests, eyes_worker.py and hostcall.py are not part of this build': no test checks this."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 10,
+      "cost_usd": 0.9398824
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T08:43:18+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 10,
+    "cost_usd": 0.9398824,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 8,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T08:43:18+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

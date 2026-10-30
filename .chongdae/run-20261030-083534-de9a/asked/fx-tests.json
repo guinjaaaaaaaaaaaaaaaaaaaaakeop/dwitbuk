@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "fx-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write tests for Q-review-fixes into test_dwitbuk.py (free functions named test_Q_review_fixes_..., this file's helpers, its own __main__ runner), on real git output where git is involved. (1) Renames in the eyes request: with --since, from a review's base and for a subdirectory target — git mv src.py reviews/src.py shows src.py's deletion and nothing of reviews/src.py; an ordinary rename shows the old path's deletion and the new file; a record moved to a source path shows the new file without the record's deletion. (2) Batching: with dwitbuk.PATHSPEC_BATCH_BYTES lowered (set it on the module, restore it after), an eyes request over many changed source files diffs every one of them, in git's order, and every git diff call it makes keeps its pathspec arguments within the limit (record the calls by wrapping dwitbuk.git); the diff equals what one unbatched git diff of those paths gives. (3) verify_packet's excluded_diff for an excluded bare hunsu.json, after hunsu.json became a directory holding a tracked child.py, holds nothing of child.py (child.py stays in diff when touched); an excluded entry ending in / still shows its files. (4) An untracked nested repository (git init inside, at a declared bare file's name and at an ordinary name) does not crash the eyes request and is not in new_files. (5) Q-hostcall: for both eyes_worker adapters, the child's env equals the parent's minus exactly the six identity/metadata keys, with AGENT_HOST/AGENT_WORKER set (and CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 for claude), including HOME, LANG, an XDG_*, an SSH_*, a CLAUDE_CODE_* and an arbitrary marker key. (1), (2), (3) and (4) fail on the current tree; (5) passes on the vendored hostcall.py, so show it failing against a copy outside the repository whose worker_env passes only an allow-list. Red evidence is the real suite or focused python3 -c runs, never python3 -m unittest; no mutation campaign. Change no repository file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-review-fixes"
+  ],
+  "contract": {
+    "Q-review-fixes": "contract/Q-review-fixes-5c003e40.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/fx-tests.response.json"
+}

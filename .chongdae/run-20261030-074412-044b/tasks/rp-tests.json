@@ -1,0 +1,145 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rp-tests",
+    "role": "nitpick",
+    "brief": "Write the contract's tests into test_dwitbuk.py, this project's existing free-function suite: module-level functions named test_Q_<section>_..., using its Project harness and its write/run/git helpers, collected by the file's own __main__ runner. Red evidence is the real suite: python3 test_dwitbuk.py (a focused run: python3 -c 'import test_dwitbuk as t; t.test_Q_match_x()'); python3 -m unittest collects no tests from this file and decides nothing. Cover every acceptance fixture: is_record on hunsu.py, hunsu_helper.py, hunsu-notes.md against the five exact hunsu environment files; a lock-declared file record vs a same-prefix source (alpha.json vs alpha.jsonl); a declared directory and a true descendant vs a directory-prefix sibling (.alpha/ and .alpha/x.json vs .alpha-extra/y.py; mangsang/ vs mangsang-extra/); verify_packet keeping hunsu.py, hunsu_helper.py and hunsu-notes.md in touched with their change present in diff; documents_or_records; late eyes (eyes request diff, new_files and diff_leaves_out; source_state so that eyes consume refuses with 'source changed' after hunsu.py changes); the stop hook's touched; and Q-keep: a change under mangsang/ after an eyes request still makes consume refuse with 'source changed', and mangsang/ stays in the late-eyes diff and new_files. Amend test_the_eyes_leave_out_the_records_the_lock_declares to the Q-hunsu record_paths result (no bare hunsu). Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-match",
+      "Q-hunsu",
+      "Q-sites",
+      "Q-keep"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 1,
+  "added": "2026-10-30T07:45:05+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Q-sites \"no record decision is left to `startswith` or to a glob\" — no test reads the source; only the outcomes (lookalikes kept, a literal `x[1].json` entry not excluding `x1.json`) are checked, so a different non-prefix rule that gives the same answers would pass.",
+    "(provider) Q-keep \"String prefixes that are not about record paths stay as they are\" (packet containment, `--show-prefix` stripping, `run-` names, `eyes*-response.json`, `(provider) `/`settings.` forms, `.local.json`, `../`) — covered only by the existing suite's tests of those behaviours; no new test for each.",
+    "(provider) Q-keep \"`hostcall.py`, `eyes_worker.py`, the manifests and `README.md` are not part of this change; no version bump\" — not testable from the suite; a diff review decides it.",
+    "(provider) Q-keep \"`python3 test_dwitbuk.py` passes as a whole, on Python 3.11 or later\" — the runner is the check; test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else was already failing before these tests (JSONDecodeError) and is not part of this slice; it was run here only on Python 3.12.",
+    "(provider) Q-keep tests also assert the exact Q-hunsu `diff_leaves_out` and a hunsu.py staleness check, which is why they fail now; their mangsang, run-record, `reviews/` and packet-directory parts are unchanged behaviour and pass today."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added 14 `test_Q_*` free functions to `test_dwitbuk.py`. They use its `Project` harness and its `write`/`run`/`git` helpers, and the file's own `__main__` runner collects them. I also amended `test_the_eyes_leave_out_the_records_the_lock_declares` so it expects the Q-hunsu `record_paths` tuples, with hunsu's five files listed by exact name and no bare `hunsu`.\n\nRunning `python3 test_dwitbuk.py` now gives 15 failures:\n- **13 of the new tests and the amended one fail because the feature is missing.** `is_record` doesn't exist yet, `record_paths` still returns `hunsu`, and lookalike or same-prefix paths are still dropped. Examples: `hunsu.py`, `alpha.jsonl` and `reviews2/a.py` are cut from `touched`, from the late-eyes diff and from the source fingerprint, and `diff_leaves_out` holds `hunsu*`.\n- **One failure was there before my changes:** `test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else` dies with a JSONDecodeError. Q-keep's \"`python3 test_dwitbuk.py` passes as a whole\" also depends on that test.\n\nThe new tests cover:\n- `is_record`: path normalisation, directory and exact entries, every non-match the contract lists, and empty entries or paths.\n- `record_paths`, with and without a lock.\n- `documents_or_records`.\n- `verify_packet`: what stays in `touched` and its diff, plus `excluded.record-paths`.\n- Late-eyes `eyes request`: what is in the diff and `new_files`, a literal (not glob) `x[1].json` entry, and the exact `diff_leaves_out`.\n- `source_state`: a change to a hunsu lookalike makes consume refuse with \"source changed\", while changes to hunsu.json, hunsu.lock.json or `reviews/` do not. A non-git walk prunes only record directories.\n- The stop hook's `touched`, captured as the hook passes it to `verify_packet`, and its `diff_leaves_out`.\n- Q-keep: mangsang freshness and reading, run-record freshness, a commit of `reviews/` alone, and the packet directory.\n\nI changed no file other than `test_dwitbuk.py` and committed nothing.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-match",
+        "tests": [
+          "test_Q_match_a_directory_entry_matches_itself_and_what_is_under_it_and_nothing_beside_it",
+          "test_Q_match_an_exact_entry_matches_that_path_and_paths_under_it_only",
+          "test_Q_match_a_hunsu_lookalike_is_never_a_record_of_any_hunsu_entry",
+          "test_Q_match_an_empty_entry_or_path_matches_nothing_and_entries_may_be_any_iterable"
+        ]
+      },
+      {
+        "section": "Q-hunsu",
+        "tests": [
+          "test_Q_hunsu_record_paths_names_hunsus_files_exactly_with_and_without_a_lock",
+          "test_the_eyes_leave_out_the_records_the_lock_declares"
+        ]
+      },
+      {
+        "section": "Q-sites",
+        "tests": [
+          "test_Q_sites_documents_or_records_decides_records_by_the_one_rule",
+          "test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff",
+          "test_Q_sites_eyes_request_diff_and_new_files_leave_out_only_exact_records",
+          "test_Q_sites_source_state_changes_with_a_hunsu_lookalike_and_not_with_hunsus_own_files",
+          "test_Q_sites_source_state_in_a_non_git_project_prunes_only_record_directories",
+          "test_Q_sites_stop_hook_hands_a_dirty_hunsu_lookalike_to_the_eyes"
+        ]
+      },
+      {
+        "section": "Q-keep",
+        "tests": [
+          "test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_read",
+          "test_Q_keep_run_records_count_reviews_commits_do_not_and_the_packet_directory_is_left_out"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Q-sites \"no record decision is left to `startswith` or to a glob\" — no test reads the source; only the outcomes (lookalikes kept, a literal `x[1].json` entry not excluding `x1.json`) are checked, so a different non-prefix rule that gives the same answers would pass.",
+      "Q-keep \"String prefixes that are not about record paths stay as they are\" (packet containment, `--show-prefix` stripping, `run-` names, `eyes*-response.json`, `(provider) `/`settings.` forms, `.local.json`, `../`) — covered only by the existing suite's tests of those behaviours; no new test for each.",
+      "Q-keep \"`hostcall.py`, `eyes_worker.py`, the manifests and `README.md` are not part of this change; no version bump\" — not testable from the suite; a diff review decides it.",
+      "Q-keep \"`python3 test_dwitbuk.py` passes as a whole, on Python 3.11 or later\" — the runner is the check; test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else was already failing before these tests (JSONDecodeError) and is not part of this slice; it was run here only on Python 3.12.",
+      "Q-keep tests also assert the exact Q-hunsu `diff_leaves_out` and a hunsu.py staleness check, which is why they fail now; their mangsang, run-record, `reviews/` and packet-directory parts are unchanged behaviour and pass today."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 12,
+      "cost_usd": 0.7655766
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T07:49:28+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 12,
+    "cost_usd": 0.7655766,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 9,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T07:49:28+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "seen-non-claims": {
+    "by": "verifier of rp-build",
+    "texts": [
+      "(provider) Q-sites \"no record decision is left to `startswith` or to a glob\" — no test reads the source; only the outcomes (lookalikes kept, a literal `x[1].json` entry not excluding `x1.json`) are checked, so a different non-prefix rule that gives the same answers would pass.",
+      "(provider) Q-keep \"String prefixes that are not about record paths stay as they are\" (packet containment, `--show-prefix` stripping, `run-` names, `eyes*-response.json`, `(provider) `/`settings.` forms, `.local.json`, `../`) — covered only by the existing suite's tests of those behaviours; no new test for each.",
+      "(provider) Q-keep \"`hostcall.py`, `eyes_worker.py`, the manifests and `README.md` are not part of this change; no version bump\" — not testable from the suite; a diff review decides it.",
+      "(provider) Q-keep \"`python3 test_dwitbuk.py` passes as a whole, on Python 3.11 or later\" — the runner is the check; test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else was already failing before these tests (JSONDecodeError) and is not part of this slice; it was run here only on Python 3.12.",
+      "(provider) Q-keep tests also assert the exact Q-hunsu `diff_leaves_out` and a hunsu.py staleness check, which is why they fail now; their mangsang, run-record, `reviews/` and packet-directory parts are unchanged behaviour and pass today."
+    ],
+    "at": "2026-10-30T07:57:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

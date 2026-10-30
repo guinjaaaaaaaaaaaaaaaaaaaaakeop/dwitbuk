@@ -1,0 +1,245 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "fx-build",
+    "role": "implementer",
+    "brief": "Fix the independent review's findings in dwitbuk.py only (contract section Q-review-fixes): (1) the eyes request's candidate listing and its diff use --no-renames, so each side of a rename is judged by is_record on its own; (2) the kept literal pathspecs go to git in batches whose pathspec arguments stay within a new module-level int dwitbuk.PATHSPEC_BATCH_BYTES (default between 1024 and 262144), concatenated in git's order to the same text one call would give, possibly stopping once the diff passes its 80000-character cut with diff_truncated still true; (3) verify_packet's excluded_diff holds exactly what each excluded entry names under the strict rule — a bare entry only that file, never files under a directory that took its name — and an entry ending in / that directory's files; (4) an untracked entry git lists as a directory (an untracked nested repository) is never read as a file and is not in new_files. Keep everything Q-strict, Q-strict-sites and Q-strict-keep say. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+    "closes": [
+      "Q-review-fixes"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py"
+    ]
+  },
+  "seq": 12,
+  "added": "2026-10-30T09:35:23+00:00",
+  "touched_by_provider": [
+    "dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "update ./dwitbuk.py"
+      ],
+      "commands-run": 8,
+      "commands-failed": 0
+    }
+  },
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "Changed only dwitbuk.py: disabled rename pairing, bounded diff pathspec batches, enforced exact excluded-file matching, and skipped untracked directories. All tests pass.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 0
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        },
+        {
+          "check": "git diff --stat",
+          "exit": 0
+        }
+      ],
+      "decisions": [
+        {
+          "what": "A single pathspec exceeds the configured batch limit.",
+          "chosen": "Raise ValueError rather than exceed the limit.",
+          "alternatives": [
+            "Terminate with a CLI-specific error."
+          ]
+        }
+      ],
+      "non-claims": [
+        "The suite does not exercise the oversized-single-pathspec error.",
+        "The contract's explicitly deferred issues remain unchanged."
+      ],
+      "disputed-tests": [],
+      "worker": {
+        "host": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium"
+      },
+      "retried": {
+        "by": {
+          "agent": "claude-code claude-opus-5-5"
+        },
+        "at": "2026-10-30T09:39:00+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "trace": {
+        "changed": [
+          "update ./dwitbuk.py"
+        ],
+        "commands-run": 11,
+        "commands-failed": 0
+      },
+      "answered": {
+        "at": "2026-10-30T09:38:11+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "response": {
+    "status": "done",
+    "summary": "Updated only dwitbuk.py. Oversized pathspecs now run alone; excluded_diff uses candidate paths filtered through is_record and batched literal diffs. Preserved the prior rename and untracked-directory fixes. All tests passed.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      },
+      {
+        "check": "git diff --stat",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Replaced the prior attempt's rejected ValueError behavior and include/exclude pathspec filtering as explicitly required.",
+      "The contract's deferred issues remain unchanged."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T09:40:20+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "non-claims": [
+    "(provider) Replaced the prior attempt's rejected ValueError behavior and include/exclude pathspec filtering as explicitly required.",
+    "(provider) The contract's deferred issues remain unchanged."
+  ],
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T09:41:02+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T09:41:02+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 3,
+      "cost_usd": 0.1193962
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T09:41:23+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "dwitbuk.py": "df81aa8e7dd707f357321c6015bc5a3b2a60faf8"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 3,
+    "cost_usd": 0.1193962,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "seen-non-claims": {
+    "by": "verifier of fx-build",
+    "texts": [
+      "(provider) Replaced the prior attempt's rejected ValueError behavior and include/exclude pathspec filtering as explicitly required.",
+      "(provider) The contract's deferred issues remain unchanged."
+    ],
+    "at": "2026-10-30T09:41:23+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T09:41:23+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

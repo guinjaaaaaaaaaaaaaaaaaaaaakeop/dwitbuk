@@ -1,0 +1,51 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "final-review",
+    "role": "subagent",
+    "brief": "Independent read-only review of this run's committed result (907f9b7..aad18a6) by a fresh Claude sub-agent: it opens both contract documents, dwitbuk.py, hooks/stop_eyes.py, hostcall.py (compared with hacheong 7aa70c6 by git show, read-only), eyes_worker.py's adapters and the updated tests itself, runs the suite on Python 3.11, probes file-replaced-by-directory cases on real git output, and reports quoted findings; it changes no files. rs-build's final re-verification accept read only a Grep of dwitbuk.py; that verdict stays as recorded.",
+    "closes": [],
+    "needs": [],
+    "checks": [],
+    "tests": [],
+    "gate": null,
+    "scope": [
+      ".maint-evidence/run2/review"
+    ]
+  },
+  "seq": 10,
+  "added": "2026-10-30T09:11:20+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "final-review: done on the session's word by name (`run final-review`), with nothing of its own in the tree and no `did`",
+    "final-review: done by the session's sub-agent — chongdae saw the session and the tree, not the sub-agent; its model is the session's unless the session dispatched it with another"
+  ],
+  "checks": [],
+  "touched": [],
+  "performed_by": {
+    "provider": "subagent",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "write ./.maint-evidence/run2/review/final-review-report.md"
+      ],
+      "commands-run": 31,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T09:11:20+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T09:29:10+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

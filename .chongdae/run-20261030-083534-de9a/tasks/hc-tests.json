@@ -1,0 +1,119 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "hc-tests",
+    "role": "nitpick",
+    "brief": "Write the tests for Q-hostcall into test_dwitbuk.py (free functions named test_Q_hostcall_..., this file's helpers, its own __main__ runner). Drive dwitbuk's two real adapter entry points, eyes_worker.claude(packet, schema, args) and eyes_worker.codex(packet, schema, args), with subprocess.run replaced by a recorder so no host process starts (give each adapter what it needs to finish or catch its SystemExit after the call is recorded). With a parent environment that sets AGENT_HOST to the other host, CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID, CHONGDAE_SESSION, AI_AGENT, CLAUDE_PROJECT_DIR and CODEX_VERSION, plus CLAUDE_CONFIG_DIR, CODEX_HOME, ANTHROPIC_API_KEY, OPENAI_API_KEY, CLAUDECODE and AGENT_CODEX_SANDBOX (dummy values), assert the env each child got: AGENT_HOST=claude-code for claude and codex for codex, AGENT_WORKER=1, none of the six parent identity/metadata keys, every config/auth/marker key kept with its value, CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 on the claude call, the codex argv's -s value equal to AGENT_CODEX_SANDBOX when set and read-only when unset; and os.environ equal before and after each call. The current hostcall.py predates this contract, so these tests fail now: show that with the real suite (python3 test_dwitbuk.py) or a focused python3 -c run, never python3 -m unittest. Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-hostcall"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 7,
+  "added": "2026-10-30T09:05:29+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Not tested: \"`hostcall.py` becomes byte-identical to hacheong's reviewed `hostcall.py` at commit `7aa70c6` (SHA-256 `fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b`). Nothing else changes in it, and it imports no other plugin.\" The brief limits me to the adapter-behaviour tests, so nothing here pins the file's hash or its imports. A hash check or a review has to decide this sentence.",
+    "(provider) \"`python3 test_dwitbuk.py` passes as a whole on Python 3.11 or later\" is decided by the check itself, not by a named test, and only on the Python the check runs on. One test I did not write already fails at HEAD before any change of mine: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError). It is probably caused by this session's environment, which has AGENT_WORKER=1 and other host variables set; I did not confirm that. Unless that is fixed or the check runs in a clean environment, the whole-suite check can fail even after a correct build.",
+    "(provider) The sandbox tests and the os.environ before/after test also assert the full worker-env contract on the same call. This is so they decide something now: the bare -s values and the os.environ invariance already hold with the current hostcall.py.",
+    "(provider) The recorder records the env the child would get. If no env= is passed, that is os.environ at the moment of the call. A child env assembled some other way, such as a wrapper script or `env` in the argv, would not be seen. The tests also pick the host call by the argv[0] basename `claude` or `codex`."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added 9 Q-hostcall tests to test_dwitbuk.py as free functions named test_Q_hostcall_…. They use the file's own __main__ runner and a new `import argparse`. Two helpers drive the real eyes_worker.claude and eyes_worker.codex adapters with subprocess.run swapped for a recorder. The recorder answers exit 1, so no host process starts, and the SystemExit that follows the recorded call is caught. hostcall_parent builds a parent environment that claims to be the other host: it sets AGENT_HOST plus the six identity/metadata keys, the config/auth/marker keys, and an optional AGENT_CODEX_SANDBOX. hostcall_call lays that over os.environ (with AGENT_WORKER, CLAUDE_CODE_DISABLE_AUTO_MEMORY and AGENT_CODEX_SANDBOX taken out first) and snapshots os.environ before and after the call. Afterwards it restores both os.environ and subprocess.run. I ran `python3 test_dwitbuk.py` and it exits 1. All 9 new tests fail against the current hostcall.py for the contract's reasons: the child gets the parent's AGENT_HOST (e.g. 'codex' on the claude call) and the six parent identity keys. The tests themselves load and run without errors. One test I did not write also fails: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else, with a JSONDecodeError. It fails the same way with the HEAD version of the file, so my change did not cause it.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-hostcall",
+        "tests": [
+          "test_Q_hostcall_claude_child_names_claude_code_whatever_the_parent_host_and_is_a_worker",
+          "test_Q_hostcall_codex_child_names_codex_whatever_the_parent_host_and_is_a_worker",
+          "test_Q_hostcall_claude_child_carries_none_of_the_parents_identity_or_project_metadata",
+          "test_Q_hostcall_codex_child_carries_none_of_the_parents_identity_or_project_metadata",
+          "test_Q_hostcall_claude_child_keeps_config_auth_and_markers_and_turns_auto_memory_off",
+          "test_Q_hostcall_codex_child_keeps_config_auth_and_markers",
+          "test_Q_hostcall_codex_sandbox_is_the_parents_AGENT_CODEX_SANDBOX_when_set",
+          "test_Q_hostcall_codex_sandbox_is_read_only_when_the_parent_sets_none",
+          "test_Q_hostcall_parent_environ_is_the_same_after_each_call_as_before"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Not tested: \"`hostcall.py` becomes byte-identical to hacheong's reviewed `hostcall.py` at commit `7aa70c6` (SHA-256 `fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b`). Nothing else changes in it, and it imports no other plugin.\" The brief limits me to the adapter-behaviour tests, so nothing here pins the file's hash or its imports. A hash check or a review has to decide this sentence.",
+      "\"`python3 test_dwitbuk.py` passes as a whole on Python 3.11 or later\" is decided by the check itself, not by a named test, and only on the Python the check runs on. One test I did not write already fails at HEAD before any change of mine: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError). It is probably caused by this session's environment, which has AGENT_WORKER=1 and other host variables set; I did not confirm that. Unless that is fixed or the check runs in a clean environment, the whole-suite check can fail even after a correct build.",
+      "The sandbox tests and the os.environ before/after test also assert the full worker-env contract on the same call. This is so they decide something now: the bare -s values and the os.environ invariance already hold with the current hostcall.py.",
+      "The recorder records the env the child would get. If no env= is passed, that is os.environ at the moment of the call. A child env assembled some other way, such as a wrapper script or `env` in the argv, would not be seen. The tests also pick the host call by the argv[0] basename `claude` or `codex`."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 8,
+      "cost_usd": 0.34369039999999995
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T09:08:34+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 8,
+    "cost_usd": 0.34369039999999995,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 6,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T09:08:35+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "seen-non-claims": {
+    "by": "verifier of hc-sync",
+    "texts": [
+      "(provider) Not tested: \"`hostcall.py` becomes byte-identical to hacheong's reviewed `hostcall.py` at commit `7aa70c6` (SHA-256 `fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b`). Nothing else changes in it, and it imports no other plugin.\" The brief limits me to the adapter-behaviour tests, so nothing here pins the file's hash or its imports. A hash check or a review has to decide this sentence.",
+      "(provider) \"`python3 test_dwitbuk.py` passes as a whole on Python 3.11 or later\" is decided by the check itself, not by a named test, and only on the Python the check runs on. One test I did not write already fails at HEAD before any change of mine: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError). It is probably caused by this session's environment, which has AGENT_WORKER=1 and other host variables set; I did not confirm that. Unless that is fixed or the check runs in a clean environment, the whole-suite check can fail even after a correct build.",
+      "(provider) The sandbox tests and the os.environ before/after test also assert the full worker-env contract on the same call. This is so they decide something now: the bare -s values and the os.environ invariance already hold with the current hostcall.py.",
+      "(provider) The recorder records the env the child would get. If no env= is passed, that is os.environ at the moment of the call. A child env assembled some other way, such as a wrapper script or `env` in the argv, would not be seen. The tests also pick the host call by the argv[0] basename `claude` or `codex`."
+    ],
+    "at": "2026-10-30T09:10:10+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "xs-tests",
+    "role": "nitpick",
+    "brief": "Write tests for Q-exact-sections into test_dwitbuk.py (free functions named test_Q_exact_sections_..., this file's helpers, its own __main__ runner), on real temporary git repositories: (1) eyes request with --since: a lock declaring the bare foo/rec.json, a committed source file foo later replaced by a directory holding foo/rec.json (committed) — the diff holds foo's deletion and nothing of foo/rec.json (assert by diff headers and by the record's content); (2) verify_packet's excluded_diff for the excluded bare custom-record.json when HEAD has it as a file and the work tree has replaced it with a directory whose child.py is staged (not committed) — the file's deletion only, nothing of child.py; (3) with dwitbuk.PATHSPEC_BATCH_BYTES lowered so a boundary falls between foo and foo/a.py (source foo replaced by a directory holding source foo/a.py), every diff --git header appears once and the diff equals one unbatched call's text filtered to the kept paths; (4) a single path longer than a lowered PATHSPEC_BATCH_BYTES is in the diff beside short ones, in git's order; (5) a gitlink inside a nested repository the traversal walks into (vendor is a gitlink in the parent holding the gitlink rec.json; the lock declares the bare vendor/rec.json): editing a file in vendor/rec.json makes eyes consume refuse with 'source changed'. (1), (2) and (3) fail on the current tree; (4) and (5) pass there — show each failing against a copy outside the repository with one site changed (path_diff raising or dropping an oversized path; gitlinks marked only at the top level), no broader campaign. Red evidence is the real suite or focused python3 -c runs, never python3 -m unittest. Change no repository file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-exact-sections"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 16,
+  "added": "2026-10-30T10:01:28+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Item 2 ('Without such a file/directory change the text is what it was: one unbatched call over the kept paths') is checked only inside the batch-boundary test's second half (an eyes request from the directory commit, with the lowered limit) and by the existing batching test. No separate test checks excluded_diff without a file/directory change against one unbatched call.",
+    "(provider) Items (4) and (5) ('a single path longer than PATHSPEC_BATCH_BYTES is diffed (alone) rather than refused, dropped or raised on'; 'a gitlink inside a nested repository that the traversal walks into is marked like one at the top level') pass on the current tree by design. They were shown failing only against one-site mutant copies (path_diff skips or raises on an oversized path; gitlinks marked only at the top level). No other way of breaking them was tried.",
+    "(provider) The exact-sections rule is checked on three cases: a file replaced by a directory, a staged child, and a lowered batch limit at the foo / foo/a.py boundary. It is not checked for a target inside a larger repository, nested repositories in verify_packet's touched diff, or past the 80000/40000-character cuts.",
+    "(provider) 'Findings 7 and 9 of the first review stay documented limits.' This is about what the documentation says, and no test decides it.",
+    "(provider) Already failing before my change, and not caused by it: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails with JSONDecodeError in this session, and fails the same way with HEAD's test_dwitbuk.py. The check `python3 test_dwitbuk.py` will keep failing until that test passes, whatever the build does."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added five free functions named test_Q_exact_sections_* to test_dwitbuk.py, plus three helpers: diff_sections, unbatched and file_became_directory. They run on real temporary git repositories and use the file's existing helpers and its own __main__ runner. No other repository file was changed, and nothing was committed.\n\nRed evidence on the current tree, from the real suite (`python3 test_dwitbuk.py`) and focused `python3 -c` runs:\n- **(1) eyes request with --since:** fails. The diff holds a `diff --git a/foo/rec.json` section and `+{\"recmark\": 1}` beside foo's deletion.\n- **(2) excluded_diff:** fails. Beside the custom-record.json deletion it holds a section for the staged custom-record.json/child.py (`+cchild = 1`).\n- **(3) batch boundary:** fails. The headers come out as `['foo', 'foo/a.py', 'foo/a.py', 'z.py']`.\n- **(4) and (5):** pass on the current tree, as the brief expected.\n\nEach of (4) and (5) was shown failing against a copy outside the repository (<tmp>/xs-mut.*, now deleted) with one site changed:\n- path_diff skipping an oversized path: (4) fails, because the long path's section is missing.\n- path_diff raising on an oversized path: (4) fails, because eyes request exits with 'path too long'.\n- gitlinks marked only at the top level (`and not repo` added to the gitlink set): (5) fails, because consume accepts the answer after an edit inside vendor/rec.json.\n\nIn each copy the other test still passes.\n\nIn the full suite run, test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else also fails (JSONDecodeError). It fails the same way with HEAD's test_dwitbuk.py in a separate copy, so my change did not cause it.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-exact-sections",
+        "tests": [
+          "test_Q_exact_sections_eyes_request_diff_holds_the_replaced_files_deletion_and_nothing_of_a_declared_record_under_it",
+          "test_Q_exact_sections_excluded_diff_of_a_bare_entry_replaced_by_a_directory_with_a_staged_child_is_the_files_deletion_only",
+          "test_Q_exact_sections_a_batch_boundary_between_foo_and_foo_child_gives_each_section_once",
+          "test_Q_exact_sections_a_single_path_longer_than_the_batch_limit_is_diffed_beside_short_ones_in_gits_order",
+          "test_Q_exact_sections_a_gitlink_inside_a_walked_nested_repository_is_marked_like_one_at_the_top_level"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Item 2 ('Without such a file/directory change the text is what it was: one unbatched call over the kept paths') is checked only inside the batch-boundary test's second half (an eyes request from the directory commit, with the lowered limit) and by the existing batching test. No separate test checks excluded_diff without a file/directory change against one unbatched call.",
+      "Items (4) and (5) ('a single path longer than PATHSPEC_BATCH_BYTES is diffed (alone) rather than refused, dropped or raised on'; 'a gitlink inside a nested repository that the traversal walks into is marked like one at the top level') pass on the current tree by design. They were shown failing only against one-site mutant copies (path_diff skips or raises on an oversized path; gitlinks marked only at the top level). No other way of breaking them was tried.",
+      "The exact-sections rule is checked on three cases: a file replaced by a directory, a staged child, and a lowered batch limit at the foo / foo/a.py boundary. It is not checked for a target inside a larger repository, nested repositories in verify_packet's touched diff, or past the 80000/40000-character cuts.",
+      "'Findings 7 and 9 of the first review stay documented limits.' This is about what the documentation says, and no test decides it.",
+      "Already failing before my change, and not caused by it: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails with JSONDecodeError in this session, and fails the same way with HEAD's test_dwitbuk.py. The check `python3 test_dwitbuk.py` will keep failing until that test passes, whatever the build does."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 17,
+      "cost_usd": 0.7677185999999999
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:04:33+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 17,
+    "cost_usd": 0.7677185999999999,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "edit ./test_dwitbuk.py"
+      ],
+      "commands-run": 14,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:04:33+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "seen-non-claims": {
+    "by": "verifier of xs-build",
+    "texts": [
+      "(provider) Item 2 ('Without such a file/directory change the text is what it was: one unbatched call over the kept paths') is checked only inside the batch-boundary test's second half (an eyes request from the directory commit, with the lowered limit) and by the existing batching test. No separate test checks excluded_diff without a file/directory change against one unbatched call.",
+      "(provider) Items (4) and (5) ('a single path longer than PATHSPEC_BATCH_BYTES is diffed (alone) rather than refused, dropped or raised on'; 'a gitlink inside a nested repository that the traversal walks into is marked like one at the top level') pass on the current tree by design. They were shown failing only against one-site mutant copies (path_diff skips or raises on an oversized path; gitlinks marked only at the top level). No other way of breaking them was tried.",
+      "(provider) The exact-sections rule is checked on three cases: a file replaced by a directory, a staged child, and a lowered batch limit at the foo / foo/a.py boundary. It is not checked for a target inside a larger repository, nested repositories in verify_packet's touched diff, or past the 80000/40000-character cuts.",
+      "(provider) 'Findings 7 and 9 of the first review stay documented limits.' This is about what the documentation says, and no test decides it.",
+      "(provider) Already failing before my change, and not caused by it: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails with JSONDecodeError in this session, and fails the same way with HEAD's test_dwitbuk.py. The check `python3 test_dwitbuk.py` will keep failing until that test passes, whatever the build does."
+    ],
+    "at": "2026-10-30T10:11:41+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

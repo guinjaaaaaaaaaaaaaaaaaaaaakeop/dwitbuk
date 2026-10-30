@@ -1,0 +1,27 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "fixture-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix one test fixture in test_dwitbuk.py, nothing else: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else builds its hook calls' environment as dict(os.environ, **env), so run from a worker session (AGENT_WORKER=1 in the parent, as your own session is) its normal-session calls are silenced by the production guard and json.loads fails. Make the calls that stand for a normal session start the hook with AGENT_WORKER removed from the child environment, and keep the worker-suppression calls passing AGENT_WORKER=1 explicitly and expecting silence. Do not change hooks/ or any product file, do not change os.environ of the running process globally, and change no other test. This is a fixture correction, so its red is the unchanged test failing under a worker parent (already reproduced by the session); after your change show the test passing with AGENT_WORKER=1 in the parent and with it unset (focused python3 -c runs; never python3 -m unittest). Do not commit.",
+  "closes": [
+    "Q-fixture"
+  ],
+  "contract": {
+    "Q-fixture": "contract/Q-fixture-03b01f69.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/fixture-tests.response.json"
+}

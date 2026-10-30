@@ -1,0 +1,65 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "rs-tests-fix",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Amend one test rs-tests wrote, before any build: test_Q_strict_sites_source_state_tests_an_untracked_or_ignored_directory_as_a_directory expects a change inside a git-ignored plain directory (custom-record.json/ under /custom-record.json/ in .gitignore, no .git inside) to stale an eyes answer. source_state hashes git-visible source only; it examines ignored directory entries from git status solely to find nested repositories (a probe on the current tree: an ignored plain directory's change leaves the fingerprint as it was, an ignored nested repository's change moves it). Q-strict-sites 3 says such an entry is 'tested as a directory (with its trailing /), so a file entry never prunes it' — it does not make ignored plain directories source. Make the ignored custom-record.json/ a nested git repository (git init inside it, child.py committed there), so the test decides whether the bare custom-record.json prunes an ignored repository of that name; keep the untracked hunsu.json/ part as it is. The test must still fail on the current tree (python3 test_dwitbuk.py or a focused python3 -c 'import test_dwitbuk as t; t.test_...()'; python3 -m unittest collects nothing here). Change nothing else; change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-strict-sites"
+  ],
+  "contract": {
+    "Q-strict-sites": "contract/Q-strict-sites-68216246.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/rs-tests-fix.response.json",
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "I amended only test_Q_strict_sites_source_state_tests_an_untracked_or_ignored_directory_as_a_directory in test_dwitbuk.py. The ignored `custom-record.json/` is now a nested git repository: the test runs `git init` inside it, commits `child.py` there, and asserts that `git ls-files` in it lists `child.py`. The `/custom-record.json/` .gitignore line, the untracked `hunsu.json/` part, the `!! custom-record.json/` status assertion and the consume loop are unchanged. On the current tree, running the focused test with `python3 -c 'import test_dwitbuk as t; t.test_…()'` fails at the `hunsu.json/child.py` step: consume exits 0 and gives no \"source changed\". I also ran a separate probe, not part of the file, on just the ignored nested-repository case. There too a change to `custom-record.json/child.py` leaves consume at exit 0, so both halves of the test fail now because the feature is missing, not because of a fault in the test. No other file or test was changed, and nothing was committed.",
+      "verified": null,
+      "decisions": null,
+      "non-claims": [
+        "This amendment covers only sentence 3's untracked-or-ignored directory clause. The other Q-strict-sites sentences are covered by the tests rs-tests already wrote, which were not changed here.",
+        "Ignored plain directories (with no .git inside) are not tested as source. Sentence 3 says such an entry is 'tested as a directory (with its trailing /), so a file entry never prunes it'; it does not make an ignored plain directory source."
+      ],
+      "retried": null,
+      "review": null,
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_real_git_output",
+          "contract_quote": "The diff is composed from the candidate file paths git reports as changed against the same base",
+          "why": "The fixture's first review starts at the lock commit, before child.py files existed. late_packet supplies no --since override, so eyes uses that review's since. Git correctly reports both children as new files, but the test requires '-hchild = 1' and '-cchild = 1', which require the later directory commit as base. The fixture should explicitly select dirs_base for those assertions; changing production base selection would exceed this slice."
+        }
+      ],
+      "reopened": {
+        "by": "chongdae",
+        "auto": "tests disputed by rs-build",
+        "at": "2026-10-30T08:49:26+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "touched": [
+    "dwitbuk.py",
+    "test_dwitbuk.py"
+  ],
+  "amending": [
+    {
+      "test": "test_dwitbuk.py::test_Q_strict_sites_eyes_request_diff_holds_children_of_a_replaced_file_on_real_git_output",
+      "contract_quote": "The diff is composed from the candidate file paths git reports as changed against the same base",
+      "why": "The fixture's first review starts at the lock commit, before child.py files existed. late_packet supplies no --since override, so eyes uses that review's since. Git correctly reports both children as new files, but the test requires '-hchild = 1' and '-cchild = 1', which require the later directory commit as base. The fixture should explicitly select dirs_base for those assertions; changing production base selection would exceed this slice."
+    }
+  ]
+}

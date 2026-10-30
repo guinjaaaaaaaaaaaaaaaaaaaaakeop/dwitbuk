@@ -1,0 +1,98 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rs-tests-sub",
+    "role": "nitpick",
+    "brief": "Add one free-function test (test_Q_strict_sites_..., this file's Project harness and helpers, its own __main__ runner) for a case rs-build's verifier found and the suite does not hold: the eyes request when --target is a subdirectory of a larger git repository. Git reports changed names from the repository root while declarations and literal pathspecs are relative to the target; a listing without --relative turned every kept name into a pathspec that matched nothing, so the late-eyes diff was empty. In a repository whose root holds an outer file and a subdirectory project (its own hunsu.lock.json declaring a bare custom-record.json, a hunsu.json replaced by a directory holding a committed child.py, a.py), after a review of the subdirectory and changes to a.py, hunsu.json/child.py, custom-record.json, a reviews/ file and the outer file: the subdirectory's eyes request diff holds a.py's and hunsu.json/child.py's changes, not custom-record.json's, reviews/'s or the outer file's. The build stands (commit 4531a10), so the test passes on the current tree; its red evidence is the same test failing in a copy outside the repository whose dwitbuk.py lacks --relative in the eyes request's name listing (one site, one change — no mutation campaign). Use the real suite or a focused python3 -c run, never python3 -m unittest. Change no repository file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-strict-sites"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 6,
+  "added": "2026-10-30T08:57:41+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) The new test covers only the subdirectory case of Q-strict-sites item 4: \"The diff is composed from the candidate file paths git reports as changed against the same base (`git diff --name-only`), each judged with `is_record` against `left_out`; only the kept paths are diffed, as literal pathspecs.\" The section's other sentences are covered by the existing test_Q_strict_sites_* tests, which I did not change.",
+    "(provider) The red evidence comes from one hand-made change (removing --relative from the eyes request's name listing), not a mutation campaign. The test does not cover verify_packet, source_state or hooks/stop_eyes.py when the target is a subdirectory.",
+    "(provider) `python3 test_dwitbuk.py` exits 1 in this session because AGENT_WORKER=1 is set in the environment, which silences hooks/session_start.py. That makes test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fail with JSONDecodeError, with or without my change. Run without AGENT_WORKER, the whole suite passes. I did not change that test or the environment."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added one free-function test to test_dwitbuk.py: `test_Q_strict_sites_eyes_request_in_a_subdirectory_of_a_larger_repository_diffs_by_target_relative_names`. It uses the file's Project, write, git, run, late_packet and STRICT_LOCK helpers, and the file's own __main__ runner picks it up. It runs entirely on real git output.\n\nThe setup: a repository whose root holds a committed outer.py and a subdirectory project proj/. proj/ has its own hunsu.lock.json declaring a bare custom-record.json, a hunsu.json that is a directory holding a committed child.py, a.py, and a committed reviews/note.md. After `review --target proj`, the test changes outer.py, proj/a.py, proj/hunsu.json/child.py, proj/custom-record.json and proj/reviews/note.md. It then checks that proj's eyes request diff holds a.py's and hunsu.json/child.py's changes, and none of custom-record.json's, reviews/'s or outer.py's.\n\nGreen: it passes on the current tree (commit 4531a10).\n\nRed: I copied dwitbuk.py, eyes_worker.py, hostcall.py, hooks/ and test_dwitbuk.py to a temp directory outside the repository. In the copy I removed only `--relative` from the eyes request's `git diff --name-only` listing (dwitbuk.py:998; diff confirmed one line changed). Running the same test there with python3 -c failed on the a.py assertion with an empty diff (\"git names changes from the repository root; the target's own a.py is kept: \"). I then deleted the copy.\n\nOne fixture detail: the reviews/ file is .md, not .json. dwitbuk.reviews() loads every reviews/*.json as a review, so a committed .json note broke `review` with KeyError 'head' before the eyes request was ever reached.\n\nThe check `python3 test_dwitbuk.py` exits 1 in this session because of one failure that was already there: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else. This session has AGENT_WORKER=1 set, so the session-start hook stays silent and the test's json.loads fails. It fails the same way with my change stashed. With `env -u AGENT_WORKER python3 test_dwitbuk.py`, every test passes, including the new one. I changed only test_dwitbuk.py (+26 lines) and committed nothing.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-strict-sites",
+        "tests": [
+          "test_Q_strict_sites_eyes_request_in_a_subdirectory_of_a_larger_repository_diffs_by_target_relative_names"
+        ]
+      }
+    ],
+    "non-claims": [
+      "The new test covers only the subdirectory case of Q-strict-sites item 4: \"The diff is composed from the candidate file paths git reports as changed against the same base (`git diff --name-only`), each judged with `is_record` against `left_out`; only the kept paths are diffed, as literal pathspecs.\" The section's other sentences are covered by the existing test_Q_strict_sites_* tests, which I did not change.",
+      "The red evidence comes from one hand-made change (removing --relative from the eyes request's name listing), not a mutation campaign. The test does not cover verify_packet, source_state or hooks/stop_eyes.py when the target is a subdirectory.",
+      "`python3 test_dwitbuk.py` exits 1 in this session because AGENT_WORKER=1 is set in the environment, which silences hooks/session_start.py. That makes test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fail with JSONDecodeError, with or without my change. Run without AGENT_WORKER, the whole suite passes. I did not change that test or the environment."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 16,
+      "cost_usd": 0.4483666000000001
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T09:04:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 16,
+    "cost_usd": 0.4483666000000001,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 14,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T09:04:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

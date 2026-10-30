@@ -1,0 +1,104 @@
+{
+  "artifact-type": "dwitbuk/review@1",
+  "id": "review-20261030-173021-1aeb",
+  "since": null,
+  "head": "83e8e92141de49cb0ca8a6d6d9147138e8681dee",
+  "findings": [
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['carrying out a stated goal or plan']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection"
+    },
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['reviewing, disputing or testing a change']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection"
+    },
+    {
+      "kind": "unreviewed",
+      "where": "hunsu.json resolutions['asking what happened or what is open']",
+      "text": "applied from the judge's proposal, marked reviewed: false — `hunsu policy` shows the conflict a person judges",
+      "standing": true,
+      "reporter": "hunsu",
+      "layer": "objection"
+    },
+    {
+      "kind": "subagent",
+      "where": "run-20261030-074412-044b/rp-review",
+      "text": "done by the session's sub-agent (claude-code claude-opus-5-5) — declared hands, not self-performed; chongdae saw the session's tree, not the sub-agent; scope .maint-evidence/review",
+      "layer": "observation"
+    },
+    {
+      "kind": "seen-non-claims",
+      "where": "run-20261030-074412-044b/rp-build (1), run-20261030-074412-044b/rp-tests (5)",
+      "text": "6 provider non-claim(s) went to the verifier with the work and it accepted — read there, said here, not charged; each stays in its task's `non-claims`",
+      "layer": "observation"
+    },
+    {
+      "kind": "outside-run",
+      "where": "AGENTS.md, CLAUDE.md, README.md, plugin.json",
+      "text": "4 file(s) changed since the beginning; no completed run recorded touching them",
+      "layer": "objection"
+    },
+    {
+      "kind": "outside-run",
+      "where": ".claude-plugin/plugin.json",
+      "text": "1 file(s) changed since the beginning; no completed run recorded touching them",
+      "layer": "objection"
+    },
+    {
+      "kind": "outside-run",
+      "where": "commands/eyes.md",
+      "text": "1 file(s) changed since the beginning; no completed run recorded touching them",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "no check decides this task  [tasks rp-tests, rp-review, rp-tests-2]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "rp-review: done on the session's word by name (`run rp-review`), with nothing of its own in the tree and no `did`  [task rp-review]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "rp-review: done by the session's sub-agent  [task rp-review]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) The new tests pass on the current tree (build 05023c8), as the brief asks, so they are not red before a build. Their red evidence is the five single-site startswith mutations run in copies outside the repository.  [task rp-tests-2]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) The mutations put back the form `path.startswith(entry)` with each site's own entries. No new test targets a prefix rule that strips a trailing '/' from directory entries before comparing at the source_state or stop-hook sites (for example `.claude-extra` against `.claude/`). The eyes-request test does cover that case, because its left_out entries are already stripped.  [task rp-tests-2]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) I did not mutate verify_packet's touched filter or its excluded filter. The brief does not list them, and the existing test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_their_diff is what decides them.  [task rp-tests-2]",
+      "layer": "objection"
+    },
+    {
+      "kind": "non-claim",
+      "where": "run-20261030-074412-044b",
+      "text": "(provider) Q-keep: 'String prefixes that are not about record paths stay as they are', 'hostcall.py, eyes_worker.py, the manifests and README.md are not part of this change; no version bump' — these are about how the change was made and what it left alone; no test in this file can see them.  [task rp-tests-2]",
+      "layer": "objection"
+    }
+  ]
+}

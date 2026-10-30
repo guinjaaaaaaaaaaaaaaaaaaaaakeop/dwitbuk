@@ -1,0 +1,197 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "rp-build",
+    "role": "implementer",
+    "brief": "Implement the contract in dwitbuk.py and hooks/stop_eyes.py only. Add is_record(path, entries) (Q-match); make record_paths return hunsu's five exact environment files instead of the bare hunsu (Q-hunsu); use is_record at every record-matching site (Q-sites): documents_or_records, verify_packet's touched and excluded filters, source_state's skip and its non-git walk, the eyes request's exclude pathspecs (literal, ':(exclude,literal)ENTRY') and its untracked new_files filter, and the stop hook's dirty filter. Keep mangsang/ in what late eyes read as today, and leave prefixes that are not about record paths alone (Q-keep). test_dwitbuk.py is the contract and is protected: do not edit it, README.md, the manifests, hostcall.py or eyes_worker.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+    "closes": [
+      "Q-match",
+      "Q-hunsu",
+      "Q-sites",
+      "Q-keep"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py",
+      "hooks/stop_eyes.py"
+    ]
+  },
+  "seq": 2,
+  "added": "2026-10-30T07:55:13+00:00",
+  "response": {
+    "status": "done",
+    "summary": "Implemented boundary-aware record matching at all specified sites, exact hunsu environment entries, and literal diff exclusions. Preserved mangsang freshness handling. All 50 tests pass.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Changed only dwitbuk.py and hooks/stop_eyes.py; protected tests and pre-existing changes were left untouched."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T07:57:09+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "dwitbuk.py",
+    "hooks/stop_eyes.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "update ./dwitbuk.py",
+        "update ./hooks/stop_eyes.py"
+      ],
+      "commands-run": 10,
+      "commands-failed": 0
+    }
+  },
+  "non-claims": [
+    "(provider) Changed only dwitbuk.py and hooks/stop_eyes.py; protected tests and pre-existing changes were left untouched."
+  ],
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T07:57:43+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T07:57:44+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 4,
+      "cost_usd": 0.11861719999999999
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T07:57:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    ".claude-plugin/plugin.json": "7bbb6b3e60a93af87302831f29b3828813def4c6",
+    ".gitignore": "2968d098301bcdb7ab346290f4da4c2299e4d628",
+    "README.md": "16088eda0d47c8e8f8325cb67be7155942b92f9d",
+    "commands/eyes.md": "76a93f50a744de92fcfb22e614df491598a1a874",
+    "dwitbuk.py": "2e02fd03293f41a3a2ef8011501e9888ce12449f",
+    "hooks/stop_eyes.py": "1bf6931352521ad83d5e018659f5b7dc40f7478d",
+    "plugin.json": "489db64f8e4585a9e76e4695ca5ac00de287a427",
+    "test_dwitbuk.py": "c8e126305bca6776e44b21d2ae9adda732bac791",
+    "AGENTS.md": "22d234776bc1efefae04613a550cce8a7783ac86",
+    "CLAUDE.md": "c140473a3a5fbe89301c99d9d0d1b76c5971f2c3"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 4,
+    "cost_usd": 0.11861719999999999,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "seen-non-claims": {
+    "by": "verifier of rp-build",
+    "texts": [
+      "(provider) Changed only dwitbuk.py and hooks/stop_eyes.py; protected tests and pre-existing changes were left untouched."
+    ],
+    "at": "2026-10-30T07:57:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py",
+    "hooks/stop_eyes.py"
+  ],
+  "done": {
+    "at": "2026-10-30T07:57:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

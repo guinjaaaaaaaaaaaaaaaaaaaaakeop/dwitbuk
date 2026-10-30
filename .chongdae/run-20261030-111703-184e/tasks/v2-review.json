@@ -1,0 +1,51 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "v2-review",
+    "role": "subagent",
+    "brief": "Bounded non-author review of the uncommitted 2.0.0 metadata and README diff by a fresh Claude sub-agent: the five version values against README Versioning / Release and adoption and AGENTS.md, the timeless README edits read against the code they describe, and docs consistency; read-only.",
+    "closes": [],
+    "needs": [],
+    "checks": [],
+    "tests": [],
+    "gate": null,
+    "scope": [
+      ".maint-evidence/run5/review"
+    ]
+  },
+  "seq": 2,
+  "added": "2026-10-30T11:17:34+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "v2-review: done on the session's word by name (`run v2-review`), with nothing of its own in the tree and no `did`",
+    "v2-review: done by the session's sub-agent — chongdae saw the session and the tree, not the sub-agent; its model is the session's unless the session dispatched it with another"
+  ],
+  "checks": [],
+  "touched": [],
+  "performed_by": {
+    "provider": "subagent",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "write ./.maint-evidence/run5/review/v2-review-report.md"
+      ],
+      "commands-run": 10,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T11:17:34+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T11:20:01+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "gl-build",
+    "role": "implementer",
+    "brief": "Fix Q-gitlink in dwitbuk.py's source_state only: in the tracked traversal (the git ls-files loop), an entry git itself reports as a gitlink (index mode 160000, e.g. from git ls-files --stage) is marked with a trailing / before it is tested as a record — the same marker the status loop already gives untracked and ignored directories — so a nested repository at a bare exact-file declaration such as custom-record.json is source, while one under a directory declaration (custom-dir/) and a regular file at a bare declaration stay excluded. The type comes from git's report, not from is_record looking at the disk; is_record and every other site stay as they are, and mangsang/ still counts for freshness. No other change. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+    "closes": [
+      "Q-gitlink"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py"
+    ]
+  },
+  "seq": 14,
+  "added": "2026-10-30T09:46:07+00:00",
+  "touched_by_provider": [
+    "dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 5,
+      "commands-failed": 0
+    }
+  },
+  "attempts": [
+    {
+      "status": "blocked",
+      "summary": "Implemented the bounded source_state gitlink fix. The suite has one failure caused by a repeated identical write in a protected test.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 1
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        }
+      ],
+      "decisions": [],
+      "non-claims": [
+        "The full suite does not pass. Protected tests were not edited; implementation changes are confined to source_state in dwitbuk.py."
+      ],
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_gitlink_a_gitlink_at_a_bare_declaration_is_source_like_one_at_an_undeclared_path",
+          "contract_quote": "No other behaviour changes",
+          "why": "The second gitlink_stales call writes the same child.py contents already present when the fresh answer was bound, yet expects source changed. Passing this assertion would require changing the existing content-fingerprint behavior to invalidate an identical-content rewrite."
+        }
+      ],
+      "worker": {
+        "host": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium"
+      },
+      "retried": {
+        "by": "chongdae",
+        "auto": "tests disputed; gl-tests reopened to amend test_dwitbuk.py",
+        "at": "2026-10-30T09:47:38+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "trace": {
+        "changed": [
+          "update ./dwitbuk.py"
+        ],
+        "commands-run": 9,
+        "commands-failed": 1
+      },
+      "answered": {
+        "at": "2026-10-30T09:47:38+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "rebaselined": [
+    {
+      "tests": [
+        "test_dwitbuk.py"
+      ],
+      "at": "2026-10-30T09:50:01+00:00",
+      "chongdae": "chongdae 1.24.0"
+    }
+  ],
+  "response": {
+    "status": "done",
+    "summary": "Retained the existing source_state gitlink fix without further edits. The full suite passes, including Q-gitlink tests.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Protected tests and all other files were left unchanged during this attempt."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T09:51:03+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "non-claims": [
+    "(provider) Protected tests and all other files were left unchanged during this attempt."
+  ],
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T09:51:48+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T09:51:49+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 3,
+      "cost_usd": 0.0764748
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T09:52:03+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "dwitbuk.py": "ef72c2b4b240c4841a57101d5a2780ae5be8955c",
+    "test_dwitbuk.py": "bfc6982db6bd0c474221d4833b8cda39f65a6616"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 3,
+    "cost_usd": 0.0764748,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "seen-non-claims": {
+    "by": "verifier of gl-build",
+    "texts": [
+      "(provider) Protected tests and all other files were left unchanged during this attempt."
+    ],
+    "at": "2026-10-30T09:52:03+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T09:52:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

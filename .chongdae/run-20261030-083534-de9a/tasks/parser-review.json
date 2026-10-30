@@ -1,0 +1,51 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "parser-review",
+    "role": "subagent",
+    "brief": "Bounded fresh exact-source review of the final parser (path_diff at 7a58004; d1e8c32's re-verification accepted on the packet alone, pc-build's verifier read dwitbuk.py partly) by a fresh Claude sub-agent: it opens Q-exact-sections, Q-git-config and Q-conflict, path_diff's exact source and the test_Q_git_config_* and test_Q_conflict_* tests itself, and probes a real merge conflict, a hostile global git configuration and an unattributable section on temporary repositories; it changes no files and runs no broad campaign.",
+    "closes": [],
+    "needs": [],
+    "checks": [],
+    "tests": [],
+    "gate": null,
+    "scope": [
+      ".maint-evidence/run4/review"
+    ]
+  },
+  "seq": 24,
+  "added": "2026-10-30T10:36:17+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "parser-review: done on the session's word by name (`run parser-review`), with nothing of its own in the tree and no `did`",
+    "parser-review: done by the session's sub-agent — chongdae saw the session and the tree, not the sub-agent; its model is the session's unless the session dispatched it with another"
+  ],
+  "checks": [],
+  "touched": [],
+  "performed_by": {
+    "provider": "subagent",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "write ./.maint-evidence/run4/review/parser-review-report.md"
+      ],
+      "commands-run": 21,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T10:36:17+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T10:44:52+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

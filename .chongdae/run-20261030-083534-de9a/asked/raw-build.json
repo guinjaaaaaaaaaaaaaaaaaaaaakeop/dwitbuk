@@ -1,0 +1,94 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "raw-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Fix Q-raw-text in dwitbuk.py's path_diff only. (1) Without a base git prints a modify/delete conflict (DU, UD) as the one line '* Unmerged path PATH' (name not quoted): treat that line as that path's own section — kept once when the path is kept, left out when it is a declared record, never failing the request and never attached to the previous path's section, whatever the file order or batch boundaries. (2) Read the git diff output path_diff parses without newline translation (bytes decoded as UTF-8, or equivalent), so a lone \\r in a file's content can neither start nor end a section; the section split recognises only real line starts. (3) Keep the order one git call gives over the kept paths: combined (diff --cc) sections first, then the others in git's order, also across batch boundaries. Keep Q-exact-sections, Q-git-config and Q-conflict as they are (canonical flags, diff --cc once, unattributable output fails before a packet is written). test_dwitbuk.py is the contract and protected: do not edit it, hooks/, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite as env -u AGENT_WORKER python3 test_dwitbuk.py.",
+  "closes": [
+    "Q-raw-text"
+  ],
+  "contract": {
+    "Q-raw-text": "contract/Q-raw-text-48d893be.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/raw-build.response.json",
+  "attempts": [
+    {
+      "status": "blocked",
+      "summary": "The raw-text fix requires changing the git helper, but the brief permits changes only inside path_diff. The protected tests require path_diff to use that helper, which already translates CR into LF before returning output.",
+      "verified": [],
+      "decisions": [],
+      "non-claims": [
+        "No files changed. The suite was not run.",
+        "dwitbuk.git uses subprocess.run(text=True); recovering original newline bytes from its returned string is not possible."
+      ],
+      "retried": {
+        "by": "chongdae",
+        "auto": "tests disputed; raw-tests reopened to amend test_dwitbuk.py",
+        "at": "2026-10-30T10:49:30+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "review": null,
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed",
+          "contract_quote": "Fix Q-raw-text in dwitbuk.py's path_diff only.",
+          "why": "The test injects unattributable text by wrapping dwitbuk.git and requires that wrapper to observe the content diff. Reading raw bytes directly inside path_diff bypasses this fixture; retaining the helper translates newlines. A minimal raw-output change to dwitbuk.git needs authorization beyond the stated scope."
+        }
+      ],
+      "reopened": null
+    },
+    {
+      "status": "done",
+      "summary": "Updated only dwitbuk.py: preserve raw newlines, parse unmerged paths independently, and maintain git section order across batches. Full suite passed.",
+      "verified": [
+        {
+          "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+          "exit": 0
+        },
+        {
+          "check": "git diff --check",
+          "exit": 0
+        }
+      ],
+      "decisions": [
+        {
+          "what": "Soft output cap after global section ordering",
+          "chosen": "Parse all batches, sort sections, then stop after the section exceeding the cap.",
+          "alternatives": [
+            "Retain batch-boundary truncation, which can omit later combined sections that belong first."
+          ]
+        }
+      ],
+      "non-claims": [
+        "Protected tests and other restricted files were unchanged.",
+        "The soft-cap boundary change was not separately tested."
+      ],
+      "retried": {
+        "by": {
+          "agent": "claude-code claude-opus-5-5"
+        },
+        "at": "2026-10-30T10:55:18+00:00",
+        "chongdae": "chongdae 1.24.0"
+      },
+      "review": null,
+      "disputed-tests": [],
+      "reopened": null
+    }
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ]
+}

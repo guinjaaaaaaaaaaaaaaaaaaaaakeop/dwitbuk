@@ -1,0 +1,51 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "xs-review",
+    "role": "subagent",
+    "brief": "Narrow non-author review of d1e8c32 (path_diff keeps only each kept path's own section) by a fresh Claude sub-agent: it opens Q-exact-sections, path_diff and the test_Q_exact_sections_* tests itself and probes quoted names, a target inside a larger repository, diff.noprefix/diff.mnemonicPrefix configs and file/directory changes on real temporary git repositories; it changes no files. xs-build's accepting re-verification opened no file (recorded non-claim); that verdict stays as recorded.",
+    "closes": [],
+    "needs": [],
+    "checks": [],
+    "tests": [],
+    "gate": null,
+    "scope": [
+      ".maint-evidence/run3/review-xs"
+    ]
+  },
+  "seq": 18,
+  "added": "2026-10-30T10:12:27+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "xs-review: done on the session's word by name (`run xs-review`), with nothing of its own in the tree and no `did`",
+    "xs-review: done by the session's sub-agent — chongdae saw the session and the tree, not the sub-agent; its model is the session's unless the session dispatched it with another"
+  ],
+  "checks": [],
+  "touched": [],
+  "performed_by": {
+    "provider": "subagent",
+    "host": "claude-code",
+    "agent": "claude-code_2-1-314_agent",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5",
+    "versions": {
+      "used": {
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "write ./.maint-evidence/run3/review-xs/xs-review-report.md"
+      ],
+      "commands-run": 18,
+      "command-lines": "kept in the local session transcript, not in the record",
+      "window-from": "2026-10-30T10:12:27+00:00"
+    }
+  },
+  "done": {
+    "at": "2026-10-30T10:19:32+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

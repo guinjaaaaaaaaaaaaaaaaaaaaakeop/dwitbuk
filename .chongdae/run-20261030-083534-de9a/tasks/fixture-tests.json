@@ -1,0 +1,100 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "fixture-tests",
+    "role": "nitpick",
+    "brief": "Fix one test fixture in test_dwitbuk.py, nothing else: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else builds its hook calls' environment as dict(os.environ, **env), so run from a worker session (AGENT_WORKER=1 in the parent, as your own session is) its normal-session calls are silenced by the production guard and json.loads fails. Make the calls that stand for a normal session start the hook with AGENT_WORKER removed from the child environment, and keep the worker-suppression calls passing AGENT_WORKER=1 explicitly and expecting silence. Do not change hooks/ or any product file, do not change os.environ of the running process globally, and change no other test. This is a fixture correction, so its red is the unchanged test failing under a worker parent (already reproduced by the session); after your change show the test passing with AGENT_WORKER=1 in the parent and with it unset (focused python3 -c runs; never python3 -m unittest). Do not commit.",
+    "closes": [
+      "Q-fixture"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 23,
+  "added": "2026-10-30T10:34:35+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Sentences 2–3 ('the production guard ... is not changed, and no test changes the live process's environment globally'; 'The test passes run from a normal parent and from a worker parent') are shown by the diff (only test_dwitbuk.py changed, and only the env construction) and by the two focused runs. No test asserts them.",
+    "(provider) The test name does not contain the section id Q-fixture: the brief forbids renaming or changing any other test, so a selector by section id will not find it.",
+    "(provider) This is a fixture correction, so the corrected test passes now. Its red was the unchanged test failing under a worker parent, reproduced before the edit."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "Fixed the test fixture in test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (test_dwitbuk.py) and changed nothing else. run_hook now builds the child environment as a copy of os.environ with AGENT_WORKER removed, then applies the call's own env. Calls that stand for a normal session therefore run without AGENT_WORKER. The worker-suppression calls (AGENT_WORKER=\"1\", including the one under HUNSU_SURVEY) still pass it explicitly and still expect (0, \"\"). Red: before the change, the unchanged test failed with JSONDecodeError under AGENT_WORKER=1 in the parent (focused python3 -c run). After the change, focused python3 -c runs passed with AGENT_WORKER=1 in the parent and with it unset (env -u). The check `python3 test_dwitbuk.py` exits 0 ('all passed'). No hooks/ or product file was touched, os.environ of the running process is not modified, and nothing was committed.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-fixture",
+        "tests": [
+          "test_dwitbuk.py::test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Sentences 2–3 ('the production guard ... is not changed, and no test changes the live process's environment globally'; 'The test passes run from a normal parent and from a worker parent') are shown by the diff (only test_dwitbuk.py changed, and only the env construction) and by the two focused runs. No test asserts them.",
+      "The test name does not contain the section id Q-fixture: the brief forbids renaming or changing any other test, so a selector by section id will not find it.",
+      "This is a fixture correction, so the corrected test passes now. Its red was the unchanged test failing under a worker parent, reproduced before the edit."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 8,
+      "cost_usd": 0.135942
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:35:55+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 8,
+    "cost_usd": 0.135942,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "edit ./test_dwitbuk.py"
+      ],
+      "commands-run": 5,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:35:56+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

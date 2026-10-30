@@ -1,0 +1,182 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "pc-build",
+    "role": "implementer",
+    "brief": "Fix Q-git-config and Q-conflict in dwitbuk.py's path_diff only. (a) The git diff calls whose output path_diff parses ask for plain, repository-relative, per-file text whatever the user's configuration says: no colour, no relative headers, gitlinks in the short form, no external diff driver, the a/ b/ prefixes already pinned (e.g. --no-color --no-relative --submodule=short --no-ext-diff). (b) An unresolved path's 'diff --cc PATH' section (no a/ b/ prefix; the path may be C-quoted) is that path's own section: kept once when the path is kept — git lists an unmerged path once per stage, so a repeated candidate must not repeat its section across batches — and left out when the path is a declared record. (c) No silent drop: text before the first diff --git/diff --cc header of a call's output, or under a header starting 'diff ' of another kind or with an unreadable path, makes the eyes request and verify_packet's excluded_diff fail with a clear error before any packet is written (a SystemExit with a message is fine); a readable section whose path is not a kept candidate is still left out as Q-exact-sections says, and text inside a readable section is not validated line by line. Keep everything else as it is. test_dwitbuk.py is the contract and protected: do not edit it, hooks/stop_eyes.py, README.md, the manifests, eyes_worker.py or hostcall.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+    "closes": [
+      "Q-git-config",
+      "Q-conflict"
+    ],
+    "needs": [],
+    "checks": [
+      [
+        "python3",
+        "test_dwitbuk.py"
+      ]
+    ],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null,
+    "scope": [
+      "dwitbuk.py"
+    ]
+  },
+  "seq": 22,
+  "added": "2026-10-30T10:29:50+00:00",
+  "response": {
+    "status": "done",
+    "summary": "Updated only dwitbuk.py’s path_diff: pinned Git output format, preserved conflict sections once across batches, and added clear failures for unattributable output. Full protected suite passed.",
+    "verified": [
+      {
+        "check": "env -u AGENT_WORKER python3 test_dwitbuk.py",
+        "exit": 0
+      },
+      {
+        "check": "git diff --check",
+        "exit": 0
+      }
+    ],
+    "decisions": [],
+    "non-claims": [
+      "Protected tests and all other files were unchanged. No commits were made."
+    ],
+    "disputed-tests": [],
+    "worker": {
+      "host": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:32:01+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "dakdol",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "codex"
+    ],
+    "host": "codex",
+    "model": "gpt-6-astra",
+    "effort": "medium",
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [
+        "update ./dwitbuk.py"
+      ],
+      "commands-run": 9,
+      "commands-failed": 0
+    }
+  },
+  "non-claims": [
+    "(provider) Protected tests and all other files were unchanged. No commits were made."
+  ],
+  "checks-passed": {
+    "ran": [
+      {
+        "command": "python3 test_dwitbuk.py",
+        "exit": 0,
+        "tail": [
+          "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+          "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+          "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+          "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+          "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+          "all passed"
+        ],
+        "at": "2026-10-30T10:32:56+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    ],
+    "at": "2026-10-30T10:32:56+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "review": {
+    "artifact-type": "dwitbuk/review@1",
+    "verdict": "accept",
+    "findings": [],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 4,
+      "cost_usd": 0.1227488
+    }
+  },
+  "verdict-given": {
+    "at": "2026-10-30T10:33:14+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "reviewed_tree": {
+    "dwitbuk.py": "74fb0193128526616d0a7098ab1b3a4f78459015"
+  },
+  "verified_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:dwitbuk}/eyes_worker.py",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 4,
+    "cost_usd": 0.1227488,
+    "versions": {
+      "used": {
+        "dwitbuk": "1.16.0",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 0,
+      "commands-failed": 0
+    }
+  },
+  "seen-non-claims": {
+    "by": "verifier of pc-build",
+    "texts": [
+      "(provider) Protected tests and all other files were unchanged. No commits were made."
+    ],
+    "at": "2026-10-30T10:33:14+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "touched": [
+    "dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:33:15+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

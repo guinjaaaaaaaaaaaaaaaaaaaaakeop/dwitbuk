@@ -1,0 +1,65 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "raw-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write tests for Q-raw-text into test_dwitbuk.py (free functions named test_Q_raw_text_..., this file's helpers, its own __main__ runner) on real temporary git repositories, asserting actual output: (1) modify/delete conflicts (DU and UD: one branch deletes c.py, the other modifies it; git merge leaves the conflict) beside a modified d.py, with no base and no prior review, with the conflicted name sorting before and after the other path, at the default batch limit and with dwitbuk.PATHSPEC_BATCH_BYTES lowered to 1: eyes request exits 0, its diff holds the line '* Unmerged path c.py' exactly once as its own section (not inside d.py's), and the text equals one plain git diff over the kept paths; a DU path that is a declared bare record is left out. (2) a file with CR-only line endings changed so its content holds a line beginning 'diff --git a/zz b/zz' and another beginning 'diff these': eyes request exits 0 and the file's whole section (every changed line, compared on raw bytes) is in the diff, at both batch limits. (3) a UU conflict on a name sorting after a modified d.py at limit 1: the text equals one unbatched call (diff --cc first). Make the tests' own unbatched comparison read git's output without newline translation where it matters. (1) and (2) fail on the current tree; show that with focused python3 -c runs (never python3 -m unittest). No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-raw-text"
+  ],
+  "contract": {
+    "Q-raw-text": "contract/Q-raw-text-b3215919.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/raw-tests.response.json",
+  "attempts": [
+    {
+      "status": "done",
+      "summary": "I added four Q-raw-text tests to test_dwitbuk.py, written as free functions on real temporary git repositories. All four fail on the current tree. The full `python3 test_dwitbuk.py` run reports exactly these 4 failures; every other test still passes.\n\nWhat each test checks and why it fails now:\n- **Modify/delete conflicts (DU and UD).** c.py conflicts beside a modified d.py (c.py sorts before it) or b.py (c.py sorts after it). There is no base and no prior review. Each case runs at the default batch limit and with `PATHSPEC_BATCH_BYTES` set to 1. The diff must hold `* Unmerged path c.py` exactly once, on its own line, and equal one plain git diff over the kept paths. The same test then declares c.py as a bare record and expects the line to be left out. It fails now because eyes request exits non-zero with \"cannot attribute git diff section '* Unmerged path c.py'\".\n- **The unmerged line is not attached to another path's section.** Here the other path is declared as a record, so its section is left out. The diff must be exactly `* Unmerged path c.py\\n`. It fails now with the same error.\n- **CR-only file.** cr.txt's new content holds the lines `diff --git a/zz b/zz` and `diff these`. At both limits the request must exit 0. The removed line, the added line and the file's whole section must appear in the diff byte for byte. The diff must also equal one raw unbatched git call. It fails now with \"cannot attribute git diff section 'diff these'\".\n- **Order.** A UU conflict on e.py, which sorts after a modified d.py. At both limits the text must equal one unbatched call, with `diff --cc e.py` first. It fails now at limit 1, where d.py comes out first.\n\nI changed the file's shared `unbatched` helper to read git's raw bytes and decode them as UTF-8, with no newline translation. The tests that already used it still pass. On its own, the check that a declared c.py is left out already passes. So I made it a step inside the first test (the helper `modify_delete_record_is_left_out`, which the runner does not pick up as a test). The focused runs used `python3 -c`, never unittest. Nothing was committed, and no other file was touched.",
+      "verified": null,
+      "decisions": null,
+      "non-claims": [
+        "\"With a base, as now.\" — no Q-raw-text test covers the with-base modify/delete case; it is left to the existing Q-conflict and Q-exact-sections tests.",
+        "\"whatever the file order or batch boundaries\" — tested only at the default limit and at PATHSPEC_BATCH_BYTES=1, with c.py sorting before d.py and after b.py; other limits are not tried.",
+        "The check that a declared DU/UD record is left out passes on the current tree when run alone; it is decided only inside test_Q_raw_text_a_modify_delete_conflict_is_its_own_unmerged_path_line_once_and_left_out_when_declared, after the parts that fail now.",
+        "\"no newline translation\" is seen only through its output (CR bytes kept, section intact, text equal to raw git output); no test checks how dwitbuk reads git's output internally.",
+        "The CR-only case is tested with a review taken (base HEAD), not without a base."
+      ],
+      "retried": null,
+      "review": null,
+      "disputed-tests": [
+        {
+          "test": "test_dwitbuk.py::test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed",
+          "contract_quote": "Fix Q-raw-text in dwitbuk.py's path_diff only.",
+          "why": "The test injects unattributable text by wrapping dwitbuk.git and requires that wrapper to observe the content diff. Reading raw bytes directly inside path_diff bypasses this fixture; retaining the helper translates newlines. A minimal raw-output change to dwitbuk.git needs authorization beyond the stated scope."
+        }
+      ],
+      "reopened": {
+        "by": "chongdae",
+        "auto": "tests disputed by raw-build",
+        "at": "2026-10-30T10:49:30+00:00",
+        "chongdae": "chongdae 1.24.0"
+      }
+    }
+  ],
+  "touched": [],
+  "amending": [
+    {
+      "test": "test_dwitbuk.py::test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed",
+      "contract_quote": "Fix Q-raw-text in dwitbuk.py's path_diff only.",
+      "why": "The test injects unattributable text by wrapping dwitbuk.git and requires that wrapper to observe the content diff. Reading raw bytes directly inside path_diff bypasses this fixture; retaining the helper translates newlines. A minimal raw-output change to dwitbuk.git needs authorization beyond the stated scope."
+    }
+  ]
+}

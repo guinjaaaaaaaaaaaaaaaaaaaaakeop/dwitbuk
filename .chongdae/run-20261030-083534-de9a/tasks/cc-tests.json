@@ -1,0 +1,106 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "cc-tests",
+    "role": "nitpick",
+    "brief": "Write tests for Q-conflict into test_dwitbuk.py (free functions named test_Q_conflict_..., this file's helpers, its own __main__ runner) on real temporary git conflict fixtures (two branches changing c.py, git merge leaving UU c.py, plus a modified d.py): (1) eyes request with no --since and no prior review: the packet's diff holds c.py's diff --cc section exactly once with both sides' conflicting text and d.py's section, and equals what one plain git diff (no base, the pinned plain form) gives over those paths; also with dwitbuk.PATHSPEC_BATCH_BYTES lowered so batch boundaries fall around c.py, each section still once; (2) a conflicted path that is a declared bare record (lock) is left out while d.py stays; (3) no silent drop: with dwitbuk.git wrapped so that a real diff call's output also carries a section the filter cannot attribute to a candidate (for example a trailing 'Submodule x 1111111..2222222:' block), eyes request fails with a clear message and writes no eyes-request.json in --out, and verify_packet's excluded_diff path fails rather than returning partial text. Assert actual output or explicit failure; do not copy the parser's logic into the tests. (1) and (3) fail on the current tree; show that with the real suite or a focused python3 -c run, never python3 -m unittest. No mutation campaign. Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-conflict"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 20,
+  "added": "2026-10-30T10:25:01+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) Q-conflict item 3, \"With a base (`--since`, or a prior review's base) the conflicted path's text is what git gives against that base, as now. Q-exact-sections and Q-git-config hold as written.\", has no new test. It describes how things work now, so a new test would pass before the build and decide nothing. The existing Q-exact-sections and Q-git-config tests are what hold it.",
+    "(provider) \"a clear error\" is checked loosely: the message (stdout, stderr or the exception text) must name the injected `Submodule x` text or use the word 'section' or 'attribut…'. A failure that escapes main() as an uncaught traceback, not an exit code and message, fails the eyes-request test. No test can judge whether the wording is actually clear to a reader.",
+    "(provider) \"before any packet is written\" is checked only as: no eyes-request.json in a fresh --out folder. Other files the command might write elsewhere are not checked.",
+    "(provider) The unattributable section is created by wrapping dwitbuk.git and appending a trailing Submodule block to each real content diff call's output. No other kind of unattributable output (for example a stray line in the middle, or a header of an unknown kind) is tested.",
+    "(provider) These test_dwitbuk.py failures predate this task and are not Q-conflict's: the four test_Q_git_config_* tests other than ..._unbatched_comparison_..., and test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else. They also fail with HEAD's unchanged test file, so the check `python3 test_dwitbuk.py` will not exit 0 until they are fixed as well."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I added five test_Q_conflict_* tests to test_dwitbuk.py. They build a real merge conflict in a temporary git repository: c.py is changed on two branches and the merge leaves `UU c.py`, so `git diff --name-only` lists c.py twice. A committed d.py is also modified, and no review is taken. I ran them with a focused python3 -c run and with the real suite (`python3 test_dwitbuk.py`). Four fail on the current tree for the reason the contract names. (a) Without a base, the packet's diff holds only d.py. That happens with no batch limit and for every PATHSPEC_BATCH_BYTES value tried (1 up to three pathspecs' worth). (b) When dwitbuk.git is wrapped so each real diff call's output also ends with a `Submodule x 1111111..2222222:` block, `eyes request` exits 0 and writes a 172-character packet. (c) verify_packet's excluded_diff returns the record's section with that same block stuck onto it instead of failing. The fifth test passes now, as expected: a declared bare record c.py that is in conflict is left out while d.py stays (and that eyes request must still exit 0). The full suite also shows 5 failures unrelated to Q-conflict: four test_Q_git_config_* tests and test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else. I ran HEAD's unchanged copy of the test file and those same five fail there too, so they come from the current tree, not from these additions. The suite ends '9 failed'. Only test_dwitbuk.py was changed (+147 lines). Nothing was committed.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-conflict",
+        "tests": [
+          "test_Q_conflict_eyes_request_without_a_base_keeps_the_conflicted_paths_diff_cc_section_once",
+          "test_Q_conflict_eyes_request_keeps_the_diff_cc_section_once_wherever_batch_boundaries_fall",
+          "test_Q_conflict_a_conflicted_path_that_is_a_declared_record_is_left_out_and_the_rest_stays",
+          "test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed",
+          "test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text"
+        ]
+      }
+    ],
+    "non-claims": [
+      "Q-conflict item 3, \"With a base (`--since`, or a prior review's base) the conflicted path's text is what git gives against that base, as now. Q-exact-sections and Q-git-config hold as written.\", has no new test. It describes how things work now, so a new test would pass before the build and decide nothing. The existing Q-exact-sections and Q-git-config tests are what hold it.",
+      "\"a clear error\" is checked loosely: the message (stdout, stderr or the exception text) must name the injected `Submodule x` text or use the word 'section' or 'attribut…'. A failure that escapes main() as an uncaught traceback, not an exit code and message, fails the eyes-request test. No test can judge whether the wording is actually clear to a reader.",
+      "\"before any packet is written\" is checked only as: no eyes-request.json in a fresh --out folder. Other files the command might write elsewhere are not checked.",
+      "The unattributable section is created by wrapping dwitbuk.git and appending a trailing Submodule block to each real content diff call's output. No other kind of unattributable output (for example a stray line in the middle, or a header of an unknown kind) is tested.",
+      "These test_dwitbuk.py failures predate this task and are not Q-conflict's: the four test_Q_git_config_* tests other than ..._unbatched_comparison_..., and test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else. They also fail with HEAD's unchanged test file, so the check `python3 test_dwitbuk.py` will not exit 0 until they are fixed as well."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 12,
+      "cost_usd": 0.6379630000000001
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:28:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 12,
+    "cost_usd": 0.6379630000000001,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 10,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:28:04+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

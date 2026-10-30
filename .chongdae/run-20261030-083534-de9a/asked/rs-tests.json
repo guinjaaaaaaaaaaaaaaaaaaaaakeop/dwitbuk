@@ -1,0 +1,26 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-083534-de9a",
+  "task": "rs-tests",
+  "role": "nitpick",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Write the tests for the owner's strict-declaration clarification into test_dwitbuk.py (this project's free-function suite: module-level test_Q_strict_... functions, its Project harness and write/run/git helpers, collected by the file's own __main__ runner). A bare record entry is an exact FILE path; a trailing-slash entry is a directory; nothing is inferred from the disk. Cover: is_record (hunsu.json/child.py and hunsu.json/ are not records of the bare hunsu.json; custom-record.json/child.py of a lock-declared bare custom-record.json; directory entries unchanged). On real git output, in a project where hunsu.json and a lock-declared custom-record.json were each committed as files, then replaced by directories holding a committed child.py that is then changed: the eyes request's diff holds both child.py changes and an untracked file inside such a directory is in new_files; verify_packet keeps them in touched with their diff; eyes consume refuses with 'source changed' after child.py changes; the stop hook's touched and packet diff hold them; documents_or_records says they are not records; a project without git walks into such a directory. Also: diff_leaves_out keeps declared entries as declared (directories with trailing /) and the packet directory as '<rel>/'; when only records changed the eyes request's diff is empty; verify_packet diffs a touched x[1].json literally (a changed x1.json is not in its diff). Amend, do not delete, the earlier assertions this clarification supersedes (bare alpha.json covering alpha.json/inner.txt and alpha.json/, bare mangsang covering mangsang/relations/R-1.json, and diff_leaves_out sets written without trailing slashes, including test_eyes_packet_carries_diff_records_plan_and_open_findings_and_consume_keeps_only_quoted_contradictions). Keep mangsang/ late-review behaviour and same-prefix / wildcard literal cases as they are. Red evidence is the real suite: python3 test_dwitbuk.py, or a focused python3 -c 'import test_dwitbuk as t; t.test_Q_strict_x()'; python3 -m unittest collects nothing here. No mutation campaign is needed. Change no file but test_dwitbuk.py; do not commit.",
+  "closes": [
+    "Q-strict",
+    "Q-strict-sites",
+    "Q-strict-keep"
+  ],
+  "contract": {
+    "Q-strict": "contract/Q-strict-252610cf.md",
+    "Q-strict-sites": "contract/Q-strict-sites-68216246.md",
+    "Q-strict-keep": "contract/Q-strict-keep-3ffa7399.md"
+  },
+  "checks": [],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/rs-tests.response.json"
+}

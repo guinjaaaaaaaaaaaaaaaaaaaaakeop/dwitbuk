@@ -1,0 +1,33 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "build",
+  "run": "run-20261030-074412-044b",
+  "task": "rp-build",
+  "role": "implementer",
+  "target": ".",
+  "goal": "Fix record-path overmatching in dwitbuk: record_paths returns bare hunsu and its startswith users hide hunsu.py, hunsu_helper.py and hunsu-notes.md; replace prefix semantics at every record-matching site with exact-file / directory-boundary matching (lock-declared entries included), keep real environment records excluded, sibling directory prefixes as source, and mangsang model records' late-review/source-freshness handling unchanged",
+  "brief": "Implement the contract in dwitbuk.py and hooks/stop_eyes.py only. Add is_record(path, entries) (Q-match); make record_paths return hunsu's five exact environment files instead of the bare hunsu (Q-hunsu); use is_record at every record-matching site (Q-sites): documents_or_records, verify_packet's touched and excluded filters, source_state's skip and its non-git walk, the eyes request's exclude pathspecs (literal, ':(exclude,literal)ENTRY') and its untracked new_files filter, and the stop hook's dirty filter. Keep mangsang/ in what late eyes read as today, and leave prefixes that are not about record paths alone (Q-keep). test_dwitbuk.py is the contract and is protected: do not edit it, README.md, the manifests, hostcall.py or eyes_worker.py, and do not commit. Run the suite with AGENT_WORKER unset (env -u AGENT_WORKER python3 test_dwitbuk.py): inside a worker session test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else fails only because that hook steps aside when AGENT_WORKER=1.",
+  "closes": [
+    "Q-match",
+    "Q-hunsu",
+    "Q-sites",
+    "Q-keep"
+  ],
+  "contract": {
+    "Q-match": "contract/Q-match-3c3873c8.md",
+    "Q-hunsu": "contract/Q-hunsu-e147f166.md",
+    "Q-sites": "contract/Q-sites-2b9b04d8.md",
+    "Q-keep": "contract/Q-keep-69286cd4.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-074412-044b/local/rp-build.response.json"
+}

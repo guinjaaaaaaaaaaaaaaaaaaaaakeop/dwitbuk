@@ -1,0 +1,112 @@
+{
+  "artifact-type": "chongdae/task@1",
+  "written_by": "chongdae 1.24.0",
+  "status": "done",
+  "def": {
+    "id": "cc-tests-fix",
+    "role": "nitpick",
+    "brief": "Amend two tests cc-tests wrote, before any build, to Q-conflict item 2 as clarified at the end of the contract: test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed and test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text append the foreign 'Submodule x 1111111..2222222:' block after the last section, where it becomes part of that readable section's text; the clarified contract does not validate text inside a readable section. Inject instead the forms it names: the block before the first diff --git header of a real diff call's output (what diff.submodule=log printed for a gitlink first in a batch), and, as a second case, a header starting 'diff ' of another kind (for example 'diff --unknown x'). Keep the assertions (a clear message, exit non-zero, no eyes-request.json written; excluded_diff fails rather than returning text) and change nothing else. Both must still fail on the current tree; show that with a focused python3 -c run, never python3 -m unittest. Change no file but test_dwitbuk.py; do not commit.",
+    "closes": [
+      "Q-conflict"
+    ],
+    "needs": [],
+    "checks": [],
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "gate": null
+  },
+  "seq": 21,
+  "added": "2026-10-30T10:28:50+00:00",
+  "non-claims": [
+    "no check decides this task; done means the agent said so",
+    "(provider) The unreadable text is added by wrapping dwitbuk.git around real git output, not produced by a real diff.submodule=log gitlink, so it is a simulation of what git printed.",
+    "(provider) No test covers the clarified form 'a header … whose path cannot be read' on its own; the two cases tested are text before the first header and a 'diff --unknown x' header.",
+    "(provider) 'A clear error' is checked loosely: the message must name the foreign text or mention 'section' or 'attribut'."
+  ],
+  "response": {
+    "status": "done",
+    "summary": "I amended the two Q-conflict item-2 tests in test_dwitbuk.py to match the clarified contract. Nothing is committed. They no longer append the 'Submodule x 1111111..2222222:' block after the last section. The `unattributable_git(case)` wrapper now takes a case from a new `UNATTRIBUTABLE` table and each test runs both cases. Case 1 puts the 'Submodule x…' block before the first `diff --git`/`diff --cc` header of a real content diff call's output. Case 2 adds a header of another kind, 'diff --unknown x', with a line under it, after the last readable section. The assertions are unchanged: in `eyes request` the exit code is non-zero, the message is clear and no eyes-request.json is written; `verify_packet` fails instead of returning `excluded_diff` text. `clear_about_it` also accepts a message that names 'diff --unknown', since the new case has no 'Submodule x' text to quote. I checked with a focused python3 -c run of each test in each case, and all four fail on the current tree for the right reason. `eyes request` exits 0 and writes a packet in both cases. `verify_packet` returns the notes.json section as `excluded_diff` in both cases; in case 2 the 'diff --unknown x' block is joined onto it.",
+    "tests": [
+      "test_dwitbuk.py"
+    ],
+    "covers": [
+      {
+        "section": "Q-conflict",
+        "tests": [
+          "test_Q_conflict_eyes_request_without_a_base_keeps_the_conflicted_paths_diff_cc_section_once",
+          "test_Q_conflict_eyes_request_keeps_the_diff_cc_section_once_wherever_batch_boundaries_fall",
+          "test_Q_conflict_a_conflicted_path_that_is_a_declared_record_is_left_out_and_the_rest_stays",
+          "test_Q_conflict_eyes_request_fails_clearly_and_writes_no_packet_when_a_section_cannot_be_attributed",
+          "test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_partial_text"
+        ]
+      }
+    ],
+    "non-claims": [
+      "The unreadable text is added by wrapping dwitbuk.git around real git output, not produced by a real diff.submodule=log gitlink, so it is a simulation of what git printed.",
+      "No test covers the clarified form 'a header … whose path cannot be read' on its own; the two cases tested are text before the first header and a 'diff --unknown x' header.",
+      "'A clear error' is checked loosely: the message must name the foreign text or mention 'section' or 'attribut'."
+    ],
+    "worker": {
+      "host": "claude-code",
+      "model": "claude-opus-5-5",
+      "turns": 5,
+      "cost_usd": 0.234011
+    }
+  },
+  "answered": {
+    "at": "2026-10-30T10:29:28+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "touched_by_provider": [
+    "test_dwitbuk.py"
+  ],
+  "performed_by": {
+    "provider": "command",
+    "argv": [
+      "python3",
+      "{plugin:hacheong}/worker.py",
+      "--member",
+      "teujip",
+      "--request",
+      "{request}",
+      "--response",
+      "{response}",
+      "--host",
+      "claude"
+    ],
+    "host": "claude-code",
+    "model": "claude-opus-5-5",
+    "turns": 5,
+    "cost_usd": 0.234011,
+    "versions": {
+      "used": {
+        "hacheong": "1.12.1",
+        "chongdae": "1.24.0"
+      }
+    },
+    "trace": {
+      "changed": [],
+      "commands-run": 3,
+      "commands-failed": 0
+    }
+  },
+  "checks": [],
+  "touched": [
+    "test_dwitbuk.py"
+  ],
+  "done": {
+    "at": "2026-10-30T10:29:28+00:00",
+    "chongdae": "chongdae 1.24.0"
+  },
+  "seen-non-claims": {
+    "by": "verifier of pc-build",
+    "texts": [
+      "(provider) The unreadable text is added by wrapping dwitbuk.git around real git output, not produced by a real diff.submodule=log gitlink, so it is a simulation of what git printed.",
+      "(provider) No test covers the clarified form 'a header … whose path cannot be read' on its own; the two cases tested are text before the first header and a 'diff --unknown x' header.",
+      "(provider) 'A clear error' is checked loosely: the message must name the foreign text or mention 'section' or 'attribut'."
+    ],
+    "at": "2026-10-30T10:33:14+00:00",
+    "chongdae": "chongdae 1.24.0"
+  }
+}

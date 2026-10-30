@@ -1,0 +1,82 @@
+{
+  "artifact-type": "chongdae/request@1",
+  "written_by": "chongdae 1.24.0",
+  "stage": "verify",
+  "run": "run-20261030-083534-de9a",
+  "task": "hc-sync",
+  "role": "verifier",
+  "target": ".",
+  "goal": "Owner clarifications after run-20261030-074412-044b: (1) strict record declarations — a trailing-slash entry is a directory, a bare entry is an exact file path, never a directory found on disk — at every record-matching site, the late-eyes diff composed from candidate file paths, verified on real git output; (2) vendor hacheong's reviewed hostcall.py (7aa70c6, sha256 fa06077c...) with adapter tests; (3) review and adopt the owner-authorized prior documentation/Python-floor/AGENTS work and the portable bootstrap environment with prior-work provenance, and classify dropping supported Python or host versions as MAJOR in Versioning",
+  "brief": "Vendor hacheong's reviewed hostcall.py (commit 7aa70c6 of ../hacheong, sha256 fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b) as dwitbuk's hostcall.py, byte for byte: read with git show from the sibling's object store, no import of the sibling, no change to the sibling or to any installed cache. Workers then start with their own host identity and without the parent's session ids. The second check pins the digest.",
+  "closes": [
+    "Q-hostcall"
+  ],
+  "contract": {
+    "Q-hostcall": "contract/Q-hostcall-32cecdbc.md"
+  },
+  "checks": [
+    [
+      "python3",
+      "test_dwitbuk.py"
+    ],
+    [
+      "python3",
+      "-c",
+      "import hashlib,sys; sys.exit(hashlib.sha256(open('hostcall.py','rb').read()).hexdigest() != 'fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b')"
+    ]
+  ],
+  "tests": [
+    "test_dwitbuk.py"
+  ],
+  "response": "./.chongdae/run-20261030-083534-de9a/local/hc-sync.verify.response.json",
+  "touched": [
+    "hostcall.py"
+  ],
+  "built": null,
+  "excluded": {
+    "record-paths": [
+      ".dwitbuk/review.lock",
+      "reviews/review-20261030-173021-1aeb.json"
+    ]
+  },
+  "since": {
+    ".": "e81b59d3e7ab6d0c1f692d6d26381837d5af22b7"
+  },
+  "tests_non_claims": {
+    "hc-tests": [
+      "Not tested: \"`hostcall.py` becomes byte-identical to hacheong's reviewed `hostcall.py` at commit `7aa70c6` (SHA-256 `fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b`). Nothing else changes in it, and it imports no other plugin.\" The brief limits me to the adapter-behaviour tests, so nothing here pins the file's hash or its imports. A hash check or a review has to decide this sentence.",
+      "\"`python3 test_dwitbuk.py` passes as a whole on Python 3.11 or later\" is decided by the check itself, not by a named test, and only on the Python the check runs on. One test I did not write already fails at HEAD before any change of mine: test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_else (JSONDecodeError). It is probably caused by this session's environment, which has AGENT_WORKER=1 and other host variables set; I did not confirm that. Unless that is fixed or the check runs in a clean environment, the whole-suite check can fail even after a correct build.",
+      "The sandbox tests and the os.environ before/after test also assert the full worker-env contract on the same call. This is so they decide something now: the bare -s values and the os.environ invariance already hold with the current hostcall.py.",
+      "The recorder records the env the child would get. If no env= is passed, that is os.environ at the moment of the call. A child env assembled some other way, such as a wrapper script or `env` in the argv, would not be seen. The tests also pick the host call by the argv[0] basename `claude` or `codex`."
+    ]
+  },
+  "checked": [
+    {
+      "command": "python3 test_dwitbuk.py",
+      "exit": 0,
+      "tail": [
+        "PASS test_the_verifier_reads_the_hands_non_claims_and_what_chongdae_checked_itself",
+        "PASS test_verify_packet_carries_contract_touched_diff_and_the_builders_report",
+        "PASS test_verify_packet_diffs_from_where_the_task_started_in_each_repository",
+        "PASS test_verify_packet_tells_the_eyes_when_the_slice_is_a_refactoring",
+        "PASS test_worker_record_names_the_model_and_keeps_the_transcript",
+        "all passed"
+      ],
+      "at": "2026-10-30T09:09:57+00:00",
+      "chongdae": "chongdae 1.24.0",
+      "source": "the task's checks, run by chongdae to decide it",
+      "changed_since": []
+    },
+    {
+      "command": "python3 -c 'import hashlib,sys; sys.exit(hashlib.sha256(open('\"'\"'hostcall.py'\"'\"','\"'\"'rb'\"'\"').read()).hexdigest() != '\"'\"'fa06077c00e1aa8514be54689567bad7abcb5c5f21794e1b5f551ebb1e07873b'\"'\"')'",
+      "exit": 0,
+      "tail": [
+        ""
+      ],
+      "at": "2026-10-30T09:09:57+00:00",
+      "chongdae": "chongdae 1.24.0",
+      "source": "the task's checks, run by chongdae to decide it",
+      "changed_since": []
+    }
+  ]
+}
