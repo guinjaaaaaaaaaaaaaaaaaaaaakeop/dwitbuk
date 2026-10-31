@@ -1969,15 +1969,18 @@ def test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_s
 
 
 
-HOSTCALL_DROPPED = ("CODEX_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "CHONGDAE_SESSION", "AI_AGENT", "CLAUDE_PROJECT_DIR", "CODEX_VERSION")
+HOSTCALL_DROPPED = ("CODEX_THREAD_ID", "CODEX_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CHONGDAE_SESSION", "AI_AGENT", "CLAUDE_PROJECT_DIR", "CODEX_VERSION")
 HOSTCALL_KEPT = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CLAUDECODE", "AGENT_CODEX_SANDBOX", "PATH")
 HOSTCALL_HOSTS = {"claude": "claude-code", "codex": "codex"}
+HOSTCALL_SESSION_MARKER = "synthetic-codex-session-id-parent-0000"
+HOSTCALL_NEAR_MISS = ("CODEX_SESSION_ID_NOTE", "synthetic near-miss, not the session id")
 
 
 def hostcall_parent(adapter, sandbox="workspace-write"):
     """A parent environment that is the *other* host's session, with every identity, metadata, config and auth key set."""
     env = {"AGENT_HOST": "codex" if adapter == "claude" else "claude-code",
-           "CODEX_THREAD_ID": "thread-parent", "CLAUDE_CODE_SESSION_ID": "session-parent", "CHONGDAE_SESSION": "chongdae-parent",
+           "CODEX_THREAD_ID": "thread-parent", "CODEX_SESSION_ID": HOSTCALL_SESSION_MARKER,
+           HOSTCALL_NEAR_MISS[0]: HOSTCALL_NEAR_MISS[1], "CLAUDE_CODE_SESSION_ID": "session-parent", "CHONGDAE_SESSION": "chongdae-parent",
            "AI_AGENT": "parent-agent", "CLAUDE_PROJECT_DIR": "/parent/project", "CODEX_VERSION": "0.0.parent",
            "CLAUDE_CONFIG_DIR": "/dummy/claude-config", "CODEX_HOME": "/dummy/codex-home", "ANTHROPIC_API_KEY": "sk-ant-dummy",
            "OPENAI_API_KEY": "sk-openai-dummy", "CLAUDECODE": "1", "AGENT_CODEX_SANDBOX": sandbox}
@@ -2100,6 +2103,28 @@ def test_Q_hostcall_parent_environ_is_the_same_after_each_call_as_before():
         assert before == after, (adapter, {k: (before.get(k), after.get(k)) for k in set(before) | set(after) if before.get(k) != after.get(k)})
         assert before.get("AGENT_HOST") == parent["AGENT_HOST"] and "AGENT_WORKER" not in after
         hostcall_child_env_is_the_workers(adapter, call, parent)
+        assert before.get("CODEX_SESSION_ID") == after.get("CODEX_SESSION_ID") == HOSTCALL_SESSION_MARKER, \
+            (adapter, before.get("CODEX_SESSION_ID"), after.get("CODEX_SESSION_ID"))
+
+
+def hostcall_session_id_is_dropped_by_name(adapter):
+    assert HOSTCALL_DROPPED[HOSTCALL_DROPPED.index("CODEX_THREAD_ID") + 1] == "CODEX_SESSION_ID" and len(HOSTCALL_DROPPED) == 7, HOSTCALL_DROPPED
+    parent = hostcall_parent(adapter)
+    assert parent.get("CODEX_SESSION_ID") == HOSTCALL_SESSION_MARKER and parent.get(HOSTCALL_NEAR_MISS[0]) == HOSTCALL_NEAR_MISS[1], parent
+    call, before, after = hostcall_call(adapter, parent)
+    env = call["env"]
+    assert "CODEX_SESSION_ID" not in env, ("the parent's CODEX_SESSION_ID reached the %s child" % adapter, env.get("CODEX_SESSION_ID"))
+    assert env.get(HOSTCALL_NEAR_MISS[0]) == HOSTCALL_NEAR_MISS[1], (adapter, "near-miss", env.get(HOSTCALL_NEAR_MISS[0]))
+    assert env.get("AGENT_HOST") == HOSTCALL_HOSTS[adapter] and env.get("AGENT_WORKER") == "1", (adapter, env.get("AGENT_HOST"), env.get("AGENT_WORKER"))
+    assert before == after and after.get("CODEX_SESSION_ID") == HOSTCALL_SESSION_MARKER, (adapter, after.get("CODEX_SESSION_ID"))
+
+
+def test_Q_session_id_claude_child_lacks_CODEX_SESSION_ID_by_name_and_keeps_the_near_miss():
+    hostcall_session_id_is_dropped_by_name("claude")
+
+
+def test_Q_session_id_codex_child_lacks_CODEX_SESSION_ID_by_name_and_keeps_the_near_miss():
+    hostcall_session_id_is_dropped_by_name("codex")
 
 
 def diff_files(d, lead=""):
@@ -2374,17 +2399,18 @@ def hostcall_rest_of_the_parent(adapter):
     env = call["env"]
     for k, v in HOSTCALL_REST.items():
         assert env.get(k) == v, (adapter, k, env.get(k), v)
+    assert env.get(HOSTCALL_NEAR_MISS[0]) == HOSTCALL_NEAR_MISS[1], (adapter, "near-miss", env.get(HOSTCALL_NEAR_MISS[0]))
     missing = sorted(set(want) - set(env))
     extra = sorted(set(env) - set(want))
     differ = sorted(k for k in set(want) & set(env) if want[k] != env[k])
-    assert env == want, ("the child's env is the parent's minus exactly the six keys", adapter, missing, extra, differ)
+    assert env == want, ("the child's env is the parent's minus exactly the seven keys", adapter, missing, extra, differ)
 
 
-def test_Q_review_fixes_hostcall_claude_child_env_is_the_parents_minus_exactly_the_six_keys():
+def test_Q_review_fixes_hostcall_claude_child_env_is_the_parents_minus_exactly_the_seven_keys():
     hostcall_rest_of_the_parent("claude")
 
 
-def test_Q_review_fixes_hostcall_codex_child_env_is_the_parents_minus_exactly_the_six_keys():
+def test_Q_review_fixes_hostcall_codex_child_env_is_the_parents_minus_exactly_the_seven_keys():
     hostcall_rest_of_the_parent("codex")
 
 
