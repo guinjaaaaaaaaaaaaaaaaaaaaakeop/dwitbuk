@@ -1118,6 +1118,184 @@ def test_a_documents_or_records_task_with_no_check_is_said_not_charged_and_its_o
         assert "1 objection(s) (non-claim 1)" in out, out
 
 
+OBS = {"layer": "observation"}
+
+
+def layered_run(pj, rid, tasks):
+    """A session run's records as chongdae 2.0.0 writes them: one task file each, `def` with its role, `status`, `touched`,
+    the non-claims on the task (and the lock's provider for a hired role, `performed_by`)."""
+    root = os.path.join(pj.dir, ".chongdae", rid)
+    write(os.path.join(root, "plan.json"), {"artifact-type": "chongdae/plan@1", "goal": rid, "kind": "session", "tasks": []})
+    write(os.path.join(root, "state.json"), {"artifact-type": "chongdae/run@1", "status": "complete"})
+    for tid, (role, touched, ncs) in tasks.items():
+        write(os.path.join(root, "tasks", tid + ".json"),
+              {"artifact-type": "chongdae/task@1", "status": "done", "non-claims": list(ncs), "touched": list(touched),
+               "def": {"id": tid, "role": role, "checks": [], "closes": ["Q-" + tid]},
+               **({"performed_by": {"provider": "command", "as": role}} if role not in ("session", "subagent") else {})})
+
+
+def test_a_reporters_explicit_observation_goes_through_non_claim_grouping_only_when_every_constituent_says_so():
+    """Before 2.0.2, collect() kept a reporter's `"layer": "observation"` and grouping non-claims by clause rebuilt each one
+    without it: in a temp project (2026-11-03) a typed `stale` stayed an observation and a typed `non-claim` came out a charge.
+    The reporter's layer goes through grouping only when every non-claim a grouped one stands for carries an explicit
+    observation; a constituent with no layer, an unknown one, or an explicit objection leaves the group an objection — one run
+    at a time, so a run whose copy of the clause is typed lends nothing to a run whose copy is not."""
+    with Project() as pj:
+        pj.reporter([
+            {"kind": "stale", "where": "R-1", "text": "typed stale", **OBS},
+            {"kind": "non-claim", "where": "run-a", "text": "T1: (provider) typed limit", **OBS},
+            {"kind": "non-claim", "where": "run-a", "text": "T2: (provider) typed limit", **OBS},
+            {"kind": "non-claim", "where": "run-b", "text": "T3: (provider) typed limit"},                       # same clause, untyped
+            {"kind": "non-claim", "where": "run-c", "text": "T4: (provider) half typed", **OBS},
+            {"kind": "non-claim", "where": "run-c", "text": "T5: (provider) half typed"},                        # mixed: one unknown
+            {"kind": "non-claim", "where": "run-d", "text": "T6: (provider) disputed", **OBS},
+            {"kind": "non-claim", "where": "run-d", "text": "T7: (provider) disputed", "layer": "objection"},    # mixed: one objection
+            {"kind": "non-claim", "where": "run-e", "text": "no long list was tried — 2 task(s): T8, T9", **OBS},  # the reporter's own grouping
+            {"kind": "non-claim", "where": "run-f", "text": "T10: (provider) odd", "layer": "info"},             # not a layer: unknown
+            {"kind": "non-claim", "where": "run-g", "text": "T11: (provider) said a charge", "layer": "objection"},
+        ], "chongdae")
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        r = pj.latest()
+        got = {f["where"]: dwitbuk.layer(f) for f in r["findings"]}
+        assert got == {"R-1": "observation", "run-a": "observation", "run-b": "objection", "run-c": "objection", "run-d": "objection",
+                       "run-e": "observation", "run-f": "objection", "run-g": "objection"}, got
+        texts = {f["where"]: f["text"] for f in r["findings"]}
+        # grouping is unchanged: the same text, the tasks borne in words — only the layer is the reporter's now
+        assert texts["run-a"] == "(provider) typed limit  [tasks: T1 (run-a), T2 (run-a); also in other runs: T3 (run-b)]", texts
+        assert texts["run-e"] == "no long list was tried  [tasks T8, T9]", texts
+        assert "5 objection(s) (non-claim 5), 3 observation(s)" in out, out
+        i_a = next(i for i, f in enumerate(r["findings"]) if f["where"] == "run-a")
+        code, said = run("dispose", "%s/%d" % (r["id"], i_a), "--as", "dismissed", "--why", "x", "--by", "lee", "--target", pj.dir)
+        assert code != 0 and "is an observation" in said, said
+        code, followed = run("follow", "--target", pj.dir)
+        assert "typed limit  [tasks: T1" not in followed and "undisposed findings: 5" in followed, followed
+
+
+def test_no_check_by_nature_stays_but_never_lifts_a_constituents_explicit_objection():
+    """The NO_CHECK rule (a quibble's, a documents task's "no check decides this task" is said, not charged) stays for
+    non-claims no reporter typed; a constituent the reporter calls an objection keeps the group one, and the reporter's
+    explicit observation on a code task's no-check line is the reporter's word, trusted like any kind's."""
+    with Project() as pj:
+        nc = "no check decides this task; done means the agent said so"
+        layered_run(pj, "run-1", {"q": ("quibble", [], [nc])})
+        layered_run(pj, "run-2", {"q": ("quibble", [], [nc]), "p": ("quibble", [], [nc])})
+        layered_run(pj, "run-3", {"s": ("session", ["a.py"], [nc])})
+        layered_run(pj, "run-4", {"s": ("session", ["a.py"], [nc])})
+        pj.reporter([{"kind": "non-claim", "where": "run-1", "text": "q: " + nc},
+                     {"kind": "non-claim", "where": "run-2", "text": "q: " + nc},
+                     {"kind": "non-claim", "where": "run-2", "text": "p: " + nc, "layer": "objection"},
+                     {"kind": "non-claim", "where": "run-3", "text": "s: " + nc, **OBS},
+                     {"kind": "non-claim", "where": "run-4", "text": "s: " + nc}], "chongdae")
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        got = {f["where"]: dwitbuk.layer(f) for f in pj.latest()["findings"]}
+        assert got == {"run-1": "observation", "run-2": "objection", "run-3": "observation", "run-4": "objection"}, got
+
+
+def test_a_layer_a_reporter_gave_that_is_no_layer_is_a_charge_and_never_left_to_the_by_nature_rule():
+    """Reproduced on 2.0.2's first draft (a review of it, 2026-11-03): collect() dropped a `layer` that was neither word, so a
+    quibble's "no check decides this task" a reporter typed `info` read as untyped and the by-nature rule lifted it to an
+    observation. A layer given and invalid — unknown, null, not a string — is a charge, grouped or not; only a layer left
+    out keeps the kinds' rules (the by-nature rule for a quibble's no-check line; `delegated`)."""
+    with Project() as pj:
+        nc = "no check decides this task; done means the agent said so"
+        for rid in ("run-1", "run-2", "run-3", "run-4"):
+            layered_run(pj, rid, {"q": ("quibble", [], [nc])})
+        pj.reporter([{"kind": "non-claim", "where": "run-1", "text": "q: " + nc, "layer": "info"},
+                     {"kind": "non-claim", "where": "run-2", "text": "q: " + nc, "layer": None},
+                     {"kind": "non-claim", "where": "run-3", "text": "q: " + nc, "layer": ["observation"]},
+                     {"kind": "non-claim", "where": "run-4", "text": "q: " + nc},
+                     {"kind": "delegated", "where": "run-4/q", "text": "typed oddly", "layer": "info"},
+                     {"kind": "delegated", "where": "run-4/p", "text": "untyped"}], "chongdae")
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        got = {f["where"]: dwitbuk.layer(f) for f in pj.latest()["findings"]}
+        assert got == {"run-1": "objection", "run-2": "objection", "run-3": "objection", "run-4": "observation",
+                       "run-4/q": "objection", "run-4/p": "observation"}, got
+        assert all(f["layer"] in ("observation", "objection") for f in pj.latest()["findings"]), "the review writes only the two words"
+        assert "4 objection(s) (delegated 1, non-claim 3), 2 observation(s)" in out, out
+
+
+def test_an_untyped_quibble_non_claim_stays_a_charge_whatever_it_says_and_whoever_said_it():
+    """Deferred, not fixed by heuristics: whether a contract reader's own non-claim is a limit its role sets ("I did not read
+    the tree") or work it left undone ("I did not inspect the clause I was sent") is not in the record as a type. A hired
+    quibble that answered, touched nothing and had no checks still says both in free text, and the second need not name the
+    clause's anchor — so no role, provenance or wording lifts an untyped one: guin-site review 6257's role-limit sentences
+    stay charges until a producer types them, and the admission beside them stays one too."""
+    with Project() as pj:
+        said = ["(provider) I did not read the tree or other plan sections (Q-read, Q-lexicon, Q-patch-view, Q-meta). Anything they decide may already settle a finding.",
+                "(provider) I did not propose answers or rate the contract.",
+                "(provider) 트리(코드)는 읽지 않았다. 지금 코드가 이 일들을 어떻게 하는지는 말하지 않는다",
+                "(provider) I did not inspect the acceptance clause about retries; the turns ran out"]   # missing work, no anchor named
+        nc = "no check decides this task; done means the agent said so"
+        layered_run(pj, "run-1", {"thread-quibble": ("quibble", [], [nc] + said)})
+        pj.reporter([{"kind": "non-claim", "where": "run-1", "text": "thread-quibble: " + n} for n in [nc] + said], "chongdae")
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        got = {f["text"]: dwitbuk.layer(f) for f in pj.latest()["findings"]}
+        assert got == {**{n + "  [task thread-quibble]": "objection" for n in said}, nc.split(";")[0] + "  [task thread-quibble]": "observation"}, got
+        assert "4 objection(s) (non-claim 4)" in out, out
+
+
+def test_a_typed_observation_across_reviews_keeps_identity_disposition_and_history_and_an_untyped_old_charge_still_carries():
+    """Reviews in a row while a reporter starts, keeps and stops typing its non-claims. A charge the last review held is the
+    same finding when typed (its identity has no layer): it inherits that charge's disposition and first-seen, and since that
+    review held it as a charge, not an observation, it is written in full once — counted as `unchanged` from the next review,
+    which then holds it. An untyped charge that stopped being reported is carried as before (nothing absolves it), a review
+    already written is not rewritten, and a non-claim the reporter stops typing is a charge again — answered if it was."""
+    import time
+    with Project() as pj:
+        def report(typed, extra=()):
+            pj.reporter([{"kind": "non-claim", "where": "run-1", "text": "%s: (provider) limit %s" % (t, t), **(OBS if t in typed else {})}
+                         for t in ("A", "B") + tuple(extra)], "chongdae")
+        def review():
+            time.sleep(1.1)
+            code, out = run("review", "--target", pj.dir)
+            assert code == 0, out
+            return pj.latest(), out
+        def by_task(r):
+            return {re.search(r"limit (\w)", f["text"]).group(1) if "limit" in f["text"] else f["kind"]: f for f in r["findings"]}
+        report((), extra=("C",))
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        r1 = pj.latest()
+        f1 = by_task(r1)
+        assert all(dwitbuk.layer(f1[t]) == "objection" for t in "ABC"), f1
+        i_a = r1["findings"].index(f1["A"])
+        assert run("dispose", "%s/%d" % (r1["id"], i_a), "--as", "accepted", "--why", "the role sets it", "--by", "lee", "--target", pj.dir)[0] == 0
+        r1_path = os.path.join(pj.dir, dwitbuk.REVIEWS, r1["id"] + ".json")
+        r1_bytes = open(r1_path, "rb").read()
+        answer = pj.latest()["findings"][i_a]["disposition"]
+
+        report(("A", "B", "D"), extra=("D",))   # A and B typed now, C no longer reported, D new and typed
+        r2, out2 = review()
+        f2 = by_task(r2)
+        assert open(r1_path, "rb").read() == r1_bytes, "a written review is history: not rewritten"
+        assert [dwitbuk.layer(f2[t]) for t in "ABD"] == ["observation"] * 3, f2
+        assert "unchanged" not in f2, "the last review held A and B as charges, not observations: written in full, not counted"
+        assert dwitbuk.identity(f2["A"]) == dwitbuk.identity(f1["A"]) and f2["A"]["disposition"] == answer, f2["A"]
+        assert f2["A"]["first-seen"] == r1["id"] == f2["B"]["first-seen"] and "disposition" not in f2["B"], f2
+        carried = [f for f in r2["findings"] if f["kind"] == "undisposed"]
+        assert len(carried) == 1 and carried[0]["raised-in"] == "%s/%d" % (r1["id"], r1["findings"].index(f1["C"])), carried
+        assert "1 objection(s) (non-claim 1; 1 of them carried, already in the count), 3 observation(s)" in out2, out2
+        i_b = r2["findings"].index(f2["B"])
+        assert "is an observation" in run("dispose", "%s/%d" % (r2["id"], i_b), "--as", "accepted", "--why", "x", "--by", "lee", "--target", pj.dir)[1]
+
+        r2_bytes = open(os.path.join(pj.dir, dwitbuk.REVIEWS, r2["id"] + ".json"), "rb").read()
+        r3, out3 = review()   # the same report: now held in full by r2, counted
+        f3 = by_task(r3)
+        assert open(os.path.join(pj.dir, dwitbuk.REVIEWS, r2["id"] + ".json"), "rb").read() == r2_bytes
+        assert not any(t in f3 for t in "ABD") and f3["unchanged"]["seen-in"] == [r2["id"]], f3
+        assert "3 observation(s) written in full in 1 earlier review(s) and unchanged since (non-claim 3)" == f3["unchanged"]["text"], f3
+        carried = [f for f in r3["findings"] if f["kind"] == "undisposed"]
+        assert len(carried) == 1 and carried[0]["raised-in"].startswith(r1["id"] + "/"), carried
+
+        report(())   # the reporter stops typing: A and B are charges again, A answered in r1, B open; C still carried
+        r4, out4 = review()
+        f4 = by_task(r4)
+        assert dwitbuk.layer(f4["A"]) == dwitbuk.layer(f4["B"]) == "objection", f4
+        assert f4["A"]["disposition"] == answer and "disposition" not in f4["B"], f4
+        assert "2 objection(s) (non-claim 2; 1 of them carried, already in the count)" in out4, out4
+        code, followed = run("follow", "--target", pj.dir)   # B, counted as unchanged in r3, is owed a disposal again
+        assert code == 1 and "limit B  [task B]" in followed and "limit A" not in followed and "undisposed findings: 2" in followed, followed
+
+
 def test_review_and_the_session_start_line_count_each_open_charge_once_by_the_kind_it_makes():
     """guin-site review a3c2: chongdae's close said "cq-failed 2, non-claim 7, undisposed 3" and the next session start
     "cq-failed 2, non-claim 10" for the same twelve objections — review counted a carry as `undisposed`, the hook as the kind

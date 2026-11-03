@@ -237,7 +237,10 @@ def collect(target, since):
                 findings.append({"kind": f["kind"], "where": f["where"], "text": f["text"],
                                  **({"files": f["files"]} if "files" in f else {}),   # read below to group by directory; not saved
                                  **({"standing": True, "reporter": name} if doc.get("standing") is True else {}),
-                                 **({"layer": f["layer"]} if f.get("layer") in ("observation", "objection") else {})})
+                                 # a layer the reporter gave is kept; one it gave that is no layer (`info`, null) is a charge —
+                                 # dropped, it read as no layer at all, and a quibble's typed-`info` "no check decides this
+                                 # task" was lifted by the by-nature rule. Only a layer left out is left to the kind's rules
+                                 **({"layer": f["layer"] if f["layer"] in ("observation", "objection") else "objection"} if "layer" in f else {})})
     return findings, sorted(reporters), heard
 
 
@@ -314,7 +317,14 @@ def cmd_review(args):
     for key, by_run in groups.items():
         for where, fs in sorted(by_run.items()):
             f = {"kind": "non-claim", "where": where, "text": key + bearing(fs, by_run, where)}
-            if key == NO_CHECK and all(uncheckable_by_nature(defs.get(where, {}), t, target) for x in fs for t in task_ids(x["text"])):
+            said = [x.get("layer") for x in fs]   # each constituent's explicit layer, as collect() kept it; None: the reporter said none
+            if all(s == "observation" for s in said):
+                # the reporter marked every non-claim this one stands for an observation, and a reporter is trusted with its
+                # own layer: before 2.0.2 grouping rebuilt the finding without it, and a typed observation was raised as a charge
+                f["layer"] = "observation"
+            elif "objection" in said:
+                f["layer"] = "objection"   # one constituent the reporter calls a charge keeps the group one: nothing below lifts it
+            elif key == NO_CHECK and all(uncheckable_by_nature(defs.get(where, {}), t, target) for x in fs for t in task_ids(x["text"])):
                 # a contract, design or plan document (domain plan) has no check that could decide prose, a test task's tests
                 # are what the build is checked against, and a task that wrote only documents or records (a Done line in
                 # ATPROTO.md, `hunsu lock`) has nothing a check could run on: said, not a charge — a session's code task with
@@ -348,8 +358,9 @@ def cmd_review(args):
             if not f.get("disposition") and (charge(f) in settled or cut_charge(f) in settled):
                 f["disposition"] = settled.get(charge(f)) or settled[cut_charge(f)]   # answered in any earlier review, not only the last: one charge, one answer
             # an observation is a fact of the record; written in full once, it is counted after that, with the review that
-            # holds it — a site's 120 relations confirmed by delegation were 58 KB of every review, forever
-            written_in = prior[-1]["id"] if old else carried.get(identity(f), (None, None))[1]
+            # holds it — a site's 120 relations confirmed by delegation were 58 KB of every review, forever. Held by the last
+            # review as a charge, it was never written there as an observation: written in full now, counted from the next
+            written_in = (prior[-1]["id"] if layer(old) == "observation" else None) if old else carried.get(identity(f), (None, None))[1]
             if written_in and layer(f) == "observation" and f.get("kind") != "unchanged":
                 unchanged.setdefault(written_in, {})[f["kind"]] = unchanged.get(written_in, {}).get(f["kind"], 0) + 1
                 continue

@@ -213,7 +213,17 @@ Every finding carries a `layer`. An **objection** is a charge someone must answe
 counts it, `dispose` closes it. An **observation** is a fact of the record — kept in the review (shown under its own
 heading with a count), but never debt: `dispose` refuses it ("an observation is a fact, not a charge") and `follow`
 neither lists nor counts it. `delegated` is an observation by kind; a reporter may mark any of its own findings
-`"layer": "observation"` and is trusted. Everything else — unknown kinds included — is an objection: fail closed.
+`"layer": "observation"` and is trusted. Everything else — unknown kinds included — is an objection: fail closed. A
+`layer` a reporter gives that is neither word (`"info"`, `null`) is an objection too, never read as no layer; only a
+layer left out is left to the kind's rules. A grouped `non-claim` (below) keeps the reporter's observation only when
+every non-claim it stands for carries it; one with no layer, an invalid one or an objection among them leaves it an
+objection, and the by-nature rule below never lifts a non-claim the reporter called an objection. Before 2.0.2 grouping
+dropped the reporter's layer, and a typed observation was raised as a charge.
+
+Whether a contract reader's own non-claim is a limit its role sets ("I did not read the tree", "I propose no answers")
+or work it left undone ("I did not inspect the clause I was sent") is not classified: the record has no type that tells
+them apart, and the second need not name its anchor. No role, provenance or wording lifts an untyped one; until the
+engine that records non-claims types them, each stays a charge and a disposal answers it.
 
 From reporters, in their own words: chongdae's `outside-run` (grouped per directory here), `unattributed`, `delegated`
 (observation: `(verifier accepted)` / `(no verifier)`), `non-claim` (one per run and first clause, its tasks said in words —
@@ -245,6 +255,11 @@ worker never ran.
 
 - `--max-turns` bounds the Claude host only; `codex exec` has no turn limit to give, so a Codex eyes session ends when
   it ends.
+
+- A review keeps each finding's `layer`, not who decided it. An open "no check decides this task" charge that no
+  reporter repeats stops being carried once its tasks are uncheckable by nature (the rule written for charges raised
+  before 1.14.0); a reporter's explicit objection on such a run, left undisposed and then no longer reported, stops there
+  too. Telling the two apart needs the layer's provenance kept in the review — a new key, not part of 2.0.2.
 
 - The engine never computes findings from another product's directory; it runs the reporters the lock declares and
   keeps what answers in the type. A reporter's `{plugin:NAME}` is the copy this project runs: a `hunsu.local.json`
