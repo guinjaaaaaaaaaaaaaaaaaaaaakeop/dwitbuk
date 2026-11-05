@@ -13,11 +13,14 @@ import subprocess
 import sys
 import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))   # the source checkout: these tests, the project's records
+PLUGIN = os.path.join(HERE, "plugin")   # the installed payload: what the tests exercise
+sys.dont_write_bytecode = True   # running the self-check leaves no bytecode in the payload (a directory install copies what is there)
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"   # nor do the hooks, engines and workers it starts
+sys.path.insert(0, PLUGIN)
 import dwitbuk  # noqa: E402
 import eyes_worker as w  # noqa: E402
-sys.path.insert(0, os.path.join(HERE, "hooks"))
+sys.path.insert(0, os.path.join(PLUGIN, "hooks"))
 import session_start  # noqa: E402
 
 
@@ -397,7 +400,7 @@ def test_follow_brief_is_a_readers_line_and_says_nothing_when_nothing_is_open():
         code, out = run("follow", "--path", "a.py", "--brief", "--target", pj.dir)
         assert code == 0 and out == "", out
     for manifest in ("plugin.json", os.path.join(".claude-plugin", "plugin.json"), os.path.join(".codex-plugin", "plugin.json")):
-        reads = dwitbuk.load(os.path.join(HERE, manifest))["reads"]
+        reads = dwitbuk.load(os.path.join(PLUGIN, manifest))["reads"]
         assert reads["note"] == ["python3", "{plugin:dwitbuk}/dwitbuk.py", "follow", "--path", "{path}", "--brief", "--target", "{target}"], manifest
         assert "--brief" not in reads["file"], manifest   # the whole read stays
 
@@ -722,11 +725,11 @@ def pause(path, doc):
 dwitbuk.save = pause
 dwitbuk.main(sys.argv[1:])
 """
-        proc = subprocess.Popen([sys.executable, "-c", script, "eyes", "consume", "--dir", first, "--target", pj.dir], cwd=HERE,
+        proc = subprocess.Popen([sys.executable, "-c", script, "eyes", "consume", "--dir", first, "--target", pj.dir], cwd=PLUGIN,
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             assert proc.stdout.readline().strip() == "ready"
-            attempt = subprocess.run([sys.executable, os.path.join(HERE, "dwitbuk.py"), "eyes", "consume", "--dir", second, "--target", pj.dir],
+            attempt = subprocess.run([sys.executable, os.path.join(PLUGIN, "dwitbuk.py"), "eyes", "consume", "--dir", second, "--target", pj.dir],
                                      capture_output=True, text=True, timeout=10)
             assert attempt.returncode == 4 and "retry" in attempt.stderr, attempt
             stdout, stderr = proc.communicate("\n", timeout=10)
@@ -908,7 +911,7 @@ def test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_
     """Reviews are placed by the runner now (chongdae's `reviewer` role at a run's end), so nobody asks for them; what still
     needs a person is the disposition. The SessionStart hook says how many objections of the latest review are undisposed —
     a fact with the review's id, silent when there is nothing, silent in a worker session, never blocking."""
-    hook = os.path.join(HERE, "hooks", "session_start.py")
+    hook = os.path.join(PLUGIN, "hooks", "session_start.py")
     def run_hook(cwd, **env):
         # a normal session unless the call says AGENT_WORKER itself: the parent may be a worker session
         child = {k: v for k, v in os.environ.items() if k != "AGENT_WORKER"}
@@ -948,7 +951,7 @@ def test_session_start_hook_says_what_the_placed_reviews_still_need_and_nothing_
 def test_stop_hook_steps_aside_inside_a_worker_session_and_without_the_switch():
     with Project() as pj:
         write(os.path.join(pj.dir, "a.py"), "x = 2\n")   # dirty
-        hook = os.path.join(HERE, "hooks", "stop_eyes.py")
+        hook = os.path.join(PLUGIN, "hooks", "stop_eyes.py")
         def run_hook(payload, **env):
             done = subprocess.run([sys.executable, hook], input=json.dumps(payload), capture_output=True, text=True, encoding="utf-8", env=dict(os.environ, **env))
             return done.returncode, done.stdout + done.stderr
@@ -1304,7 +1307,7 @@ def test_review_and_the_session_start_line_count_each_open_charge_once_by_the_ki
              {"kind": "undisposed", "where": "r2", "text": "z", "carries": ["non-claim", "r2", "z"]}]
     assert dwitbuk.count_text(open_) == "cq-failed 1, non-claim 2; 1 of them carried, already in the count"
     assert dwitbuk.count_text(open_[:2]) == "cq-failed 1, non-claim 1" and dwitbuk.count_text([]) == "none"
-    hook = os.path.join(HERE, "hooks", "session_start.py")
+    hook = os.path.join(PLUGIN, "hooks", "session_start.py")
     with Project() as pj:
         pj.reporter([{"kind": "left-open", "where": "run-1/T", "text": "left open"}, {"kind": "stale", "where": "R-1", "text": "stale"}])
         assert run("review", "--target", pj.dir)[0] == 0
@@ -3431,6 +3434,482 @@ def test_Q_bounded_git_keeps_universal_newlines_and_git_patch_returns_gits_bytes
         assert patch == subprocess.run(["git", "diff", *PLAIN_DIFF, "--", "cr.txt"], cwd=pj.dir, capture_output=True).stdout.decode("utf-8", "replace")
         assert "\rtwo\r\n" in patch and "five\r" in patch, repr(patch)
         assert "\r" not in dwitbuk.git(pj.dir, "diff", *PLAIN_DIFF, "--", "cr.txt"), "the generic helper still translates"
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# The installed payload is plugin/: what a host copies at install (the catalogs' `source`). These read it as a host does —
+# that directory alone — and keep the source checkout (these tests, this project's hunsu environment, its run and review
+# records) out of it.
+
+PAYLOAD_REQUIRED = ("dwitbuk.py", "eyes_worker.py", "hostcall.py", "plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
+                    "README.md", "LICENSE", "skills/review/SKILL.md", "commands/review.md", "commands/dispose.md", "commands/follow.md",
+                    "commands/eyes.md", "hooks/hooks.json", "hooks/codex.json", "hooks/session_start.py", "hooks/stop_eyes.py")
+PAYLOAD_SHAPE = re.compile(r"^(?:(?:dwitbuk|eyes_worker|hostcall)\.py|plugin\.json|README\.md|LICENSE|\.(?:claude|codex)-plugin/plugin\.json"
+                           r"|skills/[\w.-]+/SKILL\.md|commands/[\w.-]+\.md|hooks/[\w.-]+\.(?:json|py))$")
+PLUGIN_ROOT_VAR = re.compile(r"\$\{(?:CLAUDE_PLUGIN_ROOT|PLUGIN_ROOT)\}/([^\"'\s`\\]+)")   # up to a quote, space or JSON's escaping backslash
+
+
+def in_git():
+    return subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=HERE, capture_output=True).returncode == 0
+
+
+def payload_files():
+    """What the payload ships: the files under plugin/ git would commit (tracked, or new and not ignored) — a host installs
+    the published tree, not this machine's bytecode; outside git, the directory minus bytecode."""
+    done = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "plugin"], cwd=HERE, capture_output=True)
+    if done.returncode == 0 and done.stdout:
+        listed = {p[len("plugin/"):] for p in done.stdout.decode("utf-8").split("\0") if p.startswith("plugin/")}
+        return sorted(p for p in listed if os.path.lexists(os.path.join(PLUGIN, *p.split("/"))))   # deleted in the tree: not shipped
+    out = []
+    for dirpath, dirs, files in os.walk(PLUGIN):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        out += [os.path.relpath(os.path.join(dirpath, f), PLUGIN).replace(os.sep, "/") for f in files if not f.endswith((".pyc", ".pyo"))]
+    return sorted(out)
+
+
+def copy_payload(dest):
+    """The payload alone, as a host's cache holds it: plugin/'s shipped files, nothing above it."""
+    for rel in payload_files():
+        to = os.path.join(dest, *rel.split("/"))
+        os.makedirs(os.path.dirname(to), exist_ok=True)
+        shutil.copy2(os.path.join(PLUGIN, *rel.split("/")), to)
+    return dest
+
+
+def tree_state(root):
+    state = {}
+    for dirpath, _, files in os.walk(root):
+        for f in files:
+            with open(os.path.join(dirpath, f), "rb") as fh:
+                state[os.path.relpath(os.path.join(dirpath, f), root).replace(os.sep, "/")] = fh.read()
+    return state
+
+
+def md_anchors(path):
+    """The anchors a Markdown file's headings make (GitHub's rule: lower case, punctuation dropped, spaces to hyphens)."""
+    out = set()
+    for line in io.open(path, encoding="utf-8"):
+        m = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
+        if m:
+            out.add(re.sub(r"[^\w\- ]", "", m.group(1).lower()).replace(" ", "-"))
+    return out
+
+
+def md_links(path, inside):
+    """Every relative link in a Markdown file resolves to a file or directory under `inside`, and its anchor to a heading."""
+    text = io.open(path, encoding="utf-8").read()
+    for link in re.findall(r"\]\(([^)\s]+)\)", text):
+        if re.match(r"^[a-z][a-z0-9+.-]*:", link):
+            continue   # a URL
+        page, _, anchor = link.partition("#")
+        dest = os.path.normpath(os.path.join(os.path.dirname(path), page)) if page else path
+        assert os.path.realpath(dest).startswith(os.path.realpath(inside) + os.sep) and os.path.exists(dest), \
+            "%s links outside %s or to nothing: %s" % (path, inside, link)
+        if anchor and dest.endswith(".md"):
+            assert anchor in md_anchors(dest), "%s: no heading makes #%s in %s" % (path, anchor, dest)
+
+
+def test_package_the_payload_is_the_runtime_alone_and_everything_it_names_is_inside_it():
+    """Installation and development are separate: a host installs plugin/, so everything the plugin runs or names — engine,
+    worker, hostcall, hooks, commands, the skill, its README and LICENSE — is in it, and nothing of the checkout is: no
+    tests, no hunsu environment, no run, review or model records, no bytecode, no symlink."""
+    files = payload_files()
+    missing = [p for p in PAYLOAD_REQUIRED if p not in files]
+    assert not missing, "the payload lacks %r" % missing
+    stray = [p for p in files if not PAYLOAD_SHAPE.match(p)]
+    assert not stray, "only the runtime ships; in the payload: %r" % stray
+    for dirpath, dirs, names in os.walk(PLUGIN):
+        for n in dirs + names:
+            assert not os.path.islink(os.path.join(dirpath, n)), "no symlink in the payload: %s" % os.path.join(dirpath, n)
+    if in_git():
+        for rel in ("plugin/__pycache__/dwitbuk.cpython-312.pyc", "plugin/hooks/__pycache__/session_start.cpython-312.pyc"):
+            assert subprocess.run(["git", "check-ignore", "-q", rel], cwd=HERE).returncode == 0, "bytecode is never shipped: %s" % rel
+    with open(os.path.join(PLUGIN, "LICENSE"), "rb") as a, open(os.path.join(HERE, "LICENSE"), "rb") as b:
+        assert a.read() == b.read(), "the payload's LICENSE is the repository's"
+    manifests = {m: dwitbuk.load(os.path.join(PLUGIN, m)) for m in ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json")}
+    version = manifests["plugin.json"]["version"]
+    for m, doc in manifests.items():
+        assert doc["name"] == "dwitbuk" and doc["version"] == version and doc["engines"] == {"python": ">=3.11"}, (m, doc.get("version"), doc.get("engines"))
+        for key in ("roles", "reads", "records"):
+            assert doc[key] == manifests["plugin.json"][key], (m, key)
+        for argv in list(doc["roles"].values()) + list(doc["reads"].values()):
+            for a in argv:
+                if a.startswith("{plugin:dwitbuk}/"):
+                    assert os.path.isfile(os.path.join(PLUGIN, a[len("{plugin:dwitbuk}/"):])), (m, a)
+    assert os.path.isfile(os.path.join(PLUGIN, manifests[".codex-plugin/plugin.json"]["skills"], "review", "SKILL.md"))
+    assert os.path.isfile(os.path.join(PLUGIN, manifests["plugin.json"]["extensions"]["com.openai"]["hooks"]))
+    named = []
+    for rel in files:
+        if rel.endswith((".json", ".md")):
+            named += [(rel, p) for p in PLUGIN_ROOT_VAR.findall(io.open(os.path.join(PLUGIN, rel), encoding="utf-8").read())]
+    assert {r for r, _ in named} >= {"hooks/hooks.json", "hooks/codex.json", "commands/review.md", "commands/dispose.md",
+                                     "commands/follow.md", "commands/eyes.md"}, named
+    for rel, p in named:
+        assert os.path.isfile(os.path.join(PLUGIN, p)), "%s names %s, which is not in the payload" % (rel, p)
+    for rel in (p for p in files if p.endswith(".md")):
+        text = io.open(os.path.join(PLUGIN, rel), encoding="utf-8").read()
+        assert not re.search(r"/(?:Users|home)/[^/\s]+/", text), "no local machine path in %s" % rel
+        md_links(os.path.join(PLUGIN, rel), PLUGIN)   # an installed README links nowhere above the payload
+    # the catalogs stay at the repository's root and name the payload
+    claude = dwitbuk.load(os.path.join(HERE, ".claude-plugin", "marketplace.json"))
+    entry = next(e for e in claude["plugins"] if e["name"] == "dwitbuk")
+    assert entry["source"] == "./plugin" and entry["version"] == version == claude["metadata"]["version"], (entry, claude["metadata"])
+    codex = dwitbuk.load(os.path.join(HERE, ".agents", "plugins", "marketplace.json"))
+    entry = next(e for e in codex["plugins"] if e["name"] == "dwitbuk")
+    assert entry["source"] == {"source": "local", "path": "./plugin"} and "version" not in entry, entry
+    assert dwitbuk.catalog_source(HERE, "dwitbuk") == os.path.normpath(PLUGIN)
+    # one source: nothing of the runtime is left beside the payload but the two entry points, and the developer docs link true
+    for gone in ("hostcall.py", "plugin.json", "commands", "skills", "hooks", ".codex-plugin", os.path.join(".claude-plugin", "plugin.json")):
+        assert not os.path.lexists(os.path.join(HERE, gone)), "%s lives in plugin/ only" % gone
+    for doc in ("README.md", "AGENTS.md"):
+        md_links(os.path.join(HERE, doc), HERE)
+
+
+FAKE_CLAUDE = r'''import json, os, sys
+argv = sys.argv[1:]
+prompt = sys.stdin.read()
+schema = json.loads(argv[argv.index("--json-schema") + 1])
+with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as fh:
+    fh.write(json.dumps({"argv": argv, "AGENT_WORKER": os.environ.get("AGENT_WORKER"), "AGENT_HOST": os.environ.get("AGENT_HOST"),
+                         "packet": "dwitbuk/eyes-request@1" in prompt}) + "\n")
+with open(os.environ["FAKE_CLAUDE_ANSWER"], encoding="utf-8") as fh:
+    answer = json.load(fh)
+answer["request"] = schema["properties"]["request"]["enum"][0]   # as a model gets it: the request's fingerprint, in the schema
+print(json.dumps({"type": "system", "subtype": "init", "model": "fake-eyes-1", "session_id": "fake-1"}))
+print(json.dumps({"type": "result", "num_turns": 1, "total_cost_usd": 0, "session_id": "fake-1", "structured_output": answer}))
+'''
+
+
+def test_package_a_copy_of_the_payload_alone_runs_review_dispose_eyes_and_hooks_outside_the_checkout():
+    """A host installs plugin/ copied on its own. The copy, in a fresh directory outside this checkout, with no PYTHONPATH or
+    user site and a project of its own as the working directory, runs the actual CLI on a small project: a review whose
+    reporter typed one non-claim an observation (kept one through grouping), follow, a disposal with its quote and the
+    finding's own text, the review lock refusing a competing mutation, late eyes through the manifest's own `eyes` argv and
+    hostcall to a host (a fake `claude` answering as a model would, given the request's fingerprint in the schema), consume
+    keeping only quoted findings, dispositions carried by the next review, the session-start line naming the copy's engine,
+    and the stop hook placing the eyes from the copy. The payload itself is never written."""
+    if os.name == "nt":
+        raise Skip("the fake host is a POSIX shell script; the payload's shape is checked on every host")
+    base = tempfile.mkdtemp(prefix="dwitbuk-payload-")
+    try:
+        assert not os.path.realpath(base).startswith(os.path.realpath(HERE) + os.sep)
+        copy = copy_payload(os.path.join(base, "cache", "dwitbuk", "dwitbuk", "installed"))
+        before = tree_state(copy)
+        assert sorted(before) == payload_files() and not [p for p in before if "__pycache__" in p or p.endswith(".pyc")], sorted(before)
+        home, proj, bindir = (os.path.join(base, d) for d in ("home", "project", "bin"))
+        for d in (home, proj, bindir):
+            os.makedirs(d)
+        log, answer = os.path.join(base, "claude.log"), os.path.join(base, "answer.json")
+        write(os.path.join(base, "fake_claude.py"), FAKE_CLAUDE)
+        write(os.path.join(bindir, "claude"), '#!/bin/sh\nexec "%s" -B -s "%s" "$@"\n' % (sys.executable, os.path.join(base, "fake_claude.py")))
+        os.chmod(os.path.join(bindir, "claude"), 0o755)
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith("PYTHON") and k not in ("AGENT_WORKER", "AGENT_HOST", "HUNSU_SURVEY", "CLAUDE_CONFIG_DIR")}
+        env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1", HUNSU_CLAUDE_DIR=home, FAKE_CLAUDE_LOG=log, FAKE_CLAUDE_ANSWER=answer,
+                   PATH=bindir + os.pathsep + os.environ.get("PATH", ""))
+
+        def py(*argv, stdin=None, **more):
+            done = subprocess.run([sys.executable, "-B", "-s", *argv], cwd=proj, input=stdin, capture_output=True, text=True,
+                                  encoding="utf-8", env=dict(env, **more))
+            return done.returncode, done.stdout, done.stderr
+        engine = os.path.join(copy, "dwitbuk.py")
+        cli = lambda *a: py(engine, *a, "--target", proj)
+        calls = lambda: [json.loads(l) for l in open(log, encoding="utf-8")] if os.path.exists(log) else []
+        latest = lambda: dwitbuk.load(os.path.join(proj, "reviews", sorted(os.listdir(os.path.join(proj, "reviews")))[-1]))
+
+        # the copy's modules are the copy's, one engine instance, and nothing of the checkout is on the path it runs with
+        probe = ("import json, sys; sys.path.insert(0, sys.argv[1]); import eyes_worker, dwitbuk, hostcall; "
+                 "print(json.dumps({'files': [m.__file__ for m in (eyes_worker, dwitbuk, hostcall)], 'path': sys.path, "
+                 "'one': eyes_worker.check_eyes.__globals__ is dwitbuk.__dict__}))")
+        code, out, err = py("-c", probe, copy)
+        seen = json.loads(out)
+        assert all(os.path.realpath(f).startswith(os.path.realpath(copy) + os.sep) for f in seen["files"]), seen["files"]
+        assert not [p for p in seen["path"] if p and os.path.realpath(p).startswith(os.path.realpath(HERE))], seen["path"]
+        assert seen["one"], "one engine instance"
+
+        git(proj, "init", "-q", "-b", "main")
+        write(os.path.join(proj, "a.py"), "x = 1\n")
+        git(proj, "add", "-A"); git(proj, "commit", "-q", "-m", "base")
+        reporter = os.path.join(base, "reporter.py")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "chongdae", "findings": [
+            {"kind": "non-claim", "where": "run-a", "text": "T1: (provider) a limit its role sets", "layer": "observation"},
+            {"kind": "non-claim", "where": "run-a", "text": "T2: (provider) a limit its role sets", "layer": "observation"},
+            {"kind": "non-claim", "where": "run-b", "text": "T3: (provider) the clause was left unread"},
+            {"kind": "left-open", "where": "run-1/T", "text": "left open when its run closed"}]}
+        write(reporter, "import sys\nprint(%r)\n" % json.dumps(doc))
+        write(os.path.join(proj, "hunsu.lock.json"), {"reporters": {"chongdae": [sys.executable, reporter, "--since", "{since}"]}})
+
+        code, out, err = cli("review")
+        assert code == 0 and "2 objection(s) (left-open 1, non-claim 1), 1 observation(s)" in out, (code, out, err)
+        r = latest()
+        assert {f["where"]: dwitbuk.layer(f) for f in r["findings"]} == {"run-a": "observation", "run-b": "objection", "run-1/T": "objection"}, r["findings"]
+        assert next(f for f in r["findings"] if f["where"] == "run-a").get("layer") == "observation", "the reporter's layer, written in the review"
+        at = {f["where"]: i for i, f in enumerate(r["findings"])}
+        code, out, err = cli("follow")
+        assert code == 1 and "undisposed findings: 2" in out and "left unread" in out and "a limit its role sets" not in out, out
+        code, out, err = cli("dispose", "%s/%d" % (r["id"], at["run-a"]), "--as", "dismissed", "--why", "x", "--by", "tester")
+        assert code != 0 and "is an observation" in err, (code, out, err)
+        code, out, err = cli("dispose", "%s/%d" % (r["id"], at["run-1/T"]), "--as", "accepted", "--why", "the task was dropped on purpose",
+                             "--by", "tester", "--quote", "x = 1")
+        assert code == 0, (out, err)
+        held = latest()["findings"][at["run-1/T"]]["disposition"]
+        assert held["by"] == "tester" and held["why"] == "the task was dropped on purpose" and held["quote"] == "x = 1" \
+            and held["finding_text"] == r["findings"][at["run-1/T"]]["text"], held
+
+        # serialized: while another process holds the review lock, a mutation from the copy is refused and writes nothing
+        holder = subprocess.Popen([sys.executable, "-B", "-s", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import dwitbuk\n"
+                                   "with dwitbuk.ReviewLock(sys.argv[2]):\n    print('held', flush=True); sys.stdin.readline()", copy, proj],
+                                  cwd=proj, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        try:
+            assert holder.stdout.readline().strip() == "held"
+            code, out, err = cli("dispose", "%s/%d" % (r["id"], at["run-b"]), "--as", "accepted", "--why", "y", "--by", "tester")
+            assert code == 4 and "retry" in err, (code, out, err)
+        finally:
+            holder.communicate("\n", timeout=10)
+        assert "disposition" not in latest()["findings"][at["run-b"]], "the refused mutation wrote nothing"
+
+        # late eyes: request, the manifest's own `eyes` argv through hostcall to the (fake) host, consume
+        write(os.path.join(proj, "a.py"), "x = 2\n")
+        packets = os.path.join(proj, ".dwitbuk", "eyes")
+        code, out, err = cli("eyes", "request", "--out", packets)
+        assert code == 0 and os.path.isfile(os.path.join(packets, "eyes-request.json")), (out, err)
+        write(answer, {"findings": [{"kind": "anomaly", "where": "a.py", "record_quote": "", "tree_quote": "x = 2", "why": "a constant changed outside a run"},
+                                    {"kind": "contradiction", "where": "a.py", "record_quote": "", "tree_quote": "x = 2", "why": "quotes no record"}]})
+        role = dwitbuk.load(os.path.join(copy, "plugin.json"))["roles"]["eyes"]
+        fill = {"{plugin:dwitbuk}": copy, "{request}": os.path.join(packets, "eyes-request.json"),
+                "{response}": os.path.join(packets, "eyes-response.json"), "{host}": "claude"}
+        argv = list(role)
+        for key, value in fill.items():
+            argv = [a.replace(key, value) for a in argv]
+        assert argv[0] == "python3" and argv[1] == os.path.join(copy, "eyes_worker.py"), argv
+        code, out, err = py(*argv[1:])
+        assert code == 0, (out, err)
+        assert len(calls()) == 1, calls()
+        call = calls()[0]
+        assert call["AGENT_WORKER"] == "1" and call["AGENT_HOST"] == "claude-code" and call["packet"], call
+        assert call["argv"][call["argv"].index("--tools") + 1] == "Read,Grep,Glob" and "--no-session-persistence" in call["argv"], call["argv"]
+        resp = dwitbuk.load(os.path.join(packets, "eyes-response.json"))
+        assert resp["worker"]["model"] == "fake-eyes-1" and os.path.isfile(os.path.join(packets, resp["worker"]["transcript"])), resp["worker"]
+        code, out, err = py(argv[1], "--prompt-only", "--request", fill["{request}"], "--response", os.path.join(base, "unused.json"))
+        assert code == 0 and resp["request"] in out and len(calls()) == 1, "prompt-only prints the bound schema and calls no host"
+        code, out, err = cli("eyes", "consume", "--dir", packets)
+        assert code == 0 and "1 finding(s) added" in out and "1 rejected" in out, (out, err)
+        eyes = [f for f in latest()["findings"] if f["kind"] in ("anomaly", "contradiction")]
+        assert len(eyes) == 1 and eyes[0]["kind"] == "anomaly" and "tree: “x = 2”" in eyes[0]["text"], eyes
+
+        # the next review: the disposal answers its charge, the observation is on record once, the rest is still open
+        import time; time.sleep(1.1)
+        git(proj, "add", "a.py"); git(proj, "commit", "-q", "-m", "x = 2")
+        code, out, err = cli("review")
+        assert code == 0, (out, err)
+        r2 = latest()
+        assert r2["id"] != r["id"] and any(f["kind"] == "unchanged" and r["id"] in str(f.get("seen-in")) for f in r2["findings"]), r2["findings"]
+        code, out, err = cli("follow")
+        assert code == 1 and "undisposed findings: 2" in out and "left unread" in out and "a constant changed outside a run" in out \
+            and "left open when its run closed" not in out, out
+
+        # the session-start line names the copy's engine, and that command works as written
+        hook = os.path.join(copy, "hooks", "session_start.py")
+        code, out, err = py(hook, stdin=json.dumps({"cwd": proj}))
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert code == 0 and ctx.startswith("dwitbuk: 2 undisposed objection(s) in %s" % r2["id"]), ctx
+        named = re.search(r'python3 "([^"]+)" follow', ctx).group(1)
+        assert os.path.realpath(named) == os.path.realpath(engine), named
+        code, out, err = py(named, "follow", "--target", proj)
+        assert code == 1 and "undisposed findings: 2" in out, out
+        code, out, err = py(hook, stdin=json.dumps({"cwd": home}), HUNSU_SURVEY="1")
+        ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert ctx == session_start.STANDING and copy not in ctx, ctx
+
+        # the stop hook: off without the switch; on, it places the eyes from the copy and refuses the stop with what they quote
+        stop = os.path.join(copy, "hooks", "stop_eyes.py")
+        write(os.path.join(proj, "a.py"), "x = 3\n")
+        code, out, err = py(stop, stdin=json.dumps({"cwd": proj}))
+        assert code == 0 and not os.path.exists(os.path.join(proj, ".dwitbuk", "stop.log")) and len(calls()) == 1, (code, err)
+        write(os.path.join(proj, "hunsu.json"), {"settings": {"dwitbuk": {"stop-eyes": True}}})
+        write(answer, {"findings": [{"kind": "anomaly", "where": "a.py", "record_quote": "", "tree_quote": "x = 3", "why": "changed again at the stop"}]})
+        code, out, err = py(stop, stdin=json.dumps({"cwd": proj}))
+        assert code == 2 and "changed again at the stop" in err and "x = 3" in err, (code, out, err)
+        assert len(calls()) == 2 and calls()[-1]["AGENT_WORKER"] == "1", calls()
+        assert any(f["kind"] == "anomaly" and "changed again at the stop" in f["text"] for f in latest()["findings"]), "added to the latest review"
+
+        assert tree_state(copy) == before, "the payload is never written: no bytecode, scratch or record lands in it"
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def test_package_the_checkouts_root_entry_points_run_the_payload_with_one_module_instance():
+    """`python3 <checkout>/dwitbuk.py` and `<checkout>/eyes_worker.py` were the plugin's own paths before the payload moved to
+    plugin/, and resolvers released before this layout (chongdae 2.0.0's `{plugin:NAME}`) take a `hunsu.local.json` link to
+    a checkout as the plugin's root. They stay as entry points only: no engine code, the payload's file run as `__main__`,
+    and when imported the payload's module in their place — never a second instance beside it."""
+    import ast
+    for name in ("dwitbuk.py", "eyes_worker.py"):
+        tree = ast.parse(io.open(os.path.join(HERE, name), encoding="utf-8").read())
+        assert not [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda))], name
+    assert os.path.realpath(dwitbuk.__file__) == os.path.realpath(os.path.join(PLUGIN, "dwitbuk.py")), dwitbuk.__file__
+    assert w.check_eyes.__globals__ is dwitbuk.__dict__ and session_start.dwitbuk is dwitbuk, "this suite holds one engine instance"
+
+    def py(*argv, cwd):
+        return subprocess.run([sys.executable, "-B", *argv], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
+    with Project() as pj:
+        pj.reporter([{"kind": "left-open", "where": "run-1/T", "text": "left open"}])
+        assert run("review", "--target", pj.dir)[0] == 0
+        for name, args in (("dwitbuk.py", ["follow", "--target", pj.dir]), ("dwitbuk.py", ["--help"]), ("eyes_worker.py", ["--help"])):
+            via_root, direct = py(os.path.join(HERE, name), *args, cwd=pj.dir), py(os.path.join(PLUGIN, name), *args, cwd=pj.dir)
+            assert (via_root.returncode, via_root.stdout, via_root.stderr) == (direct.returncode, direct.stdout, direct.stderr), (name, args, via_root, direct)
+            if args[0] == "follow":
+                assert via_root.returncode == 1 and "left open" in via_root.stdout, "the exit code and the output pass through"
+    probe = ("import json, sys\n"
+             "for n in sys.argv[1].split(','): __import__(n)\n"
+             "import dwitbuk, eyes_worker\n"
+             "engines = [m for m in list(sys.modules.values()) if (getattr(m, '__file__', None) or '').endswith(('dwitbuk.py', 'eyes_worker.py'))]\n"
+             "print(json.dumps({'files': sorted(m.__file__ for m in engines), "
+             "'one': eyes_worker.check_eyes.__globals__ is dwitbuk.__dict__ and sys.modules['dwitbuk'] is dwitbuk}))")
+    want = sorted(os.path.realpath(os.path.join(PLUGIN, n)) for n in ("dwitbuk.py", "eyes_worker.py"))
+    for order in ("dwitbuk,eyes_worker", "eyes_worker,dwitbuk"):
+        done = py("-c", probe, order, cwd=HERE)   # the checkout's root first on sys.path: the entry points are what `import` finds
+        seen = json.loads(done.stdout or "{}")
+        assert seen.get("one") and sorted(os.path.realpath(f) for f in seen["files"]) == want, (order, seen, done.stderr)
+
+
+def test_a_link_or_directory_marketplace_at_a_source_checkout_resolves_to_its_payload():
+    """A `hunsu.local.json` link names a marketplace directory (hunsu's own reading of it). With the payload in plugin/, a link
+    to a checkout's root would have run `<checkout>/<engine>.py`; the catalog's `source` says where the payload is — the
+    Claude catalog's string, else the Codex catalog's local path — when a plugin manifest is there. Without one the earlier
+    rule stands (`<link>/<name>`, else the link), so flat checkouts and folders of flat plugins resolve as before. A
+    directory marketplace is read the same way, the checkout itself included (the host runs it in place from the catalog's
+    source; its install record is a copy nothing runs); with no catalog or `<path>/<name>`, the install record, as before."""
+    base = tempfile.mkdtemp(prefix="dwitbuk-links-")
+    old = os.environ.get("HUNSU_CLAUDE_DIR")
+    try:
+        def manifest(d, kind=".claude-plugin"):
+            write(os.path.join(d, kind, "plugin.json") if kind else os.path.join(d, "plugin.json"), {"name": "mangsang", "version": "9"})
+        co = os.path.join(base, "co"); manifest(os.path.join(co, "plugin"))
+        write(os.path.join(co, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "mangsang", "source": "./plugin"}]})
+        cx = os.path.join(base, "cx"); manifest(os.path.join(cx, "plugin"), ".codex-plugin")
+        write(os.path.join(cx, ".agents", "plugins", "marketplace.json"), {"plugins": [{"name": "mangsang", "source": {"source": "local", "path": "./plugin"}}]})
+        folder = os.path.join(base, "folder"); manifest(os.path.join(folder, "mangsang", "plugin"))
+        write(os.path.join(folder, "mangsang", ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "mangsang", "source": "./plugin"}]})
+        flat = os.path.join(base, "flat"); manifest(flat, None)
+        write(os.path.join(flat, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "mangsang", "source": "./"}]})
+        old_folder = os.path.join(base, "old"); manifest(os.path.join(old_folder, "mangsang"), None)
+        empty = os.path.join(base, "empty"); os.makedirs(os.path.join(empty, "plugin"))   # the catalog names a directory that holds no manifest
+        write(os.path.join(empty, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "mangsang", "source": "./plugin"}]})
+        broken = os.path.join(base, "broken"); write(os.path.join(broken, ".claude-plugin", "marketplace.json"), "{not json")
+        want = {co: os.path.join(co, "plugin"), cx: os.path.join(cx, "plugin"), folder: os.path.join(folder, "mangsang", "plugin"),
+                flat: flat, old_folder: os.path.join(old_folder, "mangsang"), empty: empty, broken: broken}
+        with Project() as pj:
+            for link, root in want.items():
+                write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"mangsang": link}})
+                got = dwitbuk.plugin_root(pj.dir, "mangsang")
+                assert os.path.normpath(got) == os.path.normpath(root), (link, got, root)
+            write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"dwitbuk": HERE}})   # this checkout: the lock's argv reaches the payload
+            argv = dwitbuk.resolve_argv(pj.dir, ["python3", "{plugin:dwitbuk}/dwitbuk.py", "follow"], None)
+            assert os.path.normpath(argv[1]) == os.path.join(PLUGIN, "dwitbuk.py"), argv
+            home = os.path.join(base, "home")
+            os.environ["HUNSU_CLAUDE_DIR"] = home
+            write(os.path.join(pj.dir, "hunsu.local.json"), {})
+            write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"mangsang": {"marketplace": "dev"}}})
+            # a directory marketplace is loaded in place by the host from the source its catalog names — also when the
+            # marketplace is the checkout itself (`hunsu dev --market` on a checkout: no `<path>/<name>` beside its catalog)
+            for market, root in ((co, os.path.join(co, "plugin")), (cx, os.path.join(cx, "plugin")), (flat, flat),
+                                 (folder, os.path.join(folder, "mangsang", "plugin")), (old_folder, os.path.join(old_folder, "mangsang"))):
+                write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": market}}})
+                assert os.path.normpath(dwitbuk.plugin_root(pj.dir, "mangsang")) == root, market
+            write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {"mangsang@dev": [
+                {"scope": "project", "projectPath": pj.dir, "installPath": "/cache/mangsang/9"}]}})
+            for market in (empty, broken, ""):   # no catalog names a manifest and no `<path>/<name>`: the install record, as before
+                write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": market}}})
+                assert dwitbuk.plugin_root(pj.dir, "mangsang") == "/cache/mangsang/9", market
+            write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": HERE}}})
+            write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"dwitbuk": {"marketplace": "dev"}}})
+            assert os.path.normpath(dwitbuk.plugin_root(pj.dir, "dwitbuk")) == PLUGIN, "this checkout as a directory marketplace: its payload"
+    finally:
+        if old is None:
+            os.environ.pop("HUNSU_CLAUDE_DIR", None)
+        else:
+            os.environ["HUNSU_CLAUDE_DIR"] = old
+        shutil.rmtree(base, ignore_errors=True)
+
+
+
+def test_a_catalog_source_is_a_path_inside_the_catalog_and_its_manifest_names_the_plugin():
+    """A fresh review (root, 2026-11-05, temp fixtures with a matching probe manifest): a catalog at /catalog whose source was
+    `../outside` resolved to the sibling /outside, and `https://…` to a local /catalog/https:/… directory. A catalog's source
+    is its own payload: a relative path that stays inside the catalog's directory by realpath (no URI, no absolute path, no
+    `..` or symlink out), whose manifests name no other plugin. Anything else names nothing, and the earlier rules stand."""
+    base = tempfile.mkdtemp(prefix="dwitbuk-contain-")
+    old = os.environ.get("HUNSU_CLAUDE_DIR")
+    try:
+        cat = os.path.join(base, "catalog")
+        def manifest(d, name="probe", kind=".claude-plugin"):
+            write(os.path.join(d, kind, "plugin.json") if kind else os.path.join(d, "plugin.json"), {"name": name} if name else {"version": "1"})
+        def claude(src):
+            write(os.path.join(cat, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": src}]})
+        def codex(path):
+            shutil.rmtree(os.path.join(cat, ".claude-plugin"), ignore_errors=True)
+            write(os.path.join(cat, ".agents", "plugins", "marketplace.json"), {"plugins": [{"name": "probe", "source": {"source": "local", "path": path}}]})
+        outside = os.path.join(base, "outside")
+        manifest(outside, kind=None)
+        manifest(os.path.join(cat, "https:", "example.invalid", "probe"), kind=None)   # what `https://…` normalized to
+        manifest(os.path.join(cat, "file:", "x"), kind=None)
+        manifest(os.path.join(cat, "plugin"))
+        manifest(os.path.join(cat, "plugins", "deep", "probe"))
+        manifest(os.path.join(cat, "other"), name="someone-else")
+        manifest(os.path.join(cat, "nameless"), name=None)
+        write(os.path.join(cat, "broken", "plugin.json"), "{not json")
+        for odd, value in (("listed", ["probe"]), ("mapped", {}), ("numbered", 5), ("bare", "probe")):   # a name that is not a name
+            write(os.path.join(cat, odd, "plugin.json"), {"name": value} if odd != "bare" else ["probe"])
+        write(os.path.join(cat, "nulled", "plugin.json"), {"name": None})   # an explicit null: no name, like none at all
+        links = os.name != "nt"
+        if links:
+            os.symlink(outside, os.path.join(cat, "escape"))                    # a symlink out of the catalog
+            os.symlink(os.path.join(cat, "plugin"), os.path.join(cat, "alias"))  # one that stays inside
+        rejected = ["../outside", "./plugin/../../outside", "https://example.invalid/probe", "file://x", outside,
+                    "./other", "./broken", "./missing", "./listed", "./mapped", "./numbered", "./bare"] + (["escape", "./escape"] if links else [])
+        kept = {"./plugin": "plugin", "plugin": "plugin", "./plugins/deep/probe": os.path.join("plugins", "deep", "probe"),
+                "./nameless": "nameless", "./nulled": "nulled", "./plugin/../plugin": "plugin", **({"./alias": "alias"} if links else {})}
+        for src in rejected:
+            claude(src)
+            assert dwitbuk.catalog_source(cat, "probe") is None, src
+        for src, rel in kept.items():
+            claude(src)
+            assert dwitbuk.catalog_source(cat, "probe") == os.path.normpath(os.path.join(cat, rel)), src
+        manifest(cat, kind=None)   # a flat catalog: the payload is the directory itself
+        claude("./")
+        assert dwitbuk.catalog_source(cat, "probe") == os.path.normpath(cat)
+        os.unlink(os.path.join(cat, "plugin.json"))
+        for path in ("https://example.invalid/probe", "file://x", outside, "../outside"):   # the Codex catalog's local object
+            codex(path)
+            assert dwitbuk.catalog_source(cat, "probe") is None, path
+        codex("./plugin")
+        assert dwitbuk.catalog_source(cat, "probe") == os.path.join(cat, "plugin")
+        # through plugin_root: a rejected source falls back to the earlier rule — the link itself here, the install record for
+        # a directory marketplace — never to the escaped directory, and never a crash (a list for a name raised TypeError)
+        codex("./listed")
+        with Project() as pj:
+            write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"probe": cat}})
+            assert dwitbuk.plugin_root(pj.dir, "probe") == cat
+        codex("../outside")
+        with Project() as pj:
+            write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"probe": cat}})
+            assert dwitbuk.plugin_root(pj.dir, "probe") == cat
+            home = os.path.join(base, "home")
+            os.environ["HUNSU_CLAUDE_DIR"] = home
+            write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": cat}}})
+            write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {"probe@dev": [
+                {"scope": "project", "projectPath": pj.dir, "installPath": "/cache/probe/1"}]}})
+            write(os.path.join(pj.dir, "hunsu.local.json"), {})
+            write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"probe": {"marketplace": "dev"}}})
+            assert dwitbuk.plugin_root(pj.dir, "probe") == "/cache/probe/1"
+    finally:
+        if old is None:
+            os.environ.pop("HUNSU_CLAUDE_DIR", None)
+        else:
+            os.environ["HUNSU_CLAUDE_DIR"] = old
+        shutil.rmtree(base, ignore_errors=True)
+
 
 
 if __name__ == "__main__":
