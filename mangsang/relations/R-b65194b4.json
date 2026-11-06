@@ -1,0 +1,15 @@
+{
+  "id": "R-b65194b4",
+  "src": "plugin/dwitbuk.py:closed_reviews",
+  "predicate": "realizes",
+  "dst": "concept:closed-review-kept",
+  "evidence": "if state.get(\"status\") != \"complete\" or not isinstance(reviewed, dict):",
+  "seen": {
+    "plugin/dwitbuk.py:closed_reviews": "935fa8cd400e",
+    "concept:closed-review-kept": "18ce4dd7754b"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

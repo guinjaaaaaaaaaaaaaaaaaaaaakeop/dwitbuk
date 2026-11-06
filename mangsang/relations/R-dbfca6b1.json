@@ -1,0 +1,27 @@
+{
+  "id": "R-dbfca6b1",
+  "src": "plugin/dwitbuk.py:layer",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "return f[\"layer\"] if f.get(\"layer\") in (\"observation\", \"objection\") else (\"observation\" if f.get(\"kind\") in OBSERVATION_KINDS else \"objection\")",
+  "seen": {
+    "plugin/dwitbuk.py:layer": "e131989aab00",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each projection read against the revised meaning — collect holds the settings, grouping and by-nature rules, layer the explicit-layer and fact-kind rules, Kinds of finding documents all four; grounded, the worker's verify-path filter, the eyes section and both tests concern consume and the verify path only; no person read these"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/dwitbuk.py:layer": "e131989aab00",
+        "concept:fail-closed-layer": "b12dc40db378"
+      },
+      "evidence": "return f[\"layer\"] if f.get(\"layer\") in (\"observation\", \"objection\") else (\"observation\" if f.get(\"kind\") in OBSERVATION_KINDS else \"objection\")"
+    }
+  ],
+  "written_by": "mangsang 2.0.1"
+}

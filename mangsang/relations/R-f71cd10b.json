@@ -1,0 +1,47 @@
+{
+  "id": "R-f71cd10b",
+  "src": "plugin/eyes_worker.py:main",
+  "predicate": "realizes",
+  "dst": "concept:quote-grounded-finding",
+  "evidence": "out[\"findings\"] = [f for f in out.get(\"findings\", []) if grounded(f)]",
+  "seen": {
+    "plugin/eyes_worker.py:main": "71311796ef09",
+    "concept:quote-grounded-finding": "2d91f2a1d2c9"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/eyes_worker.py:main": "be7c91c605e0",
+        "concept:quote-grounded-finding": "4df4b020d22c"
+      },
+      "evidence": "out[\"findings\"] = [f for f in out.get(\"findings\", []) if grounded(f)]"
+    },
+    {
+      "confirmed": {
+        "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each projection read against the revised meaning — collect holds the settings, grouping and by-nature rules, layer the explicit-layer and fact-kind rules, Kinds of finding documents all four; grounded, the worker's verify-path filter, the eyes section and both tests concern consume and the verify path only; no person read these"
+      },
+      "seen": {
+        "plugin/eyes_worker.py:main": "be7c91c605e0",
+        "concept:quote-grounded-finding": "b4093f8d9d72"
+      },
+      "evidence": "out[\"findings\"] = [f for f in out.get(\"findings\", []) if grounded(f)]"
+    },
+    {
+      "confirmed": {
+        "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application task and the root's follow-up (2026-11-05, relayed by the root coordinator): each projection read against the narrowed meaning — ReviewLock tries its non-blocking lock after opening the lock file, serialized holds it before the command touches a review, save replaces atomically, the README and the concurrency test assert exit 4 and no lost findings; grounded, the worker's filter, the eyes section and both tests check that the quote fields are filled, not that a quote is true; no person read these"
+      },
+      "seen": {
+        "plugin/eyes_worker.py:main": "be7c91c605e0",
+        "concept:quote-grounded-finding": "2d91f2a1d2c9"
+      },
+      "evidence": "out[\"findings\"] = [f for f in out.get(\"findings\", []) if grounded(f)]"
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

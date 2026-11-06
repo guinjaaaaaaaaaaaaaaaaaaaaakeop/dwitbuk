@@ -6,7 +6,8 @@ The request is a `dwitbuk/eyes-request@1` packet (late eyes: findings), or a `ch
 placed before a gate: a `dwitbuk/review@1` verdict). The reader is the host's model: it gets the packet on stdin, may Read files
 under the target, and must answer with one JSON object whose findings quote the record and the tree. dwitbuk validates on consume;
 chongdae reads the verdict. A verdict carries what the eyes read (`read`, from the session's own stream), and an accept that read
-nothing of the tree, or only the diff where the contract names behaviour, says so in `non-claims` — still an accept.
+nothing of the tree, only the diff where the contract names behaviour, or leaves touched files outside the diff unread,
+says so in `non-claims` — still an accept.
 """
 import argparse
 import json
@@ -127,6 +128,35 @@ def unread_accept(read, packet):
     return None
 
 
+def unread_touched(read, packet):
+    """Touched paths whose change is not whole in the diff and whose file was not opened on record."""
+    if read is None:
+        return []
+    target = packet["target"]
+    unread = []
+    for path in packet.get("touched") or []:
+        if path not in (packet.get("not_in_diff") or []):
+            continue
+        absolute = os.path.join(target, path)
+        real = os.path.realpath(absolute)
+        opened = False
+        for entry in read.get("files") or []:
+            tool, _, name = entry.partition(" ")
+            if tool in ("Read", "Grep") and name:
+                if (os.path.realpath(name) == real if os.path.isabs(name)
+                        else os.path.normpath(name) == os.path.normpath(path)):
+                    opened = True
+                    break
+        names = (path, absolute, real)
+        if not opened:
+            opened = any(c.get("exit") in (0, None) and any(
+                re.search(r"(?<![\w./-])" + re.escape(name) + r"(?![\w/-]|\.\w)", c.get("command", ""))
+                for name in names) for c in read.get("commands") or [])
+        if not opened:
+            unread.append(path)
+    return unread
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--request", required=True)
@@ -175,6 +205,11 @@ def main():
             said = unread_accept(read, packet)
             if said:
                 out["non-claims"] = list(out.get("non-claims") or []) + [said]
+            unread = unread_touched(read, packet)
+            if unread:
+                out["non-claims"] = list(out.get("non-claims") or []) + [
+                    "accepted with %d touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: %s"
+                    % (len(unread), ", ".join("`%s`" % path for path in unread))]
         out = {"artifact-type": "dwitbuk/review@1", **out}
     else:
         check_eyes(packet, packet["target"])

@@ -1,0 +1,15 @@
+{
+  "id": "R-655158d2",
+  "src": "plugin/README.md#Plugin roots",
+  "predicate": "documents",
+  "dst": "plugin/pluginroot.py:resolve",
+  "evidence": "A reporter's `{plugin:NAME}` uses [pluginroot.py](pluginroot.py), the family's shared resolver, vendored byte-identical.",
+  "seen": {
+    "plugin/README.md#Plugin roots": "fba9fbb33e7d",
+    "plugin/pluginroot.py:resolve": "87670de9a8ca"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

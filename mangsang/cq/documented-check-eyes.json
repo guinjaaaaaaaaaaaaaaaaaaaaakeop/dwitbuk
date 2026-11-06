@@ -1,0 +1,14 @@
+{
+  "id": "documented-check-eyes",
+  "text": "Does the manual describe check_eyes (the request and source binding)?",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "documents",
+    "anchors": "plugin/dwitbuk.py:check_eyes",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): a core symbol of a covered contract; no person read or approved this invariant"
+  },
+  "written_by": "mangsang 2.0.1"
+}

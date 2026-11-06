@@ -1,0 +1,15 @@
+{
+  "id": "R-0c690cdd",
+  "src": "test_dwitbuk.py:test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_is_untouched",
+  "predicate": "realizes",
+  "dst": "concept:verifier-sees-touched",
+  "evidence": "assert got.get(\"non-claims\") == [UNREAD_BIG], got.get(\"non-claims\")",
+  "seen": {
+    "test_dwitbuk.py:test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_is_untouched": "fd45a48d4d34",
+    "concept:verifier-sees-touched": "3a57313f5660"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

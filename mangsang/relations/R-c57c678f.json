@@ -1,0 +1,15 @@
+{
+  "id": "R-c57c678f",
+  "src": "plugin/eyes_worker.py:unread_touched",
+  "predicate": "realizes",
+  "dst": "concept:verifier-sees-touched",
+  "evidence": "if path not in (packet.get(\"not_in_diff\") or []):",
+  "seen": {
+    "plugin/eyes_worker.py:unread_touched": "20b25c25fa81",
+    "concept:verifier-sees-touched": "3a57313f5660"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

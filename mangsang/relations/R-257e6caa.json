@@ -1,0 +1,15 @@
+{
+  "id": "R-257e6caa",
+  "src": "test_dwitbuk.py:test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_charged",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "assert dwitbuk.layer(setting) == \"observation\", setting",
+  "seen": {
+    "test_dwitbuk.py:test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_charged": "ba2f1a7b7ea8",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): the tests asserting the declared-setting and by-nature observation rules of the revised meaning; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

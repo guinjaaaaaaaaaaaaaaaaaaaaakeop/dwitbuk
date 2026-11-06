@@ -1,0 +1,27 @@
+{
+  "id": "R-4193b1a1",
+  "src": "plugin/README.md#Stop hook",
+  "predicate": "realizes",
+  "dst": "concept:bound-late-answer",
+  "evidence": "A stale or unmatched response, or a failed consume such as a busy review lock, says nothing was decided and does not block the stop.",
+  "seen": {
+    "plugin/README.md#Stop hook": "49aa3d356614",
+    "concept:bound-late-answer": "36a77e5f4a33"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/README.md#Stop hook": "49aa3d356614",
+        "concept:bound-late-answer": "45d30ad4c6c4"
+      },
+      "evidence": "A stale or unmatched response, or a failed consume such as a busy review lock, says nothing was decided and does not block the stop."
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

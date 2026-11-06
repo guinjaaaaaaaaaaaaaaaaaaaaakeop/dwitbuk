@@ -1,0 +1,14 @@
+{
+  "id": "concurrent-mutation",
+  "text": "What happens when two commands try to change one checkout's reviews at the same time?",
+  "verify": {
+    "kind": "answered-by",
+    "concepts": [
+      "serialized-review-mutation"
+    ]
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): the question is what a user of the engine must be able to ask, and the concept's meaning is its answer; no person read or approved this pairing"
+  },
+  "written_by": "mangsang 2.0.1"
+}

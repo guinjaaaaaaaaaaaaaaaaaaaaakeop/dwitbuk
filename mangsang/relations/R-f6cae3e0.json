@@ -1,0 +1,15 @@
+{
+  "id": "R-f6cae3e0",
+  "src": "test_dwitbuk.py:test_one_charge_is_disposed_once_across_consecutive_reviews",
+  "predicate": "realizes",
+  "dst": "concept:one-answer-per-charge",
+  "evidence": "assert load_review(pj, rid) == r, \"an earlier review is history: the answer is written once, not copied into it\"",
+  "seen": {
+    "test_dwitbuk.py:test_one_charge_is_disposed_once_across_consecutive_reviews": "104acf5f003e",
+    "concept:one-answer-per-charge": "5e90527716e1"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

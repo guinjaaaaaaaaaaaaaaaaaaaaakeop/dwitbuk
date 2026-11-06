@@ -1,0 +1,27 @@
+{
+  "id": "R-16920444",
+  "src": "test_dwitbuk.py:test_stop_hook_validates_before_displaying_even_without_a_review",
+  "predicate": "realizes",
+  "dst": "concept:bound-late-answer",
+  "evidence": "assert code == 0 and \"source changed\" in output.getvalue() and \"address each\" not in output.getvalue(), output.getvalue()",
+  "seen": {
+    "test_dwitbuk.py:test_stop_hook_validates_before_displaying_even_without_a_review": "a856744825eb",
+    "concept:bound-late-answer": "36a77e5f4a33"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "test_dwitbuk.py:test_stop_hook_validates_before_displaying_even_without_a_review": "a856744825eb",
+        "concept:bound-late-answer": "45d30ad4c6c4"
+      },
+      "evidence": "assert code == 0 and \"source changed\" in output.getvalue() and \"address each\" not in output.getvalue(), output.getvalue()"
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

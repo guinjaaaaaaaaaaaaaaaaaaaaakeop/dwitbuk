@@ -1,0 +1,14 @@
+{
+  "id": "verified-review-lock",
+  "text": "Is ReviewLock (one mutation at a time) proven by a test?",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "verifies",
+    "anchors": "plugin/dwitbuk.py:ReviewLock",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): a core symbol of a covered contract; no person read or approved this invariant"
+  },
+  "written_by": "mangsang 2.0.1"
+}

@@ -39,6 +39,25 @@ manifests and host settings; `eyes_worker.py --host claude` or `--host codex` se
 The source repository's maintainer guidance (its `AGENTS.md`) is not part of this plugin and is not injected into a
 project that installs it.
 
+### Plugin roots
+
+A reporter's `{plugin:NAME}` uses [pluginroot.py](pluginroot.py), the family's shared resolver, vendored
+byte-identical. `AGENT_HOST=codex` selects Codex; every other value selects Claude Code. Claude's home is
+`HUNSU_CLAUDE_DIR`, else `CLAUDE_CONFIG_DIR`, else `~/.claude`; Codex's is `HUNSU_CODEX_DIR`, else
+`AGENT_CODEX_HOME`, else `CODEX_HOME`, else `~/.codex`.
+
+A `hunsu.local.json` link wins (relative to the project): its catalog's local payload, else `<link>/<NAME>`, else
+the link itself. A missing link directory stops resolution. Otherwise `hunsu.json` declares the marketplace and
+version; `hunsu.local.json`'s `dev` may override the marketplace. Claude uses a directory marketplace in place
+(catalog, else `<path>/<NAME>`), else an existing install for this project's local scope, project scope, then user
+scope. Codex requires an enabled `config.toml` entry and a cache directory with a plugin manifest: one copy wins;
+several require one matching the declared version, otherwise resolution stops and names them.
+
+Without a declared marketplace, exactly one marketplace with an applicable installation may supply the copy;
+several require a declaration. It never borrows another host's or marketplace's copy. A found version differing
+from the declaration keeps its root and prints a note naming both versions and the root. For each reporter run,
+that note also becomes a `plugin-version` objection, with the reporter's name as its `where`.
+
 ## Commands
 
 Each runs the engine and shows its output. `dwitbuk.py --help` for arguments.
@@ -94,6 +113,17 @@ or in the plan's `providers.verifier`. The builder never places it. The packet t
 own non-claims (`built.non-claims`, and the tests writer's `tests_non_claims`) against the code — an accept is recorded as
 having read them, and they are not charged again — and, when chongdae ran commands itself (`take`/`retry --checked`),
 that `checked` is evidence chongdae observed, unlike a claim in `built.verified`.
+
+The packet's `touched` is the request's `touched` less `.chongdae/` and `.claude/`. A record path the task's scope names
+— `mangsang/`, `hunsu.json` — reaches the eyes named, with its diff, under the same size cut. The diff is cut at 80000
+characters; files without a git diff are added whole only below 40000 bytes. `not_in_diff`, present only when non-empty,
+lists touched paths whose change is not wholly in that diff, in touched order: their section was cut or lies past the cut,
+or a file without a git diff was too large. The eyes are told to Read them under target.
+
+An accept with recorded reads also names files in `not_in_diff` the eyes did not open in a non-claim:
+"accepted with N touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: `a`, `b`".
+Reading one touched file does not account for the others. `read` (`files`, `commands`, `answered-before-reading`) is a stable
+field of the verdict a runner should keep with it: the evidence the accept's non-claims stand on.
 
 `tests_non_claims` reaches the eyes as `{"whose": "the tests writer's statements about its own tests — not the builder's
 report …", "statements": {task: [sentence, …]}}`, and the instructions say a finding about the builder may not quote it as
@@ -161,8 +191,17 @@ source refuses the whole consume: create a fresh request and rerun the eyes. Thi
 `--prompt-only` includes the required request fingerprint in the answer schema for a native reader. Source comparison
 uses contents, executable bits and symlinks of git-visible files, including initialized submodules and directly nested
 ignored repositories; without git it scans the tree. The selected contract and run records read into a late-eyes packet
-are included explicitly. Other records and the packet output directory are excluded, so recording a review does not stale itself. Use a dedicated packet directory, never a
+are included explicitly. The binding covers what the packet packed from each run: its goal and status, the packed
+tasks and non-claims. A `did`, a new task or a new run does not stale it; a change to a packed run's goal or status,
+a packed task or non-claim does. Other records and the packet output directory are excluded, so recording a review does not stale itself. Use a dedicated packet directory, never a
 source directory. A repository below an ignored parent directory is not discovered automatically.
+
+The packet also names the review it was bound to. `consume` adds findings there while it is the latest and no
+completed run recorded it at close, or into the latest eyes review already made for that bound review. Otherwise it
+writes a new review naming the bound review in `eyes-of`, carrying the latest review's open charges and keeping its
+`since` and `head`. A packet packed when no review existed is bound to none: its findings go into a new review whose
+`eyes-of` is null, never into an ordinary review written after it. If no new findings remain, it writes nothing. A
+closed run's close review is never rewritten.
 
 `review`, `dispose` and `eyes` serialize mutations within one checkout. A competing command exits 4 and asks for a retry;
 it cannot overwrite findings from the command in progress. Readers remain available, and JSON replacement is atomic.
@@ -181,7 +220,8 @@ carried as `undisposed` (only when that reporter answered this review; one that 
 A reporter that reads events over a range (a run's record since a commit) does not say it, and its findings are carried
 as before. An eyes finding stands on quotes from both sides, or — an `anomaly` — on the tree alone: one rule, for the
 review and for the verifier. A verify request's `excluded` (files under the record paths the runner left out of
-`touched`) reaches the eyes with its diff and a sentence: left out by rule, not by omission — no record-vs-tree finding;
+`touched`; a task whose scope names them has them in `touched`) reaches the eyes with its diff and a sentence:
+the runner left them out — no record-vs-tree finding;
 when the task's work is that change (update a plugin, lock the environment), it is verified as the slice's work. A verify
 request with `recheck` (the last reject's findings, the files changed since)
 is a re-verification: the eyes check that each finding is resolved and that what changed breaks no contract sentence,
@@ -244,7 +284,7 @@ before or after a task found, with its quote), `verifier-reject` (a verdict that
 sides), `delegation-stamp` (one reason stamped on 3+ judgments); mangsang's `stale`, `broken`, and from its `cq
 --findings` reporter `cq-failed`, `cq-unanswerable`, `cq-unquestioned`; hunsu's `drift`, `unreviewed`. dwitbuk's own:
 `undisposed` (an open charge carried, once, by reference), `unchanged` (observations earlier reviews hold in full,
-counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`, `reporter-failed`. `review-debt` (the
+counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`, `reporter-failed`, `plugin-version` (a reporter plugin differs from its declared version). `review-debt` (the
 previous review's open count) is no longer written: the carried charges are the debt, each once, and the line restated
 their count in every review; older reviews keep theirs, read as an observation.
 
@@ -274,9 +314,8 @@ worker never ran.
   `.agents/plugins/marketplace.json`) when a plugin manifest is there — a source checkout keeps its payload in `plugin/`.
   Otherwise, as before 2.1.0, a link resolves to `<link>/<name>`, else the link, and a directory marketplace to
   `<path>/<name>`, else its install record.
-- Reporter plugin-path lookup checks project-local links, then Claude's installation and marketplace
-  records; it does not query Codex's plugin registry. For plugins installed only in Codex, supply their actual roots
-  through `hunsu.local.json` links before resolving `{plugin:NAME}` reporter arguments.
+- Reporter plugin-path lookup follows the selected host's enabled installations and the project's declarations;
+  see [Plugin roots](#plugin-roots). A cache directory alone is not an enabled Codex installation.
 - The engine reads records and git, never code for meaning. Meaning is read by late eyes — a fresh session with
   Read/Grep/Glob on Claude, or the Codex adapter's default read-only sandbox, and a fixed answer schema. Other than
   tree-only `anomaly` findings, a finding without a quote from each side is dropped on consume. `AGENT_CODEX_SANDBOX`
@@ -311,3 +350,6 @@ what exists keeps working. **major**: an artifact type, lock or record that othe
 supported Python or host version is dropped (an `engines` floor rises, as `python` from 3.9 to 3.11 did in 2.0.0). Since
 2.1.0 the source repository keeps this plugin in its `plugin/` directory and its catalogs name that directory; the
 commands, hooks, roles and reads an installation runs keep their 2.0.2 names and arguments.
+2.2.0 adds fields and one module and removes nothing: the verify packet's `not_in_diff` and the accept's unread
+non-claim, a late-eyes packet's `source.records` (now a digest of what it packed; `true` from 2.1.0 keeps the old rule)
+and `source.review`, a review's `eyes-of`, the `plugin-version` finding, and [pluginroot.py](pluginroot.py).

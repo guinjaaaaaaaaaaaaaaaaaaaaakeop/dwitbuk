@@ -11,7 +11,7 @@
   eyes request --out DIR [--since COMMIT] [--contract PATH] [--lens NAME]...
                                            late eyes: a packet (diff, run records, plan or contract, open findings) for a bounded read-only
                                            session; one packet per lens (contract | record | fresh), or one without
-  eyes consume --dir DIR                   its answer, validated (a quote from the record and one from the tree, or no finding), into the latest review
+  eyes consume --dir DIR                   its answer, validated (a quote from the record and one from the tree, or no finding), into its bound review or a new eyes review
 
 The same eyes, placed earlier: as a chongdae `verifier` provider (`eyes_worker.py --request <chongdae request> --response ...`)
 they read the task's contract, the files it touched and the builder's report, and answer `dwitbuk/review@1` — accept, or reject
@@ -45,8 +45,13 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pluginroot
+from pluginroot import PLUGIN_MANIFESTS, catalog_local, manifest_names, catalog_source, in_place
+
 REVIEWS = "reviews"
 RUNS = ".chongdae"
+BOOKKEEPING = (RUNS + "/", ".claude/")
 PATHSPEC_BATCH_BYTES = 32768
 OBSERVATION_KINDS = {"delegated", "review-debt"}   # facts of the record, not charges: nobody should dispose them. The debt (in
 # older reviews) was a count of charges the review already carried one by one: disposing it as well was the same charge answered twice
@@ -150,124 +155,18 @@ def git_patch(target, *a):
     return done.stdout.decode("utf-8", errors="replace") if done.returncode == 0 else None
 
 
-def install_entry(entries, target):
-    """The host keeps one install record per (scope, project). The one that applies to `target` is its own project-scope
-    record, else the user-scope one, else — for a project that only enabled the plugin — the first; entries[0] was the first
-    project that ever installed it, which loads a different copy once versions diverge."""
-    want = os.path.realpath(target)
-    for e in entries:
-        if e.get("scope") == "project" and e.get("projectPath") and os.path.realpath(e["projectPath"]) == want:
-            return e
-    for e in entries:
-        if e.get("scope") == "user":
-            return e
-    return entries[0] if entries else {}
+def plugin_root(target, name, notes=None):
+    result = pluginroot.resolve(target, name)
+    if result["root"] is None:
+        raise SystemExit(result["reason"])
+    if result["note"]:
+        print(result["note"], file=sys.stderr)
+        if notes is not None and result["note"] not in notes:
+            notes.append(result["note"])
+    return result["root"]
 
 
-PLUGIN_MANIFESTS = ("plugin.json", os.path.join(".claude-plugin", "plugin.json"), os.path.join(".codex-plugin", "plugin.json"))
-
-
-def catalog_local(directory, src):
-    """`src` as a directory inside the catalog's `directory`, or None. Only a relative path is: no URI scheme (`https:`,
-    `file:`, `github:` — a remote source is not a payload here), not absolute or drive- or root-anchored, and resolving —
-    by realpath, so neither `..` nor a symlink leads out — to `directory` itself or a directory under it."""
-    if not isinstance(src, str) or not src or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", src):
-        return None
-    if os.path.isabs(src) or os.path.splitdrive(src)[0] or src.startswith(("/", "\\")):
-        return None
-    root = os.path.normpath(os.path.join(directory, src))
-    base, real = os.path.realpath(directory), os.path.realpath(root)
-    try:
-        inside = os.path.commonpath([base, real]) == base
-    except ValueError:   # different drives
-        inside = False
-    return root if inside and os.path.isdir(real) else None
-
-
-def manifest_names(root):
-    """The names the plugin manifests at `root` declare (a manifest without one adds none), or None when there is no
-    manifest or one cannot be read — a root whose identity cannot be read is not taken."""
-    names, found = set(), False
-    for m in PLUGIN_MANIFESTS:
-        path = os.path.join(root, m)
-        if not os.path.isfile(path):
-            continue
-        found = True
-        try:
-            doc = load(path)
-        except (OSError, ValueError):
-            return None
-        declared = doc.get("name") if isinstance(doc, dict) else None
-        if not isinstance(doc, dict) or (declared is not None and not isinstance(declared, str)):
-            return None   # not a manifest, or a name that is not a name (`["probe"]`, `{}`, 5): an identity not read
-        if declared is not None:
-            names.add(declared)
-    return names if found else None
-
-
-def catalog_source(directory, name):
-    """The source a marketplace directory's catalog names for plugin `name` (Claude's `.claude-plugin/marketplace.json`, then
-    `.agents/plugins/marketplace.json`'s local path), when it is a directory inside the catalog's (catalog_local) whose plugin
-    manifests name no other plugin; else None. A source checkout keeps its installed payload in a subdirectory (`./plugin`),
-    and only its catalog says which. A URL, an absolute path or a path out of the directory names nothing here (a fresh
-    review, 2026-11-05: `../outside` resolved to a sibling and `https://…` to a local `https:/…` directory)."""
-    for catalog in (os.path.join(directory, ".claude-plugin", "marketplace.json"), os.path.join(directory, ".agents", "plugins", "marketplace.json")):
-        try:
-            entries = load(catalog).get("plugins") or []
-        except (OSError, ValueError, AttributeError):
-            continue   # a catalog this cannot read names nothing; the earlier rule still applies
-        for entry in entries:
-            src = entry.get("source") if isinstance(entry, dict) and entry.get("name") == name else None
-            if isinstance(src, dict) and src.get("source") == "local":
-                src = src.get("path")
-            root = catalog_local(directory, src)
-            names = manifest_names(root) if root else None
-            if names is not None and names <= {name}:
-                return root
-    return None
-
-
-def in_place(directory, name):
-    """A plugin's root inside a directory used in place (a hunsu.local.json link, a directory marketplace): what the
-    directory's catalog names, else what `<directory>/<name>`'s own catalog names (a folder of checkouts); None when no
-    catalog names one — the caller keeps its earlier rule."""
-    sub = os.path.join(directory, name)
-    return catalog_source(directory, name) or (catalog_source(sub, name) if os.path.isdir(sub) else None)
-
-
-def plugin_root(target, name):
-    links = load(os.path.join(target, "hunsu.local.json")).get("links", {})
-    if name in links:
-        root = links[name]
-        return in_place(root, name) or (os.path.join(root, name) if os.path.isdir(os.path.join(root, name)) else root)
-    home = os.environ.get("HUNSU_CLAUDE_DIR") or os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    installed = load(os.path.join(home, "plugins", "installed_plugins.json")).get("plugins", {})
-    # the copy this project runs: from the marketplace its manifest declares (or the one `hunsu dev` put it in development
-    # from) — matched by name alone, the first record belonged to whichever project installed it first, and a review once
-    # ran another project's 1.1.0 reporters that way
-    market = load(os.path.join(target, "hunsu.local.json")).get("dev", {}).get(name) \
-        or (load(os.path.join(target, "hunsu.json")).get("plugins", {}).get(name) or {}).get("marketplace")
-    if market:
-        src = (load(os.path.join(home, "plugins", "known_marketplaces.json")).get(market) or {}).get("source") or {}
-        if src.get("source") == "directory" and src.get("path"):
-            # a directory marketplace is loaded in place by the host: the source its catalog names (a checkout's `./plugin`,
-            # also when the marketplace is the checkout itself), else `<path>/<name>` — not the snapshot the install record keeps
-            found = in_place(src["path"], name) or (os.path.join(src["path"], name) if os.path.isdir(os.path.join(src["path"], name)) else None)
-            if found:
-                return found
-        entries = installed.get("%s@%s" % (name, market)) or []
-        want = os.path.realpath(target)
-        mine = [e for e in entries if e.get("scope") == "user" or (e.get("projectPath") and os.path.realpath(e["projectPath"]) == want)]
-        if mine:
-            return install_entry(mine, target).get("installPath")
-        raise SystemExit("plugin %s@%s is declared for this project but not installed for it here — `hunsu install`" % (name, market))
-    for key, entries in installed.items():
-        if key.split("@")[0] == name and entries:
-            return install_entry(entries, target).get("installPath")
-    raise SystemExit("plugin %r is not linked (hunsu.local.json) or installed here" % name)
-
-
-def resolve_argv(target, argv, since):
+def resolve_argv(target, argv, since, notes=None):
     out = []
     skip = False
     for a in argv:
@@ -281,7 +180,7 @@ def resolve_argv(target, argv, since):
                 out.pop()   # the flag before it: a reporter with nothing to be "since"
             continue
         for m in set(re.findall(r"\{plugin:([\w.-]+)\}", a)):
-            a = a.replace("{plugin:%s}" % m, plugin_root(target, m).replace(os.sep, "/"))
+            a = a.replace("{plugin:%s}" % m, plugin_root(target, m, notes).replace(os.sep, "/"))
         out.append(a)
     if out and out[0] in ("python", "python3") and not shutil.which(out[0]):
         out[0] = next((c for c in ("python3", "python") if shutil.which(c)), None) or sys.executable   # locks written on macOS say python3, on some hosts only python exists — the reporter should not die over the name
@@ -299,8 +198,15 @@ def collect(target, since):
         findings.append({"kind": "no-reporters", "where": "hunsu.lock.json",
                          "text": "no reporters declared (hunsu.json `reporters`, then lock): this review is late eyes and dispositions only; no run, relation or environment record was read"})
     for name, argv in reporters.items():
+        notes = []
         try:
-            done = subprocess.run(resolve_argv(target, argv, since), cwd=target, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            resolved = resolve_argv(target, argv, since, notes)
+        except (Exception, SystemExit) as err:
+            findings.append({"kind": "reporter-failed", "where": name, "text": "reporter %s gave no dwitbuk/findings@1: %s" % (name, str(err)[:200])})
+            continue
+        try:
+            done = subprocess.run(resolved, cwd=target, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            findings.extend({"kind": "plugin-version", "where": name, "text": note} for note in notes)
             doc = json.loads(done.stdout)
             assert doc.get("artifact-type") == "dwitbuk/findings@1" and isinstance(doc.get("findings"), list)
         except (SystemExit, OSError, ValueError, AssertionError) as err:
@@ -903,9 +809,10 @@ def verify_packet(request):
     """A chongdae build request (stage verify) -> the eyes packet for a verdict. The contract, what the task touched (as a diff), the
     builder's own report. The reader is told what decides: a sentence the code contradicts, or a claim no check could have decided."""
     target = request["target"]
-    touched = [t for t in request.get("touched") or [] if not is_record(t, record_paths(target))]
+    touched = [t for t in request.get("touched") or [] if not is_record(t, BOOKKEEPING)]
     since = request.get("since") or {}
     diff = ""
+    not_in_diff = []
     for path in touched:
         repo, inner = repo_of(target, path, since)
         cwd, base = os.path.join(target, repo) if repo != "." else target, since.get(repo)
@@ -917,9 +824,13 @@ def verify_packet(request):
             diff += d
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:
             diff += "+++ %s (new file)\n" % path + io.open(os.path.join(target, path), encoding="utf-8", errors="replace").read() + "\n"
-    # what chongdae left out of `touched` by rule — the environment (hunsu's files) and the products' records — with its diff: a
-    # task whose whole work is `hunsu lock` or `mangsang confirm` has `touched: []`, and a verifier told nothing about these read
-    # the changed tree as an undeclared edit (four rejects in five on the same task, guin-site 2026-09-28)
+        elif os.path.isfile(os.path.join(target, path)):
+            not_in_diff.append(path)
+            continue
+        if len(diff) > 80000:
+            not_in_diff.append(path)
+    # Record-path files the runner left out of `touched`, with their diff. A task whose scope names them instead includes
+    # them in `touched`; neither case makes the changed records an undeclared edit.
     excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
     # Git's literal pathspecs can recurse; declarations are judged by is_record.
     excluded_names = []
@@ -933,6 +844,7 @@ def verify_packet(request):
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
+            **({"not_in_diff": not_in_diff} if not_in_diff else {}),
             **({"excluded": excluded, "excluded_diff": excluded_diff[:40000]} if excluded else {}),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
             # whose words these are, in the data itself: a verifier read the tests writer's "I did not run the whole suite" as
@@ -957,10 +869,12 @@ def verify_packet(request):
                                 "is not a finding that it fails, unless what changed since could break it; whether it decides the sentence is still "
                                 "yours to judge. " if request.get("checked") else "")
                              + ("`excluded` lists files under the products' record paths that differ from HEAD — the environment (hunsu's manifest, lock and "
-                                "judgments) and records such as mangsang/ — which are never in `touched`, by rule, not by omission: a change there is not an "
+                                "judgments) and records such as mangsang/ — that the runner left out of `touched` by rule, not by omission "
+                                "(a task whose scope names them has them in `touched`): a change there is not an "
                                 "undeclared edit and no record-vs-tree finding. When the brief or contract says the task's work is that change (update a plugin, "
                                 "lock the environment, relate concepts), read it in `excluded_diff` as the slice's work and verify it against them. "
-                                if excluded else "") +
+                                if excluded else "")
+                             + ("The files in `not_in_diff` have changes not wholly in `diff`; Read them under target. " if not_in_diff else "") +
                              "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file — "
                              "put each quoted sentence in backticks, verbatim, and name in `where` the field it is from (`built.verified[0]`, "
                              "`contract.Q1`): a quoted span the named field does not hold is dropped as unfounded — "
@@ -1150,15 +1064,56 @@ def source_state(target, output, extra=(), records=False):
     return fingerprint({"tree": state, **({"runs": runs(target)} if records else {})})
 
 
+def eyes_run(name, plan, state):
+    """The run record shown to late eyes, excluding bookkeeping such as did."""
+    return {"run": name, "goal": plan.get("goal"), "status": state.get("status"),
+                          "tasks": [{"id": t.get("id"), "brief": t.get("brief"), "closes": t.get("closes", []), "checks": t.get("checks", []),
+                                     "state": {k: v for k, v in state.get("tasks", {}).get(t.get("id"), {}).items() if k in ("status", "confirmed", "accepted", "touched", "attempts", "response")}}
+                                    for t in plan.get("tasks", [])],
+                          "non-claims": state.get("non-claims", [])}
+
+
+def packed_records(target, packed):
+    """Re-read only the runs, tasks and non-claims the packet showed, in its order."""
+    current = {name: eyes_run(name, plan, state) for name, plan, state in runs(target)}
+    out = []
+    for old in packed:
+        now = current.get(old["run"])
+        if now is not None:
+            tasks = {t["id"]: t for t in now["tasks"]}
+            now = dict(now, tasks=[tasks.get(t["id"]) for t in old["tasks"]],
+                       **{"non-claims": [n for n in old["non-claims"] if n in now["non-claims"]]})
+        out.append(now)
+    return out
+
+
+def closed_reviews(target):
+    """Review ids recorded at completed runs' close, with the run naming each."""
+    closed = {}
+    for name, _, state in runs(target):
+        reviewed = state.get("reviewed")
+        if state.get("status") != "complete" or not isinstance(reviewed, dict):
+            continue
+        wrote = reviewed.get("wrote")
+        if not isinstance(wrote, list):
+            continue
+        for path in wrote:
+            if isinstance(path, str) and re.fullmatch(r"reviews/[^/]+\.json", path):
+                closed[path[len("reviews/"):-len(".json")]] = name
+    return closed
+
+
 def bind_eyes(packet, output, extra=()):
     """Bind a late-eyes packet to its target and source before a worker reads it."""
     packet["target"] = os.path.realpath(packet["target"])
     output = os.path.realpath(output)
     if output == packet["target"] or packet["target"].startswith(output + os.sep):
         raise SystemExit("eyes: --out must not contain the entire target; use a packet subdirectory")
-    records = "runs" in packet
+    records = fingerprint(packed_records(packet["target"], packet["runs"])) if "runs" in packet else False
+    prior = reviews(packet["target"])
     packet["source"] = {"output": output, "extra": [os.path.abspath(p) for p in extra], "records": records,
-                        "digest": source_state(packet["target"], output, extra, records)}
+                        "digest": source_state(packet["target"], output, extra),
+                        "review": prior[-1]["id"] if prior else None}
 
 
 def check_eyes(packet, target, answer=None):
@@ -1171,7 +1126,9 @@ def check_eyes(packet, target, answer=None):
         why = "answer does not match its request"
     else:
         source = packet["source"]
-        if not source.get("output") or source.get("digest") != source_state(target, source["output"], source.get("extra", []), source.get("records", False)):
+        if not source.get("output") or source.get("digest") != source_state(target, source["output"], source.get("extra", []), source.get("records") is True):
+            why = "source changed since the request"
+        elif isinstance(source.get("records"), str) and source["records"] != fingerprint(packed_records(target, packet.get("runs", []))):
             why = "source changed since the request"
     if why:
         raise SystemExit("eyes: %s; generate a fresh request and rerun the eyes" % why)
@@ -1183,7 +1140,7 @@ def cmd_eyes(args):
     target = args.target
     if args.mode == "request":
         plan_path = os.path.join(target, args.contract) if args.contract else os.path.join(target, "plan", "PLAN.md")
-        initial_source = source_state(target, args.out, [plan_path], records=True)
+        initial_source = source_state(target, args.out, [plan_path])
         prior = reviews(target)
         base = args.since or (prior[-1]["since"] if prior else None)   # what the latest review covered
         head = (git(target, "rev-parse", "HEAD") or "no-git").strip()
@@ -1206,11 +1163,7 @@ def cmd_eyes(args):
         for name, plan, state in runs(target):
             if base and name not in moved and state.get("status") == "complete":
                 continue   # untouched since `since`: its record was already in front of eyes
-            runs_.append({"run": name, "goal": plan.get("goal"), "status": state.get("status"),
-                          "tasks": [{"id": t.get("id"), "brief": t.get("brief"), "closes": t.get("closes", []), "checks": t.get("checks", []),
-                                     "state": {k: v for k, v in state.get("tasks", {}).get(t.get("id"), {}).items() if k in ("status", "confirmed", "accepted", "touched", "attempts", "response")}}
-                                    for t in plan.get("tasks", [])],
-                          "non-claims": state.get("non-claims", [])})
+            runs_.append(eyes_run(name, plan, state))
         plan_path = os.path.join(target, args.contract) if args.contract else os.path.join(target, "plan", "PLAN.md")
         plan_text = io.open(plan_path, encoding="utf-8").read() if os.path.exists(plan_path) else ""
         open_ = [{"kind": kind_of(f), "where": f["where"], "text": f["text"]} for _, f in open_charges(target)[1]]
@@ -1229,17 +1182,17 @@ def cmd_eyes(args):
                 raise SystemExit("unknown lens %s (known: %s)" % (lens, ", ".join(LENSES)))
             doc = dict(packet, lens=lens, instructions=packet["instructions"] + (" Lens: " + LENSES[lens] if lens else ""))
             bind_eyes(doc, args.out, [plan_path])
-            if doc["source"]["digest"] != initial_source:
+            if doc["source"]["digest"] != initial_source or doc["source"]["records"] != fingerprint(runs_):
                 raise SystemExit("eyes: source changed while packing the request; retry request")
             save(os.path.join(args.out, "eyes-%s-request.json" % lens if lens else "eyes-request.json"), doc)
         print("eyes packet(s) -> %s (%s; diff %d chars, %d runs, contract %d chars, %d open findings). Run eyes_worker.py on each, then `eyes consume --dir %s`"
               % (args.out, ", ".join(args.lens) if args.lens else "no lens", len(diff), len(runs_), len(plan_text), len(open_), args.out))
         return 0
-    # consume: validated findings go into the latest review as `contradiction`; the rejected ones are printed, not stored
+    # consume: validate every binding before choosing a writable review; rejected findings are only printed
     prior = reviews(target)
     if not prior:
         raise SystemExit("no review to add to — `dwitbuk review` first")
-    answers = []
+    answers, bound_reviews = [], set()
     for name in sorted(os.listdir(args.dir)):
         if not (name.startswith("eyes") and name.endswith("-response.json")):
             continue
@@ -1247,6 +1200,9 @@ def cmd_eyes(args):
         request = load(os.path.join(args.dir, name[:-len("-response.json")] + "-request.json"))
         check_eyes(request, target, answer)
         answers.append(answer)
+        bound_reviews.add(request["source"].get("review", prior[-1]["id"]))
+    if len(bound_reviews) > 1:
+        raise SystemExit("eyes: answers are bound to different reviews")
     if not any("findings" in a for a in answers):
         raise SystemExit("no eyes*-response.json with `findings` in %s" % args.dir)
     kept, rejected, quoted = [], [], set()
@@ -1262,11 +1218,50 @@ def cmd_eyes(args):
             kept.append({"kind": "anomaly", "where": f["where"], "text": "%s — tree: \u201c%s\u201d" % (f["why"], f["tree_quote"])})
         else:
             kept.append({"kind": "contradiction", "where": f["where"], "text": "%s: %s — record: \u201c%s\u201d — tree: \u201c%s\u201d" % (f["kind"], f["why"], f["record_quote"], f["tree_quote"])})
-    r = prior[-1]
-    have = {identity(f) for f in r["findings"]}
+    r = latest = prior[-1]
+    bound = next(iter(bound_reviews))
+    closed = closed_reviews(target)
+    have = {identity(f) for f in latest["findings"]}
     kept = [f for f in kept if identity(f) not in have]
-    r["findings"] += kept
-    save(os.path.join(target, REVIEWS, r["id"] + ".json"), r)
+    if latest["id"] not in closed and (latest["id"] == bound or ("eyes-of" in latest and latest["eyes-of"] == bound)):
+        r["findings"] += kept
+        save(os.path.join(target, REVIEWS, r["id"] + ".json"), r)
+    elif kept:
+        import secrets
+        import time
+        settled, origin = answered(prior), raised(prior)
+        findings = []
+        for f in kept:
+            f["layer"] = "objection"
+            if charge(f) in settled:
+                f["disposition"] = settled[charge(f)]
+            findings.append(f)
+        seen = {charge(f) for f in findings}
+        for i, old in enumerate(latest["findings"]):
+            key = charge(old)
+            if layer(old) != "objection" or old.get("disposition") or key in settled or key in seen:
+                continue
+            seen.add(key)
+            findings.append(carry(old, "%s/%d" % (latest["id"], i), latest["id"], origin))
+        observations = carried_observations(prior)
+        if observations:
+            by_kind, held = {}, set()
+            for f, rid in observations.values():
+                by_kind[f["kind"]] = by_kind.get(f["kind"], 0) + 1
+                held.add(rid)
+            findings.append({"kind": "unchanged", "layer": "observation", "where": "%d earlier review(s)" % len(held), "seen-in": sorted(held),
+                             "text": "%d observation(s) written in full in %d earlier review(s) and unchanged since (%s)"
+                                     % (sum(by_kind.values()), len(held), ", ".join("%s %d" % kv for kv in sorted(by_kind.items())))})
+        while True:
+            rid = "review-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(2))
+            if rid > latest["id"]:
+                break
+            time.sleep(0.05)
+        r = {"artifact-type": "dwitbuk/review@1", "id": rid, "since": latest["since"], "head": latest["head"],
+             "eyes-of": bound, "findings": findings}
+        save(os.path.join(target, REVIEWS, rid + ".json"), r)
+        reason = "bound to no review (none existed when it was packed)" if bound is None else "recorded at close by %s" % closed[bound] if bound in closed else "no longer the latest"
+        print("eyes: answers %s (%s)" % (bound, reason))
     for f in kept:
         print("  %-13s  %s — %s" % (f["kind"], f["where"], f["text"][:160]))
     for line in rejected:

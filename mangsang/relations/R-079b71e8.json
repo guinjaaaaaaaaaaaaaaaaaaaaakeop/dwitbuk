@@ -1,0 +1,27 @@
+{
+  "id": "R-079b71e8",
+  "src": "plugin/dwitbuk.py:cmd_dispose",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "raise SystemExit(\"dispose: %s is an observation — an observation is a fact, not a charge; there is nothing to dispose\" % args.finding)",
+  "seen": {
+    "plugin/dwitbuk.py:cmd_dispose": "427dd9e2b791",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each projection read against the revised meaning — collect holds the settings, grouping and by-nature rules, layer the explicit-layer and fact-kind rules, Kinds of finding documents all four; grounded, the worker's verify-path filter, the eyes section and both tests concern consume and the verify path only; no person read these"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/dwitbuk.py:cmd_dispose": "427dd9e2b791",
+        "concept:fail-closed-layer": "b12dc40db378"
+      },
+      "evidence": "raise SystemExit(\"dispose: %s is an observation — an observation is a fact, not a charge; there is nothing to dispose\" % args.finding)"
+    }
+  ],
+  "written_by": "mangsang 2.0.1"
+}

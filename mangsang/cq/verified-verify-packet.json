@@ -1,0 +1,14 @@
+{
+  "id": "verified-verify-packet",
+  "text": "Is verify_packet (what of the touched files reaches the verifier, and what its diff does not hold) proven by a test that calls it?",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "verifies",
+    "anchors": "plugin/dwitbuk.py:verify_packet",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

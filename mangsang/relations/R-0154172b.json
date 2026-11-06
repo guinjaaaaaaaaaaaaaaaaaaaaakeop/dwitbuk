@@ -1,0 +1,27 @@
+{
+  "id": "R-0154172b",
+  "src": "test_dwitbuk.py:test_a_carried_charge_stands_once_and_one_disposal_answers_it_once",
+  "predicate": "realizes",
+  "dst": "concept:one-answer-per-charge",
+  "evidence": "assert src_rid == rids[0] and dwitbuk.identity(src) == tuple(f[\"carries\"]), f",
+  "seen": {
+    "test_dwitbuk.py:test_a_carried_charge_stands_once_and_one_disposal_answers_it_once": "c0c7080f478a",
+    "concept:one-answer-per-charge": "5e90527716e1"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "test_dwitbuk.py:test_a_carried_charge_stands_once_and_one_disposal_answers_it_once": "7e6ee0a98e80",
+        "concept:one-answer-per-charge": "5e90527716e1"
+      },
+      "evidence": "assert src_rid == rids[0] and dwitbuk.identity(src) == tuple(f[\"carries\"]), f"
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

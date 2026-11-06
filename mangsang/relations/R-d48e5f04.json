@@ -1,0 +1,37 @@
+{
+  "id": "R-d48e5f04",
+  "src": "plugin/dwitbuk.py:collect",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "**({\"layer\": f[\"layer\"] if f[\"layer\"] in (\"observation\", \"objection\") else \"objection\"} if \"layer\" in f else {})})",
+  "seen": {
+    "plugin/dwitbuk.py:collect": "8dc7bca35314",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/dwitbuk.py:collect": "84c024cd79db",
+        "concept:fail-closed-layer": "b12dc40db378"
+      },
+      "evidence": "**({\"layer\": f[\"layer\"] if f[\"layer\"] in (\"observation\", \"objection\") else \"objection\"} if \"layer\" in f else {})})"
+    },
+    {
+      "confirmed": {
+        "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each projection read against the revised meaning — collect holds the settings, grouping and by-nature rules, layer the explicit-layer and fact-kind rules, Kinds of finding documents all four; grounded, the worker's verify-path filter, the eyes section and both tests concern consume and the verify path only; no person read these"
+      },
+      "seen": {
+        "plugin/dwitbuk.py:collect": "84c024cd79db",
+        "concept:fail-closed-layer": "a2062b734c79"
+      },
+      "evidence": "**({\"layer\": f[\"layer\"] if f[\"layer\"] in (\"observation\", \"objection\") else \"objection\"} if \"layer\" in f else {})})"
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

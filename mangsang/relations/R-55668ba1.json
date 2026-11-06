@@ -1,0 +1,15 @@
+{
+  "id": "R-55668ba1",
+  "src": "plugin/README.md#Kinds of finding",
+  "predicate": "documents",
+  "dst": "plugin/dwitbuk.py:layer",
+  "evidence": "Everything else — unknown kinds included — is an objection: fail closed.",
+  "seen": {
+    "plugin/README.md#Kinds of finding": "f433e26703e3",
+    "plugin/dwitbuk.py:layer": "e131989aab00"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

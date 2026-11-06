@@ -1,0 +1,15 @@
+{
+  "id": "R-fcddaa15",
+  "src": "AGENTS.md#Maintaining dwitbuk",
+  "predicate": "references",
+  "dst": "concept:bound-late-answer",
+  "evidence": "Preserve quote grounding, request/source provenance, disposition history and serialized review mutations when changing the engine.",
+  "seen": {
+    "AGENTS.md#Maintaining dwitbuk": "150ea9cdd1c3",
+    "concept:bound-late-answer": "45d30ad4c6c4"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): the scope page and the maintainer rule name these contracts; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

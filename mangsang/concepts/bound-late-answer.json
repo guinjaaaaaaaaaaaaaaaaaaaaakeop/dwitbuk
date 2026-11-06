@@ -1,0 +1,16 @@
+{
+  "name": "bound-late-answer",
+  "means": "A late-eyes answer is taken into the review only while it is bound to the request it answers: the packet is bound to its target, a digest of the source tree and a digest of what it packed from the run records — each packed run's goal and status, its packed tasks as packed and the packed non-claims — the answer must carry the packet's fingerprint, and a missing binding, a replaced request, another target, a changed tree or a change to anything packed refuses the whole consume — the worker refuses before and after its host call, and the stop hook says nothing was decided — until a fresh request is answered; a record write that leaves what was packed as it was (an operation recorded on a task, a new task or run) refuses nothing, and a packet bound by 2.1.0 (records true) keeps the whole-records rule.",
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "history": [
+    {
+      "means": "A late-eyes answer is taken into the review only while it is bound to the request it answers: the packet is bound to its target and a digest of the source when it is packed, the answer must carry the packet's fingerprint, and a missing binding, a replaced request, another target or a source changed since packing refuses the whole consume — the worker refuses before and after its host call, and the stop hook says nothing was decided — until a fresh request is answered.",
+      "declared": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator), read against plugin/README.md, plugin/dwitbuk.py, plugin/eyes_worker.py, plugin/hooks/stop_eyes.py and test_dwitbuk.py; no person read or approved this wording"
+      }
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

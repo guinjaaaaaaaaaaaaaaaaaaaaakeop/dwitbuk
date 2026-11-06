@@ -1,0 +1,37 @@
+{
+  "id": "R-bee14456",
+  "src": "plugin/README.md#Kinds of finding",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "An **objection** is a charge someone must answer — it is disposal debt: `follow` counts it, `dispose` closes it.",
+  "seen": {
+    "plugin/README.md#Kinds of finding": "69b60d1ac12b",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+      },
+      "seen": {
+        "plugin/README.md#Kinds of finding": "f433e26703e3",
+        "concept:fail-closed-layer": "b12dc40db378"
+      },
+      "evidence": "An **objection** is a charge someone must answer — it is disposal debt: `follow` counts it, `dispose` closes it."
+    },
+    {
+      "confirmed": {
+        "delegated": "agent re-read by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each projection read against the revised meaning — collect holds the settings, grouping and by-nature rules, layer the explicit-layer and fact-kind rules, Kinds of finding documents all four; grounded, the worker's verify-path filter, the eyes section and both tests concern consume and the verify path only; no person read these"
+      },
+      "seen": {
+        "plugin/README.md#Kinds of finding": "f433e26703e3",
+        "concept:fail-closed-layer": "a2062b734c79"
+      },
+      "evidence": "An **objection** is a charge someone must answer — it is disposal debt: `follow` counts it, `dispose` closes it."
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

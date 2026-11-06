@@ -1,0 +1,8 @@
+{
+  "name": "one-answer-per-charge",
+  "means": "An objection is a charge that stays owed until one disposition answers it: a charge is the same across reviews when its kind, `where` and text match with the changing counts struck; one that stops being reported is carried once as `undisposed`, naming where it was raised; and `dispose` writes its answer once — where the charge stands now, with the finding's own text and `where` — so every copy in every review is answered by it and earlier reviews stay as written.",
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator), read against plugin/README.md, plugin/dwitbuk.py and test_dwitbuk.py; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.0.1"
+}

@@ -91,22 +91,53 @@ class Skip(Exception):
     """Raised by a test that cannot run on this host; the runner reports it as SKIP, never as PASS."""
 
 
+@contextlib.contextmanager
+def environ(**kv):
+    """Set (a value) or unset (None) os.environ variables for the block, and put back exactly what was there."""
+    saved = {k: os.environ.get(k) for k in kv}
+    try:
+        for k, v in kv.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def made(path):
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def same(a, b):
+    """Two paths name the same directory (normalized, real): a temp dir under /var is /private/var on macOS."""
+    return a is not None and b is not None and os.path.realpath(os.path.normpath(a)) == os.path.realpath(os.path.normpath(b))
+
+
 def stream(*events):
     return "".join(json.dumps(e) + "\n" for e in events)
 
 def test_a_reporters_plugin_is_the_copy_from_the_marketplace_the_project_declares():
     """Matched by name alone, the first install record belonged to another project, and a review ran its 1.1.0 reporters."""
     home = tempfile.mkdtemp(prefix="dwitbuk-home-")
+    codex = tempfile.mkdtemp(prefix="dwitbuk-codex-")
     old = os.environ.get("HUNSU_CLAUDE_DIR")
     try:
-        with Project() as p:
+        with Project() as p, environ(AGENT_HOST="claude-code", HUNSU_CODEX_DIR=codex):
             os.environ["HUNSU_CLAUDE_DIR"] = home
+            cache = {k: made(os.path.join(home, "cache", k)) for k in ("other/1.1.0", "mangsang/1.4.0", "mangsang/1.5.0")}   # installPaths that exist
             write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {
-                "mangsang@other": [{"scope": "project", "projectPath": "/elsewhere", "installPath": "/cache/other/1.1.0"}],
-                "mangsang@mangsang": [{"scope": "project", "projectPath": "/third", "installPath": "/cache/mangsang/1.4.0"},
-                                      {"scope": "project", "projectPath": p.dir, "installPath": "/cache/mangsang/1.5.0"}]}})
+                "mangsang@other": [{"scope": "project", "projectPath": "/elsewhere", "installPath": cache["other/1.1.0"]}],
+                "mangsang@mangsang": [{"scope": "project", "projectPath": "/third", "installPath": cache["mangsang/1.4.0"]},
+                                      {"scope": "project", "projectPath": p.dir, "installPath": cache["mangsang/1.5.0"]}]}})
             write(os.path.join(p.dir, "hunsu.json"), {"plugins": {"mangsang": {"marketplace": "mangsang"}}})
-            assert dwitbuk.plugin_root(p.dir, "mangsang") == "/cache/mangsang/1.5.0"
+            assert same(dwitbuk.plugin_root(p.dir, "mangsang"), cache["mangsang/1.5.0"])
             write(os.path.join(p.dir, "hunsu.json"), {"plugins": {"mangsang": {"marketplace": "absent"}}})
             try:
                 dwitbuk.plugin_root(p.dir, "mangsang")
@@ -119,6 +150,7 @@ def test_a_reporters_plugin_is_the_copy_from_the_marketplace_the_project_declare
         else:
             os.environ["HUNSU_CLAUDE_DIR"] = old
         shutil.rmtree(home, ignore_errors=True)
+        shutil.rmtree(codex, ignore_errors=True)
 
 
 def test_a_run_seen_again_is_answered_and_what_no_check_can_decide_is_said_not_charged():
@@ -1006,7 +1038,8 @@ def test_the_eyes_leave_out_the_records_the_lock_declares():
                                               "hunsu.json", "hunsu.local.json", "hunsu.lock.json", "mangsang/", "reviews/"), dwitbuk.record_paths(pj.dir)
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["a.py", ".alpha/x.json", "alpha.json", ".chongdae/run-1/tasks/T.json", "mangsang/relations/R-1.json"]}
-        assert dwitbuk.verify_packet(req)["touched"] == ["a.py"], dwitbuk.verify_packet(req)["touched"]
+        # 11-06 (D1): a record path a task's scope names is the task's work; only chongdae's runs and the host's settings go
+        assert dwitbuk.verify_packet(req)["touched"] == ["a.py", ".alpha/x.json", "alpha.json", "mangsang/relations/R-1.json"], dwitbuk.verify_packet(req)["touched"]
 
 
 def test_a_verifier_finding_whose_quote_is_another_hands_or_nowhere_is_unfounded_and_a_reject_on_it_is_an_accept():
@@ -1576,17 +1609,20 @@ def test_Q_sites_verify_packet_keeps_lookalikes_and_siblings_in_touched_with_the
         write(os.path.join(pj.dir, "hunsu-notes.md"), "notes line\n")
         write(os.path.join(pj.dir, "alpha.jsonl"), '{"l": 2}\n')
         write(os.path.join(pj.dir, ".alpha-extra", "y.py"), "sibling = 1\n")
-        write(os.path.join(pj.dir, "alpha.json"), "{}\n")
-        write(os.path.join(pj.dir, ".alpha", "x.json"), "{}\n")
-        write(os.path.join(pj.dir, "hunsu.json"), "{}\n")
+        write(os.path.join(pj.dir, "alpha.json"), '{"alpha": "declared file"}\n')
+        write(os.path.join(pj.dir, ".alpha", "x.json"), '{"alpha": "declared directory"}\n')
+        write(os.path.join(pj.dir, "hunsu.json"), '{"hunsu": "own file"}\n')
+        write(os.path.join(pj.dir, ".chongdae", "run-1", "tasks", "T.json"), '{"chongdae": "run bookkeeping"}\n')
         kept = ["hunsu.py", "hunsu_helper.py", "hunsu-notes.md", "alpha.jsonl", ".alpha-extra/y.py"]
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": kept + ["alpha.json", ".alpha/x.json", ".chongdae/run-1/tasks/T.json", "hunsu.json"], "since": {".": since}}
         p = dwitbuk.verify_packet(req)
-        assert sorted(p["touched"]) == sorted(kept), p["touched"]
+        assert p["touched"] == kept + ["alpha.json", ".alpha/x.json", "hunsu.json"], p["touched"]
         d = p["diff"]
         assert "-hp = 1" in d and "+hp = 2" in d, d
         assert "helper = 1" in d and "notes line" in d and '{"l": 2}' in d and "sibling = 1" in d, d
+        assert "declared file" in d and "declared directory" in d and '"own file"' in d, d
+        assert "run bookkeeping" not in d and ".chongdae/run-1/tasks/T.json" not in d, d
         # the request's excluded record-paths: chongdae's own runs go, everything else is kept, by the same rule
         env = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["hunsu.json", ".chongdae/run-1/state.json", ".chongdae", ".chongdae-notes.md"]}))
         assert sorted(env["excluded"]) == [".chongdae-notes.md", "hunsu.json"], env.get("excluded")
@@ -1814,7 +1850,9 @@ def test_Q_keep_a_change_under_mangsang_still_stales_a_late_eyes_answer_and_is_r
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["mangsang/relations/R-3.json", "hunsu.py"]}
         write(os.path.join(pj.dir, "hunsu.py"), "hp = 1\n")
-        assert dwitbuk.verify_packet(req)["touched"] == ["hunsu.py"]
+        p = dwitbuk.verify_packet(req)
+        assert p["touched"] == ["mangsang/relations/R-3.json", "hunsu.py"], p["touched"]   # D1: the scope named it, the verifier sees it
+        assert "mangsang/relations/R-3.json" in p["diff"] and '"R-3"' in p["diff"] and "hp = 1" in p["diff"], p["diff"]
 
 
 def test_Q_keep_run_records_count_reviews_commits_do_not_and_the_packet_directory_is_left_out():
@@ -1913,15 +1951,19 @@ def test_Q_strict_sites_verify_packet_keeps_children_of_a_replaced_file_in_touch
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": kept + ["hunsu.lock.json", "custom-record.json", "hunsu.json"], "since": {".": dirs_base}}
         p = dwitbuk.verify_packet(req)
-        assert sorted(p["touched"]) == sorted(kept), p["touched"]
+        # 11-06 (D1): the records the request lists in touched stay too, each with its diff — only chongdae's runs and the
+        # host's settings go
+        assert p["touched"] == kept + ["hunsu.lock.json", "custom-record.json", "hunsu.json"], p["touched"]
         d = p["diff"]
         assert "-hchild = 1" in d and "+hchild = 2" in d and "b/hunsu.json/child.py" in d, d
         assert "-cchild = 1" in d and "+cchild = 2" in d and "b/custom-record.json/child.py" in d, d
         assert "hunsu.json/new_mod.py (new file)" in d and "hnew = 1" in d, d
-        # from where the files were: the children are new, the records' own deletions stay out
+        # from where the files were: the children are new, and the replaced records' own deletions — touched, so the task's
+        # work — reach the verifier too
         d = dwitbuk.verify_packet(dict(req, since={".": files_base}))["diff"]
         assert "+hchild = 2" in d and "+cchild = 2" in d, d
-        assert '"plugins"' not in d and '"r": 1' not in d, d
+        assert '- "plugins": {}' in d, d
+        assert '- "r": 1' in d, d
 
 
 def test_Q_strict_sites_verify_packet_gives_touched_and_excluded_to_git_literally():
@@ -2113,7 +2155,9 @@ def test_Q_strict_keep_mangsang_stays_in_late_eyes_and_a_record_for_verify():
         assert dwitbuk.documents_or_records(["mangsang/relations/R-3.json"], pj.dir)
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["mangsang/relations/R-3.json", "mangsang", "a.py"]}
-        assert dwitbuk.verify_packet(req)["touched"] == ["a.py"]
+        p = dwitbuk.verify_packet(req)
+        assert p["touched"] == ["mangsang/relations/R-3.json", "mangsang", "a.py"], p["touched"]   # D1: a record for documents_or_records, work for verify
+        assert '"R-3"' in p["diff"], p["diff"]
 
 
 def test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_stay_in():
@@ -2141,9 +2185,10 @@ def test_Q_strict_keep_environment_records_stay_out_and_same_prefix_neighbours_s
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": list(sources) + list(records) + [".claude/settings.json", "reviews/r.json"], "since": {".": since}}
         p = dwitbuk.verify_packet(req)
-        assert sorted(p["touched"]) == sorted(sources), p["touched"]
-        for name in sources:
+        assert p["touched"] == list(sources) + list(records) + ["reviews/r.json"], p["touched"]   # D1: only the host's settings go
+        for name in sources + records:
             assert '"new %s"' % name in p["diff"], (name, p["diff"])
+        assert "reviews/r.json" in p["diff"] and ".claude/settings.json" not in p["diff"], p["diff"]
         for name in sources:
             assert not dwitbuk.documents_or_records([name], pj.dir), name
         assert dwitbuk.documents_or_records(list(records), pj.dir)
@@ -3441,10 +3486,10 @@ def test_Q_bounded_git_keeps_universal_newlines_and_git_patch_returns_gits_bytes
 # that directory alone — and keep the source checkout (these tests, this project's hunsu environment, its run and review
 # records) out of it.
 
-PAYLOAD_REQUIRED = ("dwitbuk.py", "eyes_worker.py", "hostcall.py", "plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
+PAYLOAD_REQUIRED = ("dwitbuk.py", "eyes_worker.py", "hostcall.py", "pluginroot.py", "plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
                     "README.md", "LICENSE", "skills/review/SKILL.md", "commands/review.md", "commands/dispose.md", "commands/follow.md",
                     "commands/eyes.md", "hooks/hooks.json", "hooks/codex.json", "hooks/session_start.py", "hooks/stop_eyes.py")
-PAYLOAD_SHAPE = re.compile(r"^(?:(?:dwitbuk|eyes_worker|hostcall)\.py|plugin\.json|README\.md|LICENSE|\.(?:claude|codex)-plugin/plugin\.json"
+PAYLOAD_SHAPE = re.compile(r"^(?:(?:dwitbuk|eyes_worker|hostcall|pluginroot)\.py|plugin\.json|README\.md|LICENSE|\.(?:claude|codex)-plugin/plugin\.json"
                            r"|skills/[\w.-]+/SKILL\.md|commands/[\w.-]+\.md|hooks/[\w.-]+\.(?:json|py))$")
 PLUGIN_ROOT_VAR = re.compile(r"\$\{(?:CLAUDE_PLUGIN_ROOT|PLUGIN_ROOT)\}/([^\"'\s`\\]+)")   # up to a quote, space or JSON's escaping backslash
 
@@ -3799,7 +3844,7 @@ def test_a_link_or_directory_marketplace_at_a_source_checkout_resolves_to_its_pa
         broken = os.path.join(base, "broken"); write(os.path.join(broken, ".claude-plugin", "marketplace.json"), "{not json")
         want = {co: os.path.join(co, "plugin"), cx: os.path.join(cx, "plugin"), folder: os.path.join(folder, "mangsang", "plugin"),
                 flat: flat, old_folder: os.path.join(old_folder, "mangsang"), empty: empty, broken: broken}
-        with Project() as pj:
+        with Project() as pj, environ(AGENT_HOST="claude-code", HUNSU_CODEX_DIR=os.path.join(base, "codex")):
             for link, root in want.items():
                 write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"mangsang": link}})
                 got = dwitbuk.plugin_root(pj.dir, "mangsang")
@@ -3817,11 +3862,12 @@ def test_a_link_or_directory_marketplace_at_a_source_checkout_resolves_to_its_pa
                                  (folder, os.path.join(folder, "mangsang", "plugin")), (old_folder, os.path.join(old_folder, "mangsang"))):
                 write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": market}}})
                 assert os.path.normpath(dwitbuk.plugin_root(pj.dir, "mangsang")) == root, market
+            installed = made(os.path.join(home, "cache", "mangsang", "9"))   # an installPath that exists
             write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {"mangsang@dev": [
-                {"scope": "project", "projectPath": pj.dir, "installPath": "/cache/mangsang/9"}]}})
+                {"scope": "project", "projectPath": pj.dir, "installPath": installed}]}})
             for market in (empty, broken, ""):   # no catalog names a manifest and no `<path>/<name>`: the install record, as before
                 write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": market}}})
-                assert dwitbuk.plugin_root(pj.dir, "mangsang") == "/cache/mangsang/9", market
+                assert same(dwitbuk.plugin_root(pj.dir, "mangsang"), installed), market
             write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": HERE}}})
             write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"dwitbuk": {"marketplace": "dev"}}})
             assert os.path.normpath(dwitbuk.plugin_root(pj.dir, "dwitbuk")) == PLUGIN, "this checkout as a directory marketplace: its payload"
@@ -3888,21 +3934,22 @@ def test_a_catalog_source_is_a_path_inside_the_catalog_and_its_manifest_names_th
         # through plugin_root: a rejected source falls back to the earlier rule — the link itself here, the install record for
         # a directory marketplace — never to the escaped directory, and never a crash (a list for a name raised TypeError)
         codex("./listed")
-        with Project() as pj:
+        with Project() as pj, environ(AGENT_HOST="claude-code", HUNSU_CODEX_DIR=os.path.join(base, "codex-home")):
             write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"probe": cat}})
             assert dwitbuk.plugin_root(pj.dir, "probe") == cat
         codex("../outside")
-        with Project() as pj:
+        with Project() as pj, environ(AGENT_HOST="claude-code", HUNSU_CODEX_DIR=os.path.join(base, "codex-home")):
             write(os.path.join(pj.dir, "hunsu.local.json"), {"links": {"probe": cat}})
             assert dwitbuk.plugin_root(pj.dir, "probe") == cat
             home = os.path.join(base, "home")
             os.environ["HUNSU_CLAUDE_DIR"] = home
             write(os.path.join(home, "plugins", "known_marketplaces.json"), {"dev": {"source": {"source": "directory", "path": cat}}})
+            installed = made(os.path.join(home, "cache", "probe", "1"))   # an installPath that exists
             write(os.path.join(home, "plugins", "installed_plugins.json"), {"plugins": {"probe@dev": [
-                {"scope": "project", "projectPath": pj.dir, "installPath": "/cache/probe/1"}]}})
+                {"scope": "project", "projectPath": pj.dir, "installPath": installed}]}})
             write(os.path.join(pj.dir, "hunsu.local.json"), {})
             write(os.path.join(pj.dir, "hunsu.json"), {"plugins": {"probe": {"marketplace": "dev"}}})
-            assert dwitbuk.plugin_root(pj.dir, "probe") == "/cache/probe/1"
+            assert same(dwitbuk.plugin_root(pj.dir, "probe"), installed)
     finally:
         if old is None:
             os.environ.pop("HUNSU_CLAUDE_DIR", None)
@@ -3910,6 +3957,1369 @@ def test_a_catalog_source_is_a_path_inside_the_catalog_and_its_manifest_names_th
             os.environ["HUNSU_CLAUDE_DIR"] = old
         shutil.rmtree(base, ignore_errors=True)
 
+
+
+# --- 11-06 D1: verify_packet keeps every touched path but chongdae's runs and the host's settings, and says what its diff does not hold
+
+def verify_req(pj, touched, since=None, **kw):
+    return {"artifact-type": "chongdae/request@1", "stage": "verify", "run": "run-1", "task": "T", "target": pj.dir, "brief": "b",
+            "contract": {}, "checks": [], "tests": [], "touched": list(touched), **({"since": {".": since}} if since else {}), **kw}
+
+
+def test_D1_verify_packet_keeps_touched_record_paths_with_their_diff_and_drops_only_chongdae_and_claude():
+    """11-06: today's model work (mangsang/relations/…) reached the verifier with no name and no diff."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"alpha": [".alpha/", "alpha.json"], "mangsang": ["mangsang/", ".mangsang/"]}})
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), '{"id": "R-1", "v": "one"}\n')
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": "before"}\n')
+        write(os.path.join(pj.dir, ".alpha", "x.json"), '{"alpha": "before"}\n')
+        write(os.path.join(pj.dir, "src", "a.py"), "src_a = 'before'\n")
+        write(os.path.join(pj.dir, ".chongdae", "run-1", "tasks", "T.json"), '{"task": "chongdae-before"}\n')
+        write(os.path.join(pj.dir, ".claude", "settings.json"), '{"claude": "settings-before"}\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base with records")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-1.json"), '{"id": "R-1", "v": "two"}\n')
+        write(os.path.join(pj.dir, "mangsang", "relations", "R-2.json"), '{"id": "R-2", "v": "brand new relation"}\n')
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": "after"}\n')
+        write(os.path.join(pj.dir, ".alpha", "x.json"), '{"alpha": "after"}\n')
+        write(os.path.join(pj.dir, "src", "a.py"), "src_a = 'after'\n")
+        write(os.path.join(pj.dir, ".chongdae", "run-1", "tasks", "T.json"), '{"task": "chongdae-after"}\n')
+        write(os.path.join(pj.dir, ".claude", "settings.json"), '{"claude": "settings-after"}\n')
+        kept = ["mangsang/relations/R-1.json", "mangsang/relations/R-2.json", "hunsu.json", ".alpha/x.json", "src/a.py"]
+        p = dwitbuk.verify_packet(verify_req(pj, kept + [".chongdae/run-1/tasks/T.json", ".claude/settings.json"], since))
+        assert p["touched"] == kept, p["touched"]
+        d = p["diff"]
+        assert '-{"id": "R-1", "v": "one"}' in d and '+{"id": "R-1", "v": "two"}' in d and "b/mangsang/relations/R-1.json" in d, d
+        assert "mangsang/relations/R-2.json (new file)" in d and "brand new relation" in d, d
+        assert '-{"plugins": "before"}' in d and '+{"plugins": "after"}' in d, d
+        assert '-{"alpha": "before"}' in d and '+{"alpha": "after"}' in d, d
+        assert "-src_a = 'before'" in d and "+src_a = 'after'" in d, d
+        for gone in ("chongdae-before", "chongdae-after", "settings-before", "settings-after", ".chongdae/", ".claude/"):
+            assert gone not in d, (gone, d)
+        assert "not_in_diff" not in p, p.get("not_in_diff")   # every file whole: no key
+        # documents_or_records still counts them records (unchanged)
+        assert dwitbuk.documents_or_records(["mangsang/relations/R-1.json", "hunsu.json", ".alpha/x.json"], pj.dir)
+
+
+def test_D1_verify_packet_names_in_not_in_diff_what_its_diff_does_not_hold_whole():
+    with Project() as pj:
+        write(os.path.join(pj.dir, "a_small.py"), "small = 'before'\n")
+        write(os.path.join(pj.dir, "b_huge.py"), "huge = 0\n")
+        write(os.path.join(pj.dir, "c_after.py"), "after = 'before'\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "a_small.py"), "small = 'after'\n")
+        write(os.path.join(pj.dir, "b_huge.py"), "".join("huge_%05d = %d  # a long line of the huge change\n" % (i, i) for i in range(2500)))
+        write(os.path.join(pj.dir, "c_after.py"), "after = 'after'\n")
+        write(os.path.join(pj.dir, "d_big_new.txt"), "big new file line\n" * 3000)   # 54000 bytes, untracked: git has no diff
+        assert os.path.getsize(os.path.join(pj.dir, "b_huge.py")) > 80000 and os.path.getsize(os.path.join(pj.dir, "d_big_new.txt")) >= 40000
+        p = dwitbuk.verify_packet(verify_req(pj, ["a_small.py", "b_huge.py", "c_after.py", "d_big_new.txt"], since))
+        assert p["touched"] == ["a_small.py", "b_huge.py", "c_after.py", "d_big_new.txt"], p["touched"]
+        assert "+small = 'after'" in p["diff"], p["diff"][:400]
+        assert "not_in_diff" in p, sorted(p)
+        nid = p["not_in_diff"]
+        assert isinstance(nid, list) and set(nid) == {"b_huge.py", "c_after.py", "d_big_new.txt"}, nid
+        assert "a_small.py" not in nid, nid
+        # a 40000-byte new file exactly is not added whole either
+        write(os.path.join(pj.dir, "e_exact.txt"), "x" * 39999 + "\n")
+        assert os.path.getsize(os.path.join(pj.dir, "e_exact.txt")) == 40000
+        q = dwitbuk.verify_packet(verify_req(pj, ["a_small.py", "e_exact.txt"], since))
+        assert q.get("not_in_diff") == ["e_exact.txt"], q.get("not_in_diff")
+        # and a packet whose diff holds every file whole has no key at all
+        r = dwitbuk.verify_packet(verify_req(pj, ["a_small.py", "c_after.py"], since))
+        assert "not_in_diff" not in r and "+after = 'after'" in r["diff"], sorted(r)
+
+
+# --- 11-06 D2: an accept that left a touched file neither whole in the diff nor opened says so
+
+def unread_project(pj):
+    write(os.path.join(pj.dir, "small.py"), "small = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base small")
+    since = git(pj.dir, "rev-parse", "HEAD")
+    write(os.path.join(pj.dir, "small.py"), "small = 2\n")
+    write(os.path.join(pj.dir, "big.py"), "".join("big_%05d = %d\n" % (i, i) for i in range(4000)))
+    assert os.path.getsize(os.path.join(pj.dir, "big.py")) >= 40000
+    return verify_req(pj, ["small.py", "big.py"], since, run="run-1", task="big-task", brief="add big",
+                      contract={"Q-big": "big.py defines four thousand constants"}, checks=[["python3", "t.py"]], tests=["t.py"],
+                      built={"summary": "built", "verified": [], "non-claims": []})
+
+
+UNREAD_BIG = "accepted with 1 touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: `big.py`"
+
+
+def test_D2_unread_touched_names_the_not_in_diff_files_the_eyes_did_not_open():
+    assert callable(getattr(w, "unread_touched", None)), "eyes_worker.unread_touched is missing"
+    with Project() as pj:
+        packet = dict(dwitbuk.verify_packet(unread_project(pj)), not_in_diff=["big.py"])   # D2 alone: not_in_diff as D1 will give it
+        big, small = pj.dir + "/big.py", pj.dir + "/small.py"
+        def ut(files=(), commands=()):
+            return w.unread_touched({"files": list(files), "commands": list(commands)}, packet)
+        assert w.unread_touched(None, packet) == [], "not on record: the existing non-claim says so"
+        assert ut() == ["big.py"]
+        assert ut(["Read %s" % small]) == ["big.py"], "small.py read, big.py not"
+        assert ut(["Read %s" % big]) == [], "absolute under the target"
+        assert ut(["Read big.py"]) == [], "relative to the target"
+        assert ut(["Grep %s" % big]) == [], "a Grep of the file opens it"
+        assert ut(["Grep %s" % pj.dir]) == ["big.py"], "a Grep of the directory opens none under it"
+        assert ut(["Glob %s" % pj.dir]) == ["big.py"], "a Glob of the directory opens none under it"
+        assert ut(["Read %s/big.py.bak" % pj.dir]) == ["big.py"], "another file's path is not this one"
+        assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": 0}]) == []
+        assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": None}]) == [], "exit None: it ran"
+        assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": 1}]) == ["big.py"], "a failed command read nothing"
+        assert ut(commands=[{"command": "cat %s" % big, "exit": 0}]) == [], "absolute under the target"
+        assert ut(commands=[{"command": "cat old_big.py", "exit": 0}]) == ["big.py"], "not a whole token"
+        assert ut(commands=[{"command": "cat big.py.orig", "exit": 0}]) == ["big.py"], "not a whole token"
+        assert ut(commands=[{"command": "rg -n big_ .", "exit": 0}]) == ["big.py"], "a search of the directory opens none"
+        # in the packet's touched order, and only what not_in_diff names
+        three = dict(packet, touched=["small.py", "big.py", "c.py"], not_in_diff=["c.py", "big.py"])
+        assert w.unread_touched({"files": [], "commands": []}, three) == ["big.py", "c.py"]
+        whole = {k: v for k, v in packet.items() if k != "not_in_diff"}
+        assert w.unread_touched({"files": [], "commands": []}, whole) == [], "nothing outside the diff: nothing unread"
+
+
+def test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_is_untouched():
+    assert callable(getattr(w, "unread_touched", None)), "eyes_worker.unread_touched is missing"
+    with Project() as pj:
+        req = unread_project(pj)
+        reqf, resp = os.path.join(pj.dir, "local", "req.json"), os.path.join(pj.dir, "local", "resp.json")
+        write(reqf, req)
+        verdict = '{"verdict":"accept","findings":[]}'
+        def codex_item(n, kind, **kw):
+            return json.dumps({"type": "item.completed", "item": dict(id="item_%d" % n, type=kind, **kw)})
+        def shell(cmd):
+            return "/bin/zsh -lc %s" % json.dumps(cmd).replace('"', "'")
+        def claude_tool(name, **inp):
+            return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t-" + name, "name": name, "input": inp}]}})
+        said = json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": verdict}]}})
+        streams = {
+            "read-small": [claude_tool("Read", file_path=pj.dir + "/small.py"), said],
+            "read-big": [claude_tool("Read", file_path=pj.dir + "/big.py"), said],
+            "grep-dir": [claude_tool("Grep", pattern="big_", path=pj.dir), said],
+            "sed-ok": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' big.py"), aggregated_output="big_00000 = 0", exit_code=0),
+                       codex_item(1, "agent_message", text=verdict)],
+            "sed-failed": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' big.py"), aggregated_output="", exit_code=1),
+                           codex_item(1, "agent_message", text=verdict)],
+        }
+        def answer(case, verdict_="accept", findings=()):
+            def fake(packet, schema, args):
+                write(os.path.join(os.path.dirname(args.response), "resp.transcript.jsonl"), "\n".join(streams[case]) + "\n")
+                return {"verdict": verdict_, "findings": list(findings), "worker": {"host": "codex", "model": "m", "transcript": "resp.transcript.jsonl"}}
+            old_codex, old_argv = w.codex, sys.argv
+            w.codex, sys.argv = fake, ["eyes_worker.py", "--request", reqf, "--response", resp, "--host", "codex"]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    assert w.main() == 0
+            finally:
+                w.codex, sys.argv = old_codex, old_argv
+            return json.load(io.open(resp, encoding="utf-8"))
+        got = answer("read-small")
+        assert got["verdict"] == "accept" and got["read"]["files"] == ["Read %s/small.py" % pj.dir], got
+        assert got.get("non-claims") == [UNREAD_BIG], got.get("non-claims")
+        assert "small.py" not in got["non-claims"][0]
+        got = answer("read-big")
+        assert "non-claims" not in got and got["read"]["files"] == ["Read %s/big.py" % pj.dir], got
+        got = answer("grep-dir")   # a Grep over the directory opens none of the files under it
+        assert UNREAD_BIG in (got.get("non-claims") or []), got
+        got = answer("sed-ok")
+        assert "non-claims" not in got and got["read"]["commands"][0]["command"].startswith("sed -n") and got["read"]["commands"][0]["exit"] == 0, got
+        got = answer("sed-failed")   # beside unread_accept's own, in its exact wording
+        nc = got.get("non-claims") or []
+        assert UNREAD_BIG in nc and len(nc) == 2, nc
+        assert [n for n in nc if n.startswith("accepted without reading the tree: the eyes opened no file and ran no command")], nc
+        anomaly = {"kind": "anomaly", "where": "small.py", "record_quote": "", "tree_quote": "small = 2", "why": "odd"}
+        got = answer("read-small", "reject", [anomaly])
+        assert got["verdict"] == "reject" and "non-claims" not in got and "read" not in got, got
+
+
+
+
+# --- D3: a live-tree eyes packet is bound to what it quoted, not to every record ---------------------------------------------
+
+D3_RUN = "run-20261106-000001-d3d3"
+
+
+def session_run(pj, rid, tasks, status="running", goal=None):
+    """A chongdae 2.1.0 session run: plan.json with no tasks, state.json, and one file per task under tasks/."""
+    root = os.path.join(pj.dir, ".chongdae", rid)
+    write(os.path.join(root, "plan.json"), {"artifact-type": "chongdae/plan@1", "kind": "session", "goal": goal or "goal of " + rid, "tasks": []})
+    write(os.path.join(root, "state.json"), {"status": status, "tasks": {}, "non-claims": []})
+    for tid, st in tasks.items():
+        write(os.path.join(root, "tasks", tid + ".json"),
+              {"def": {"id": tid, "role": "implementer", "brief": "brief of " + tid, "checks": [["python3", "t.py"]]}, **st})
+
+
+def d3_project(pj):
+    """An open session run: task `eyes` (todo, the one running the eyes) and a done task with a non-claim; a review to add to."""
+    run("review", "--target", pj.dir)
+    session_run(pj, D3_RUN, {"eyes": {"status": "todo"},
+                             "built": {"status": "done", "touched": ["a.py"], "confirmed": {"by": "verifier"}, "attempts": 1,
+                                       "non-claims": ["no check decides the wording"]}})
+
+
+def d3_task_path(pj, tid, rid=D3_RUN):
+    return os.path.join(pj.dir, ".chongdae", rid, "tasks", tid + ".json")
+
+
+def d3_edit(path, change):
+    doc = dwitbuk.load(path)
+    change(doc)
+    write(path, doc)
+
+
+def append_did(pj, tid="eyes", rid=D3_RUN):
+    """What chongdae records of the eyes call itself, appended to the task's file (the same second)."""
+    d3_edit(d3_task_path(pj, tid, rid), lambda t: t.setdefault("did", []).append(
+        {"command": "python3 eyes_worker.py --request .dwitbuk/packet/eyes-request.json --response .dwitbuk/packet/eyes-response.json", "exit": 0}))
+
+
+def d3_taken(pj, folder, name):
+    code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+    assert code == 0 and "source changed" not in out, out
+    assert any(f["kind"] == "anomaly" and name in f["text"] for f in pj.latest()["findings"]), (out, pj.latest()["findings"])
+
+
+def test_D3_a_did_chongdae_appends_to_the_eyes_task_during_the_call_does_not_stale_the_packet():
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "d3-did")
+        assert any(r["run"] == D3_RUN for r in packet["runs"]), "the open run is packed"
+        append_did(pj)
+        d3_taken(pj, folder, "d3-did")
+
+
+def test_D3_a_new_task_with_its_own_non_claims_and_a_new_run_during_the_call_do_not_stale_the_packet():
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "d3-new")
+        write(d3_task_path(pj, "later"), {"def": {"id": "later", "role": "implementer", "brief": "added after", "checks": []},
+                                          "status": "todo", "non-claims": ["no check decides this task; done means the agent said so"]})
+        session_run(pj, "run-20261106-000002-eeee", {"other": {"status": "todo"}})
+        append_did(pj)
+        d3_taken(pj, folder, "d3-new")
+
+
+def d3_refusals():
+    """(what changed, the change) — each a change to something the packet carries, or to the source."""
+    def task(tid, change):
+        return lambda pj: d3_edit(d3_task_path(pj, tid), change)
+    def state(change):
+        return lambda pj: d3_edit(os.path.join(pj.dir, ".chongdae", D3_RUN, "state.json"), change)
+    def plan(change):
+        return lambda pj: d3_edit(os.path.join(pj.dir, ".chongdae", D3_RUN, "plan.json"), change)
+    return [
+        ("the done task's status", task("built", lambda t: t.update(status="failed"))),
+        ("a packed task's brief", task("built", lambda t: t["def"].update(brief="another brief"))),
+        ("a packed task's checks", task("eyes", lambda t: t["def"].update(checks=[]))),
+        ("a packed task's touched", task("built", lambda t: t.update(touched=["a.py", "b.py"]))),
+        ("a packed task's confirmed", task("built", lambda t: t.update(confirmed={"by": "someone else"}))),
+        ("a packed task-state field added", task("eyes", lambda t: t.update(accepted={"by": "kim"}))),
+        ("the run's status", state(lambda s: s.update(status="complete"))),
+        ("the run's goal", plan(lambda p: p.update(goal="another goal"))),
+        ("a packed non-claim removed", task("built", lambda t: t.update({"non-claims": []}))),
+        ("a packed task gone", lambda pj: os.unlink(d3_task_path(pj, "built"))),
+        ("a packed run gone", lambda pj: shutil.rmtree(os.path.join(pj.dir, ".chongdae", D3_RUN))),
+        ("a source file", lambda pj: write(os.path.join(pj.dir, "a.py"), "x = 7\n")),
+    ]
+
+
+def test_D3_a_change_to_what_the_packet_carries_or_to_the_source_is_still_refused_beside_a_did():
+    # the rule tells the two apart: a `did` alone is taken ...
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "d3-control")
+        append_did(pj)
+        d3_taken(pj, folder, "d3-control")
+    # ... and a `did` beside a change to anything packed is refused, the review untouched
+    for what, change in d3_refusals():
+        with Project() as pj:
+            d3_project(pj)
+            folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+            eyes_answer(pj, folder, "d3-refused")
+            before = pj.latest()
+            append_did(pj)
+            change(pj)
+            code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+            assert code != 0 and "source changed" in out, (what, out)
+            assert pj.latest() == before, what
+
+
+def d3_worker(pj, folder, during=None):
+    """eyes_worker.main on the packet in folder with a patched host; `during` runs inside the host call. Returns (host called, error)."""
+    from unittest.mock import patch
+    response = os.path.join(folder, "eyes-response.json")
+    if os.path.exists(response):
+        os.unlink(response)
+    called = []
+    def host(packet, schema, args):
+        called.append(True)
+        if during:
+            during(pj)
+        return {"findings": [{"kind": "anomaly", "where": "a.py", "tree_quote": "x = 1", "record_quote": "", "why": "d3-worker"}]}
+    with patch.object(w, "claude", host), patch.object(sys, "argv", ["eyes_worker.py", "--request", os.path.join(folder, "eyes-request.json"), "--response", response]), \
+            contextlib.redirect_stdout(io.StringIO()):
+        try:
+            w.main()
+            return bool(called), None
+        except SystemExit as err:
+            return bool(called), str(err)
+
+
+def test_D3_the_worker_saves_its_answer_when_chongdae_writes_a_did_during_the_host_call():
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "unused")
+        called, err = d3_worker(pj, folder, during=append_did)
+        response = os.path.join(folder, "eyes-response.json")
+        assert called and err is None and os.path.exists(response), err
+        assert dwitbuk.load(response).get("request") == dwitbuk.fingerprint(packet)
+        d3_taken(pj, folder, "d3-worker")
+
+
+def test_D3_the_worker_refuses_a_packed_change_before_and_after_its_host_call_by_the_same_rule():
+    response_of = lambda folder: os.path.join(folder, "eyes-response.json")
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "unused")
+        append_did(pj)   # before the call: taken
+        called, err = d3_worker(pj, folder, during=lambda p: append_did(p))
+        assert called and err is None and os.path.exists(response_of(folder)), err
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "unused")
+        append_did(pj)
+        d3_edit(d3_task_path(pj, "built"), lambda t: t.update(status="failed"))   # before the call: refused, the host never asked
+        called, err = d3_worker(pj, folder)
+        assert not called and err and "source changed" in err and not os.path.exists(response_of(folder)), (called, err)
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "unused")
+        def during(p):
+            append_did(p)
+            d3_edit(d3_task_path(p, "built"), lambda t: t["def"].update(brief="rewritten during the call"))
+        called, err = d3_worker(pj, folder, during=during)
+        assert called and err and "source changed" in err and not os.path.exists(response_of(folder)), (called, err)
+
+
+def test_D3_a_packet_bound_the_2_1_0_way_keeps_the_whole_records_rule():
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "d3-new-style")
+        append_did(pj)
+        d3_taken(pj, folder, "d3-new-style")   # bound the new way, a `did` is taken
+    with Project() as pj:
+        d3_project(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "d3-old-style")
+        src = packet["source"]
+        # what dwitbuk 2.1.0 wrote: no `review`, `records: true`, the digest over the tree and every run's whole record
+        packet["source"] = {"output": src["output"], "extra": src.get("extra", []), "records": True,
+                            "digest": dwitbuk.source_state(pj.dir, src["output"], src.get("extra", []), True)}
+        write(os.path.join(folder, "eyes-request.json"), packet)
+        write(os.path.join(folder, "eyes-response.json"), {"request": dwitbuk.fingerprint(packet), "findings": [
+            {"kind": "anomaly", "where": "a.py", "tree_quote": "d3-old-style", "record_quote": "", "why": "d3-old-style"}]})
+        d3_taken(pj, folder, "d3-old-style")   # the hand-bound packet is a valid binding ...
+        append_did(pj)
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code != 0 and "source changed" in out, out   # ... and a `did` stales it, as in 2.1.0
+
+
+# --- D4: consume never rewrites a closed run's close review ------------------------------------------------------------------
+
+D4_CHARGES = [{"kind": "contradiction", "where": "run-1/T: a.py", "text": "d4 charge one"},
+              {"kind": "stale", "where": "rel-7", "text": "d4 charge two"}]
+D4_OBSERVATION = {"kind": "delegated", "where": "R-1 a.py realizes concept:x", "text": "d4 observation"}
+
+
+def d4_reporter(pj, fixed):
+    """A reporter that says the given findings and, for each file committed since --since, an outside-run."""
+    script = os.path.join(pj.dir, ".dwitbuk", "d4rep.py")   # under a record directory: rewriting the reporter is no source change
+    write(script, "import json, os, subprocess, sys\n"
+                  "since = sys.argv[sys.argv.index('--since') + 1]\n"
+                  "here = os.path.dirname(os.path.abspath(__file__))\n"
+                  "names = subprocess.run(['git', 'diff', '--name-only', since, 'HEAD'], cwd=here, capture_output=True, text=True).stdout.split()\n"
+                  "fixed = json.loads(%r)\n"
+                  "print(json.dumps({'artifact-type': 'dwitbuk/findings@1', 'source': 'd4rep', 'findings': fixed + "
+                  "[{'kind': 'outside-run', 'where': n, 'files': [n], 'text': 'changed; no run'} for n in names]}))\n" % json.dumps(fixed))
+    lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+    lock["reporters"] = {"d4rep": [sys.executable, script, "--since", "{since}"]}
+    write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+
+
+def d4_close(pj, rid, review_id, status="complete"):
+    """A run whose reviewer wrote review_id at its close, as chongdae 2.1.0 records it."""
+    root = os.path.join(pj.dir, ".chongdae", rid)
+    write(os.path.join(root, "plan.json"), {"artifact-type": "chongdae/plan@1", "kind": "session", "goal": "closed " + rid, "tasks": []})
+    write(os.path.join(root, "state.json"), {"status": status, "tasks": {}, "non-claims": [],
+                                            "reviewed": {"by": "reviewer", "said": "closed", "wrote": ["reviews/%s.json" % review_id], "at": "2026-11-06T04:00:00Z"}})
+
+
+def review_bytes(pj, rid):
+    with open(os.path.join(pj.dir, "reviews", rid + ".json"), "rb") as fh:
+        return fh.read()
+
+
+def d4_first_review(pj):
+    d4_reporter(pj, D4_CHARGES + [D4_OBSERVATION])
+    assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+    return pj.latest()
+
+
+def assert_eyes_review(pj, new, of, latest, eyes_names):
+    """new is the eyes review written for a packet bound to `of`, answering `latest`."""
+    assert new["artifact-type"] == "dwitbuk/review@1" and new["id"] > latest["id"] and new["eyes-of"] == of, new
+    assert new["since"] == latest["since"] and new["head"] == latest["head"], new
+    fs = new["findings"]
+    n = len(eyes_names)
+    assert [f["kind"] for f in fs[:n]] == ["anomaly"] * n and all(any(name in f["text"] for f in fs[:n]) for name in eyes_names), fs
+    open_ = [(i, f) for i, f in enumerate(latest["findings"]) if dwitbuk.layer(f) == "objection" and not f.get("disposition")]
+    carried = fs[n:n + len(open_)]
+    assert [f["kind"] for f in carried] == ["undisposed"] * len(open_), fs
+    for c, (i, old) in zip(carried, open_):
+        # raised in the latest review at its index; a charge the latest itself carried may keep where it was first raised
+        allowed = {"%s/%d" % (latest["id"], i)} | ({old.get("raised-in")} if old.get("kind") == "undisposed" and old.get("raised-in") else set())
+        assert c["raised-in"] in allowed and tuple(c["carries"]) == dwitbuk.charge(old), (c, old)
+    rest = fs[n + len(open_):]
+    # one `unchanged` line only when the latest review stands on observations (its own, or ones its `unchanged` lines count);
+    # a latest review that stands on none gets none (the newer review of the bound-to-A case reports no observation)
+    held = dwitbuk.carried_observations([r for r in dwitbuk.reviews(pj.dir) if r["id"] <= latest["id"]])
+    if not held:
+        assert rest == [], rest
+        return
+    assert len(rest) == 1 and rest[0]["kind"] == "unchanged" and rest[0]["seen-in"], rest
+    assert {rid for _, rid in held.values()} <= set(rest[0]["seen-in"]), (rest[0]["seen-in"], held)
+    assert re.match(r"%d observation" % len(held), rest[0]["text"]), rest[0]
+
+
+def test_D4_consume_on_a_packet_bound_to_a_closed_review_writes_a_new_eyes_review_and_leaves_the_closed_one_as_it_was():
+    import time
+    with Project() as pj:
+        closed = d4_first_review(pj)
+        d4_close(pj, "run-20261106-000001-c105", closed["id"])
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "d4-eyes")
+        assert packet["source"].get("review") == closed["id"], packet["source"]   # the binding names the latest review
+        before = review_bytes(pj, closed["id"])
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, out
+        assert review_bytes(pj, closed["id"]) == before, "a closed review's file is byte-for-byte as it was"
+        new = pj.latest()
+        assert new["id"] != closed["id"] and len(dwitbuk.reviews(pj.dir)) == 2, [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert_eyes_review(pj, new, closed["id"], closed, ["d4-eyes"])
+        assert "added to %s" % new["id"] in out and closed["id"] in out.replace("added to %s" % new["id"], ""), out
+        # follow: the old open charges once each, and the eyes finding
+        code, out = run("follow", "--target", pj.dir)
+        assert code == 1 and out.splitlines()[-1] == "undisposed findings: 3", out
+        assert out.count("d4 charge one") == 1 and out.count("d4 charge two") == 1 and "d4-eyes" in out and "d4 observation" not in out, out
+        # a disposal of a carried charge answers it, where it stands now
+        i = next(i for i, f in enumerate(new["findings"]) if f["kind"] == "undisposed" and f["text"] == "d4 charge one")
+        code, out = run("dispose", "%s/%d" % (new["id"], i), "--as", "dismissed", "--why", "fixed", "--by", "kim", "--target", pj.dir)
+        assert code == 0, out
+        assert run("follow", "--target", pj.dir)[1].splitlines()[-1] == "undisposed findings: 2"
+        assert review_bytes(pj, closed["id"]) == before
+        # a later review starts at the eyes review's head: a commit made after it shows, nothing lost
+        write(os.path.join(pj.dir, "b.py"), "y = 1\n")
+        git(pj.dir, "add", "b.py"); git(pj.dir, "commit", "-qm", "after the close")
+        d4_reporter(pj, [])
+        time.sleep(1.1)
+        assert run("review", "--target", pj.dir)[0] == 0
+        later = pj.latest()
+        assert later["since"] == closed["head"], (later["since"], closed["head"])
+        assert any(f["kind"] == "outside-run" and "b.py" in f["where"] for f in later["findings"]), later["findings"]
+        texts = [f["text"] for f in later["findings"] if dwitbuk.layer(f) == "objection" and not f.get("disposition")]
+        assert any("d4 charge two" in t for t in texts) and any("d4-eyes" in t for t in texts) and not any("d4 charge one" in t for t in texts), texts
+
+
+def test_D4_consume_on_a_packet_bound_to_an_open_latest_review_appends_to_it_as_now():
+    with Project() as pj:
+        older = d4_first_review(pj)
+        import time; time.sleep(1.1)
+        assert run("review", "--target", pj.dir)[0] == 0
+        latest = pj.latest()
+        d4_close(pj, "run-20261106-000001-c105", older["id"])   # a completed run closed an older review, not this one
+        d4_close(pj, "run-20261106-000002-0be7", latest["id"], status="running")   # not a completed run: does not close it
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "d4-open")
+        assert packet["source"].get("review") == latest["id"], packet["source"]
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0 and "added to %s" % latest["id"] in out, out
+        assert len(dwitbuk.reviews(pj.dir)) == 2 and pj.latest()["id"] == latest["id"]
+        assert any(f["kind"] == "anomaly" and "d4-open" in f["text"] for f in pj.latest()["findings"])
+
+
+def test_D4_a_newer_review_written_before_consume_gets_a_new_eyes_review_naming_the_bound_one():
+    import time
+    with Project() as pj:
+        a = d4_first_review(pj)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "d4-late")
+        assert packet["source"].get("review") == a["id"], packet["source"]
+        d4_reporter(pj, D4_CHARGES[1:])   # charge one stops recurring: B carries it; charge two is the reporter's again
+        time.sleep(1.1)
+        assert run("review", "--target", pj.dir)[0] == 0
+        b = pj.latest()
+        before = {r: review_bytes(pj, r) for r in (a["id"], b["id"])}
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, out
+        assert {r: review_bytes(pj, r) for r in before} == before, "neither the bound review nor the newer one is rewritten"
+        new = pj.latest()
+        assert len(dwitbuk.reviews(pj.dir)) == 3 and new["id"] not in before, [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert_eyes_review(pj, new, a["id"], b, ["d4-late"])
+        assert "added to %s" % new["id"] in out and a["id"] in out.replace("added to %s" % new["id"], ""), out
+
+
+def test_D4_a_second_packet_bound_to_the_same_closed_review_appends_to_the_eyes_review_already_made():
+    with Project() as pj:
+        closed = d4_first_review(pj)
+        d4_close(pj, "run-20261106-000001-c105", closed["id"])
+        first, second, third = [os.path.join(pj.dir, ".dwitbuk", n) for n in ("first", "second", "third")]
+        eyes_answer(pj, first, "d4-first")
+        eyes_answer(pj, second, "d4-second")
+        eyes_answer(pj, third, "d4-third")
+        before = review_bytes(pj, closed["id"])
+        assert run("eyes", "consume", "--dir", first, "--target", pj.dir)[0] == 0
+        made = pj.latest()
+        assert made["id"] != closed["id"] and made.get("eyes-of") == closed["id"], made.get("id")
+        code, out = run("eyes", "consume", "--dir", second, "--target", pj.dir)
+        assert code == 0 and "added to %s" % made["id"] in out, out
+        ids = [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert ids == [closed["id"], made["id"]], ids   # no third review
+        grown = pj.latest()
+        assert grown["findings"][:len(made["findings"])] == made["findings"], "appended, as consume appends"
+        added = grown["findings"][len(made["findings"]):]
+        assert [f["kind"] for f in added] == ["anomaly"] and "d4-second" in added[0]["text"], added
+        assert grown.get("eyes-of") == closed["id"] and grown["since"] == closed["since"] and grown["head"] == closed["head"], grown
+        assert review_bytes(pj, closed["id"]) == before
+        # nothing new kept (every finding rejected) writes no review
+        write(os.path.join(third, "eyes-response.json"), {"request": dwitbuk.fingerprint(dwitbuk.load(os.path.join(third, "eyes-request.json"))),
+                                                          "findings": [{"kind": "style", "where": "a.py", "tree_quote": "x", "record_quote": "y", "why": "no kind"}]})
+        code, out = run("eyes", "consume", "--dir", third, "--target", pj.dir)
+        assert [r["id"] for r in dwitbuk.reviews(pj.dir)] == ids and review_bytes(pj, closed["id"]) == before, out
+
+
+def test_D4_nothing_new_kept_against_a_closed_review_writes_no_review():
+    with Project() as pj:
+        closed = d4_first_review(pj)
+        d4_close(pj, "run-20261106-000001-c105", closed["id"])
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "unused")
+        assert packet["source"].get("review") == closed["id"], packet["source"]
+        write(os.path.join(folder, "eyes-response.json"), {"request": dwitbuk.fingerprint(packet), "findings": [
+            {"kind": "style", "where": "a.py", "tree_quote": "x", "record_quote": "y", "why": "not a kind"}]})
+        before = review_bytes(pj, closed["id"])
+        run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert [r["id"] for r in dwitbuk.reviews(pj.dir)] == [closed["id"]] and review_bytes(pj, closed["id"]) == before
+
+
+def test_D4_the_new_eyes_review_sorts_after_the_latest_within_the_same_second():
+    import time
+    with Project() as pj:
+        first = d4_first_review(pj)
+        # the latest review, renamed to this very second with the highest suffix there is
+        late_id = "review-%s-ffff" % time.strftime("%Y%m%d-%H%M%S")
+        os.rename(os.path.join(pj.dir, "reviews", first["id"] + ".json"), os.path.join(pj.dir, "reviews", late_id + ".json"))
+        save_review(pj, dict(first, id=late_id))
+        d4_close(pj, "run-20261106-000001-c105", late_id)
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "d4-same-second")
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, out
+        ids = [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert len(ids) == 2 and ids[0] == late_id and ids[1] > late_id and pj.latest().get("eyes-of") == late_id, ids
+
+
+# --- 11-06 D5: one host-aware resolver of `{plugin:NAME}` (plugin/pluginroot.py, vendored byte-identical by chongdae and jokbo).
+# Every fixture is a temporary project and temporary host homes; `environ` is passed, so this machine's ~/.claude and ~/.codex
+# are never read.
+
+D5_KEYS = ("name", "root", "host", "via", "marketplace", "declared", "version", "note", "reason")
+
+
+def pluginroot():
+    """plugin/pluginroot.py, imported from the payload; its absence is a failed assertion, not an import error."""
+    assert os.path.isfile(os.path.join(PLUGIN, "pluginroot.py")), "plugin/pluginroot.py does not exist"
+    import importlib
+    mod = importlib.import_module("pluginroot")
+    assert callable(getattr(mod, "resolve", None)), "pluginroot.resolve is missing"
+    return mod
+
+
+class Hosts:
+    """A temporary project (`target`) and temporary host homes: Claude Code's and Codex's, written as each host writes them."""
+
+    def __init__(self):
+        self.base = tempfile.mkdtemp(prefix="dwitbuk-d5-")
+        self.target = made(os.path.join(self.base, "project"))   # under /var on macOS: its real path is /private/var/…
+        self.claude = made(os.path.join(self.base, "claude-home"))
+        self.codex = made(os.path.join(self.base, "codex-home"))
+        self.installed = {}
+        self.known = {}
+        self.config = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def env(self, host="claude-code", **extra):
+        e = {"AGENT_HOST": host, "HUNSU_CLAUDE_DIR": self.claude, "HUNSU_CODEX_DIR": self.codex, "HOME": made(os.path.join(self.base, "home"))}
+        e.update(extra)
+        return {k: v for k, v in e.items() if v is not None}
+
+    def resolve(self, name, host="claude-code", target=None, **extra):
+        got = pluginroot().resolve(target or self.target, name, environ=self.env(host, **extra))
+        assert isinstance(got, dict), got
+        missing = [k for k in D5_KEYS if k not in got]
+        assert not missing, ("resolve() result lacks keys", missing, got)
+        return got
+
+    def os_environ(self, host):
+        """For what reads os.environ (dwitbuk.plugin_root, a review): this host and these homes, the fallbacks unset."""
+        return environ(AGENT_HOST=host, HUNSU_CLAUDE_DIR=self.claude, HUNSU_CODEX_DIR=self.codex,
+                       CLAUDE_CONFIG_DIR=None, AGENT_CODEX_HOME=None, CODEX_HOME=None)
+
+    def declare(self, name, marketplace=None, version=None):
+        doc = dwitbuk.load(os.path.join(self.target, "hunsu.json")) if os.path.isfile(os.path.join(self.target, "hunsu.json")) else {}
+        entry = {k: v for k, v in (("marketplace", marketplace), ("version", version)) if v is not None}
+        doc.setdefault("plugins", {})[name] = entry
+        write(os.path.join(self.target, "hunsu.json"), doc)
+
+    def local(self, doc):
+        write(os.path.join(self.target, "hunsu.local.json"), doc)
+
+    def claude_install(self, name, market, version, scope="user", project=None, exists=True, manifest=True):
+        path = os.path.join(self.claude, "plugins", "cache", market, name, version)
+        if exists:
+            made(path)
+            if manifest:
+                write(os.path.join(path, ".claude-plugin", "plugin.json"), {"name": name, "version": version})
+        entry = {"scope": scope, "installPath": path, "version": version}
+        if project is not None:
+            entry["projectPath"] = project
+        self.installed.setdefault("%s@%s" % (name, market), []).append(entry)
+        write(os.path.join(self.claude, "plugins", "installed_plugins.json"), {"version": 2, "plugins": self.installed})
+        return path
+
+    def claude_directory_market(self, market, path):
+        self.known[market] = {"source": {"source": "directory", "path": path}, "installLocation": path}
+        write(os.path.join(self.claude, "plugins", "known_marketplaces.json"), self.known)
+
+    def codex_install(self, name, market, version, enabled=True, manifest=".codex-plugin", configured=True):
+        path = made(os.path.join(self.codex, "plugins", "cache", market, name, version))
+        if manifest:
+            write(os.path.join(path, manifest, "plugin.json") if manifest != "flat" else os.path.join(path, "plugin.json"),
+                  {"name": name, "version": version})
+        if configured:
+            self.config["%s@%s" % (name, market)] = enabled
+        self.write_config()
+        return path
+
+    def write_config(self):
+        text = 'model = "x"\n\n' + "".join('[plugins."%s"]\nenabled = %s\n\n' % (k, "true" if v else "false") for k, v in self.config.items())
+        write(os.path.join(self.codex, "config.toml"), text)
+
+
+def plugin_dir(path, name, version="1.0.0", kind=".claude-plugin"):
+    """A plugin payload at `path`: its manifest names it."""
+    write(os.path.join(path, kind, "plugin.json") if kind else os.path.join(path, "plugin.json"), {"name": name, "version": version})
+    return path
+
+
+def test_D5_pluginroot_is_a_stdlib_only_module_in_the_payload_with_resolve():
+    import ast, inspect
+    mod = pluginroot()
+    src = open(os.path.join(PLUGIN, "pluginroot.py"), encoding="utf-8").read()
+    names = set()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Import):
+            names |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            assert node.level == 0, "a relative import: pluginroot is vendored alone"
+            names.add((node.module or "").split(".")[0])
+        elif isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", None)) in ("__import__", "import_module"):
+            raise AssertionError("pluginroot imports by name at run time; it must import only the standard library")
+    foreign = sorted(n for n in names if n not in sys.stdlib_module_names)
+    assert not foreign, ("pluginroot imports outside the standard library", foreign)
+    params = list(inspect.signature(mod.resolve).parameters.values())
+    assert [p.name for p in params[:3]] == ["target", "name", "environ"] and params[2].default is None, params
+
+
+def test_D5_the_host_is_codex_only_for_AGENT_HOST_codex():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        for host, want in (("codex", "codex"), ("claude-code", "claude-code"), ("claude", "claude-code"), ("", "claude-code"),
+                           ("CODEX", "claude-code"), (None, "claude-code")):
+            got = h.resolve("probe", host=host)
+            assert got["host"] == want and got["name"] == "probe", (host, got)
+
+
+def test_D5_environ_defaults_to_os_environ():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        path = h.codex_install("probe", "m", "1.0.0")
+        mod = pluginroot()
+        with environ(AGENT_HOST="codex", HUNSU_CLAUDE_DIR=h.claude, HUNSU_CODEX_DIR=h.codex):
+            got = mod.resolve(h.target, "probe")
+        assert got["host"] == "codex" and same(got["root"], path), got
+        with environ(AGENT_HOST="claude-code", HUNSU_CLAUDE_DIR=h.claude, HUNSU_CODEX_DIR=h.codex):
+            got = mod.resolve(h.target, "probe")
+        assert got["host"] == "claude-code" and got["root"] is None, got
+
+
+def test_D5_host_homes_follow_their_variables_in_order():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        # Claude Code: HUNSU_CLAUDE_DIR, else CLAUDE_CONFIG_DIR
+        other = made(os.path.join(h.base, "claude-config"))
+        path = h.claude_install("probe", "m", "1.0.0")
+        got = h.resolve("probe", HUNSU_CLAUDE_DIR=None, CLAUDE_CONFIG_DIR=h.claude)
+        assert same(got["root"], path), ("CLAUDE_CONFIG_DIR is the Claude home without HUNSU_CLAUDE_DIR", got)
+        got = h.resolve("probe", CLAUDE_CONFIG_DIR=other)
+        assert same(got["root"], path), ("HUNSU_CLAUDE_DIR wins over CLAUDE_CONFIG_DIR", got)
+        got = h.resolve("probe", HUNSU_CLAUDE_DIR=other, CLAUDE_CONFIG_DIR=h.claude)
+        assert got["root"] is None, ("HUNSU_CLAUDE_DIR wins over CLAUDE_CONFIG_DIR", got)
+        # Codex: HUNSU_CODEX_DIR, else AGENT_CODEX_HOME, else CODEX_HOME
+        empty = made(os.path.join(h.base, "codex-empty"))
+        cpath = h.codex_install("probe", "m", "1.0.0")
+        assert same(h.resolve("probe", "codex", HUNSU_CODEX_DIR=None, AGENT_CODEX_HOME=h.codex, CODEX_HOME=empty)["root"], cpath), \
+            "AGENT_CODEX_HOME before CODEX_HOME"
+        assert same(h.resolve("probe", "codex", HUNSU_CODEX_DIR=None, CODEX_HOME=h.codex)["root"], cpath), "CODEX_HOME last"
+        assert h.resolve("probe", "codex", HUNSU_CODEX_DIR=None, AGENT_CODEX_HOME=empty, CODEX_HOME=h.codex)["root"] is None, \
+            "AGENT_CODEX_HOME before CODEX_HOME"
+        assert h.resolve("probe", "codex", HUNSU_CODEX_DIR=empty, AGENT_CODEX_HOME=h.codex)["root"] is None, "HUNSU_CODEX_DIR first"
+
+
+def test_D5_codex_only_install_resolves_on_codex_and_not_on_claude_code():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        path = h.codex_install("probe", "m", "1.0.0")
+        got = h.resolve("probe", "codex")
+        assert same(got["root"], path) and got["host"] == "codex" and got["via"] == "install", got
+        assert got["marketplace"] == "m" and got["declared"] == "1.0.0" and got["version"] == "1.0.0" and got["note"] is None, got
+        got = h.resolve("probe", "claude-code")
+        assert got["root"] is None and got["host"] == "claude-code", ("never the other host's copy", got)
+        assert "not installed for it here" in (got["reason"] or ""), got
+
+
+def test_D5_claude_only_install_resolves_on_claude_code_and_not_on_codex():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        path = h.claude_install("probe", "m", "1.0.0")
+        got = h.resolve("probe", "claude-code")
+        assert same(got["root"], path) and got["via"] == "install" and got["marketplace"] == "m" and got["version"] == "1.0.0", got
+        got = h.resolve("probe", "codex")
+        assert got["root"] is None and got["host"] == "codex" and "not installed for it here" in (got["reason"] or ""), got
+
+
+def test_D5_both_hosts_installed_each_gets_its_own_copy():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        cl = h.claude_install("probe", "m", "1.0.0")
+        cx = h.codex_install("probe", "m", "1.0.0")
+        assert same(h.resolve("probe", "claude-code")["root"], cl)
+        assert same(h.resolve("probe", "codex")["root"], cx)
+        h.declare("probe", None)   # undeclared too: each host's own installs only
+        assert same(h.resolve("probe", "claude-code")["root"], cl)
+        assert same(h.resolve("probe", "codex")["root"], cx)
+
+
+def test_D5_the_same_name_in_two_marketplaces():
+    with Hosts() as h:
+        for host, install in (("claude-code", h.claude_install), ("codex", h.codex_install)):
+            h.config.clear(); h.installed.clear()
+            a = install("probe", "alpha", "1.0.0")
+            b = install("probe", "beta", "1.0.0")
+            h.declare("probe", "alpha")
+            got = h.resolve("probe", host)
+            assert same(got["root"], a) and got["marketplace"] == "alpha", (host, got)
+            h.declare("probe", "beta")
+            assert same(h.resolve("probe", host)["root"], b), host
+            h.declare("probe", "gamma")   # declared, absent; the others present: no root, never another marketplace's
+            got = h.resolve("probe", host)
+            assert got["root"] is None and "not installed for it here" in (got["reason"] or ""), (host, got)
+            h.declare("probe", None)   # undeclared, two marketplaces: ambiguous, the reason names them
+            got = h.resolve("probe", host)
+            assert got["root"] is None and "alpha" in (got["reason"] or "") and "beta" in got["reason"], (host, got)
+
+
+def test_D5_declared_marketplace_absent_but_another_present_gives_no_root():
+    with Hosts() as h:
+        h.declare("probe", "mine")
+        h.claude_install("probe", "theirs", "1.0.0")
+        h.codex_install("probe", "theirs", "1.0.0")
+        for host in ("claude-code", "codex"):
+            got = h.resolve("probe", host)
+            assert got["root"] is None and "not installed for it here" in (got["reason"] or ""), (host, got)
+
+
+def test_D5_an_undeclared_plugin_from_one_marketplace_is_that_copy():
+    with Hosts() as h:
+        cl = h.claude_install("probe", "solo", "1.2.0")
+        cx = h.codex_install("probe", "solo", "1.2.0")
+        for host, path in (("claude-code", cl), ("codex", cx)):
+            got = h.resolve("probe", host)
+            assert same(got["root"], path) and got["marketplace"] == "solo" and got["declared"] is None, (host, got)
+            assert got["version"] == "1.2.0" and got["note"] is None, (host, got)
+        got = h.resolve("nothing", "claude-code")   # undeclared and not installed: no root, a reason
+        assert got["root"] is None and got["reason"], got
+        got = h.resolve("nothing", "codex")
+        assert got["root"] is None and got["reason"], got
+
+
+def test_D5_an_undeclared_plugin_skips_installs_of_other_projects():
+    with Hosts() as h:
+        h.claude_install("probe", "elsewhere", "1.0.0", scope="project", project="/some/other/project")
+        mine = h.claude_install("probe", "here", "1.0.0", scope="project", project=os.path.realpath(h.target))
+        got = h.resolve("probe")
+        assert same(got["root"], mine) and got["marketplace"] == "here", ("only installs that apply to this target count", got)
+
+
+def test_D5_a_version_differing_from_the_pin_returns_root_and_a_note_with_both():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        cl = h.claude_install("probe", "m", "1.3.0")
+        cx = h.codex_install("probe", "m", "1.4.0")
+        for host, path, found in (("claude-code", cl, "1.3.0"), ("codex", cx, "1.4.0")):
+            got = h.resolve("probe", host)
+            assert same(got["root"], path) and got["declared"] == "1.0.0" and got["version"] == found, (host, got)
+            assert got["note"] and "1.0.0" in got["note"] and found in got["note"], ("the note names both versions", host, got)
+
+
+def test_D5_the_version_is_read_from_any_plugin_manifest():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        for kind in ("flat", ".claude-plugin", ".codex-plugin"):
+            shutil.rmtree(os.path.join(h.codex, "plugins"), ignore_errors=True)
+            path = h.codex_install("probe", "m", "3.%d.0" % len(kind), manifest=kind)
+            got = h.resolve("probe", "codex")
+            assert same(got["root"], path) and got["version"] == "3.%d.0" % len(kind), (kind, got)
+
+
+def test_D5_several_codex_versions_take_the_declared_one_else_none():
+    with Hosts() as h:
+        h.codex_install("probe", "m", "1.0.0")
+        two = h.codex_install("probe", "m", "1.1.0")
+        h.declare("probe", "m", "1.1.0")
+        got = h.resolve("probe", "codex")
+        assert same(got["root"], two) and got["version"] == "1.1.0" and got["note"] is None, got
+        for version in (None, "2.0.0"):   # none declared, or none matching: ambiguous, the reason lists the versions
+            h.declare("probe", "m", version)
+            got = h.resolve("probe", "codex")
+            assert got["root"] is None and "1.0.0" in (got["reason"] or "") and "1.1.0" in got["reason"], (version, got)
+
+
+def test_D5_a_codex_version_directory_without_a_manifest_is_not_a_version():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        one = h.codex_install("probe", "m", "1.0.0")
+        h.codex_install("probe", "m", "0.9.0", manifest=None)   # a leftover directory: no plugin manifest
+        got = h.resolve("probe", "codex")
+        assert same(got["root"], one) and got["version"] == "1.0.0", got
+
+
+def test_D5_a_codex_plugin_not_enabled_is_not_installed():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.codex_install("probe", "m", "1.0.0", enabled=False)
+        got = h.resolve("probe", "codex")
+        assert got["root"] is None and "not installed for it here" in (got["reason"] or ""), got
+        h.declare("probe", None)
+        assert h.resolve("probe", "codex")["root"] is None
+        h.config.clear(); h.write_config()   # in the cache but not in config.toml at all
+        h.declare("probe", "m")
+        assert h.resolve("probe", "codex")["root"] is None
+
+
+def test_D5_a_claude_install_path_that_no_longer_exists_is_no_install():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.claude_install("probe", "m", "1.0.0", exists=False)
+        got = h.resolve("probe")
+        assert got["root"] is None and "not installed for it here" in (got["reason"] or ""), got
+        h.declare("probe", None)
+        assert h.resolve("probe")["root"] is None
+
+
+def test_D5_claude_scope_order_local_then_project_for_this_target_then_user():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        real = os.path.realpath(h.target)
+        user = h.claude_install("probe", "m", "1.0.0", scope="user")
+        h.claude_install("probe", "m", "1.1.0", scope="project", project="/another/project")
+        assert same(h.resolve("probe")["root"], user), "another project's entry does not apply here"
+        proj = h.claude_install("probe", "m", "1.2.0", scope="project", project=real)   # by real path
+        assert same(h.resolve("probe")["root"], proj)
+        h.claude_install("probe", "m", "1.3.0", scope="local", project="/another/project")
+        assert same(h.resolve("probe")["root"], proj), "another project's local entry does not apply here"
+        loc = h.claude_install("probe", "m", "1.4.0", scope="local", project=real)
+        assert same(h.resolve("probe")["root"], loc)
+
+
+def test_D5_a_claude_directory_marketplace_is_used_in_place():
+    with Hosts() as h:
+        market = os.path.join(h.base, "dir-market")
+        payload = plugin_dir(os.path.join(market, "plugin"), "probe")
+        write(os.path.join(market, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": "./plugin"}]})
+        h.claude_directory_market("dev", market)
+        h.claude_install("probe", "dev", "1.0.0")   # the copy the host made: nothing runs it
+        h.declare("probe", "dev")
+        got = h.resolve("probe")
+        assert same(got["root"], payload) and got["via"] == "directory-marketplace", got
+        nested = os.path.join(h.base, "folder-market")
+        inner = plugin_dir(os.path.join(nested, "probe"), "probe", kind=None)
+        h.claude_directory_market("dev", nested)
+        got = h.resolve("probe")
+        assert same(got["root"], inner) and got["via"] == "directory-marketplace", got
+        got = h.resolve("probe", "codex")   # Claude Code's directory marketplace is not Codex's install
+        assert got["root"] is None, got
+
+
+def test_D5_a_stale_link_gives_no_root_and_its_reason_even_with_an_install():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.claude_install("probe", "m", "1.0.0")
+        h.codex_install("probe", "m", "1.0.0")
+        gone = os.path.join(h.base, "gone-checkout")
+        h.local({"links": {"probe": gone}})
+        for host in ("claude-code", "codex"):
+            got = h.resolve("probe", host)
+            assert got["root"] is None, ("a stale link never falls through to an install", host, got)
+            assert got["reason"] and ("gone-checkout" in got["reason"]), ("the reason names the link", host, got)
+        h.local({"links": {"probe": "../gone-relative"}})
+        got = h.resolve("probe")
+        assert got["root"] is None and "gone-relative" in (got["reason"] or ""), got
+
+
+def test_D5_a_link_resolves_relative_to_the_target_through_its_catalog():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.claude_install("probe", "m", "1.0.0")   # a link wins over an install
+        co = os.path.join(h.base, "checkout")
+        payload = plugin_dir(os.path.join(co, "plugin"), "probe")
+        write(os.path.join(co, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": "./plugin"}]})
+        h.local({"links": {"probe": "../checkout"}})
+        for host in ("claude-code", "codex"):
+            got = h.resolve("probe", host)
+            assert same(got["root"], payload) and got["via"] == "link" and got["host"] == host, (host, got)
+        cx = os.path.join(h.base, "codex-checkout")
+        cpayload = plugin_dir(os.path.join(cx, "plugin"), "probe", kind=".codex-plugin")
+        write(os.path.join(cx, ".agents", "plugins", "marketplace.json"), {"plugins": [{"name": "probe", "source": {"source": "local", "path": "./plugin"}}]})
+        h.local({"links": {"probe": "../codex-checkout"}})
+        assert same(h.resolve("probe")["root"], cpayload)
+        folder = os.path.join(h.base, "folder")
+        inner = plugin_dir(os.path.join(folder, "probe"), "probe", kind=None)
+        h.local({"links": {"probe": "../folder"}})
+        assert same(h.resolve("probe")["root"], inner), "<link>/<NAME>"
+        flat = made(os.path.join(h.base, "flat"))
+        h.local({"links": {"probe": "../flat"}})
+        got = h.resolve("probe")
+        assert same(got["root"], flat) and got["via"] == "link", "the link itself"
+
+
+def test_D5_dev_overrides_the_declared_marketplace():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.claude_install("probe", "m", "1.0.0")
+        dev = h.claude_install("probe", "devmarket", "1.0.0")
+        h.local({"dev": {"probe": "devmarket"}})
+        got = h.resolve("probe")
+        assert same(got["root"], dev) and got["marketplace"] == "devmarket", got
+
+
+def test_D5_dwitbuk_plugin_root_is_resolves_root_and_stops_with_its_reason():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        cx = h.codex_install("probe", "m", "1.0.0")
+        with h.os_environ("codex"):
+            want = pluginroot().resolve(pj.dir, "probe")
+            assert same(want["root"], cx), want
+            assert same(dwitbuk.plugin_root(pj.dir, "probe"), want["root"]), "dwitbuk resolves a Codex-only install on codex"
+        with h.os_environ("claude-code"):
+            want = pluginroot().resolve(pj.dir, "probe")
+            assert want["root"] is None and want["reason"], want
+            try:
+                got = dwitbuk.plugin_root(pj.dir, "probe")
+                raise AssertionError("no root: plugin_root must stop, got %r" % (got,))
+            except SystemExit as err:
+                assert str(err) == want["reason"] or want["reason"] in str(err), (str(err), want["reason"])
+
+
+def test_D5_a_reporter_resolved_with_a_version_note_carries_a_plugin_version_objection():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        path = h.claude_install("probe", "m", "1.5.0")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        lock["reporters"]["missing-report"] = [sys.executable, "{plugin:absent}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        with h.os_environ("claude-code"):
+            note = pluginroot().resolve(pj.dir, "probe")["note"]
+            assert note and "1.0.0" in note and "1.5.0" in note, note
+            code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        assert code == 0, out
+        r = pj.latest()
+        pv = [f for f in r["findings"] if f["kind"] == "plugin-version"]
+        assert len(pv) == 1, r["findings"]
+        assert pv[0]["where"] == "probe-report" and pv[0]["text"] == note and dwitbuk.layer(pv[0]) == "objection", pv
+        failed = [f for f in r["findings"] if f["kind"] == "reporter-failed"]
+        assert len(failed) == 1 and "missing-report" in failed[0]["where"], failed
+        assert not [f for f in r["findings"] if f["kind"] == "plugin-version" and f["where"] == "missing-report"], r["findings"]
+
+
+def test_D5_a_reporter_resolved_without_a_note_carries_no_plugin_version_finding():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.5.0")
+        path = h.claude_install("probe", "m", "1.5.0")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        with h.os_environ("claude-code"):
+            assert pluginroot().resolve(pj.dir, "probe")["note"] is None
+            code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        assert code == 0, out
+        k = kinds(pj.latest())
+        assert "plugin-version" not in k and "reporter-failed" not in k, k
+
+
+# --- 11-06 E1: a packet bound to no review never appends to an ordinary review written after it.
+
+def test_E1_a_packet_bound_to_no_review_gets_a_new_eyes_review_and_leaves_the_ordinary_review_as_it_was():
+    import time
+    with Project() as pj:
+        d4_reporter(pj, D4_CHARGES + [D4_OBSERVATION])
+        assert dwitbuk.reviews(pj.dir) == [], "no review yet"
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        packet, _ = eyes_answer(pj, folder, "e1-unbound")
+        assert packet["source"].get("review") is None, packet["source"]   # packed when no review existed
+        time.sleep(1.1)
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        ordinary = pj.latest()
+        assert "eyes-of" not in ordinary, ordinary
+        before = review_bytes(pj, ordinary["id"])
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, out
+        assert review_bytes(pj, ordinary["id"]) == before, "the ordinary review written after the packet is byte-for-byte as it was"
+        new = pj.latest()
+        assert new["id"] != ordinary["id"] and len(dwitbuk.reviews(pj.dir)) == 2, [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert "eyes-of" in new and new["eyes-of"] is None, new
+        assert_eyes_review(pj, new, None, ordinary, ["e1-unbound"])
+        assert "added to %s" % new["id"] in out, out
+        assert "no review" in out.replace("added to %s" % new["id"], ""), ("the printed line says the packet was bound to no review", out)
+
+
+def test_E1_a_second_packet_bound_to_no_review_appends_to_the_eyes_review_with_eyes_of_null():
+    import time
+    with Project() as pj:
+        d4_reporter(pj, D4_CHARGES + [D4_OBSERVATION])
+        first, second = [os.path.join(pj.dir, ".dwitbuk", n) for n in ("first", "second")]
+        p1, _ = eyes_answer(pj, first, "e1-first")
+        p2, _ = eyes_answer(pj, second, "e1-second")
+        assert p1["source"].get("review") is None and p2["source"].get("review") is None, (p1["source"], p2["source"])
+        time.sleep(1.1)
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        ordinary = pj.latest()
+        before = review_bytes(pj, ordinary["id"])
+        assert run("eyes", "consume", "--dir", first, "--target", pj.dir)[0] == 0
+        made = pj.latest()
+        assert made["id"] != ordinary["id"] and "eyes-of" in made and made["eyes-of"] is None, made
+        code, out = run("eyes", "consume", "--dir", second, "--target", pj.dir)
+        assert code == 0 and "added to %s" % made["id"] in out, out
+        ids = [r["id"] for r in dwitbuk.reviews(pj.dir)]
+        assert ids == [ordinary["id"], made["id"]], ids   # no third review
+        grown = pj.latest()
+        assert grown["findings"][:len(made["findings"])] == made["findings"], "appended, as consume appends"
+        added = grown["findings"][len(made["findings"]):]
+        assert [f["kind"] for f in added] == ["anomaly"] and "e1-second" in added[0]["text"], added
+        assert grown["eyes-of"] is None and review_bytes(pj, ordinary["id"]) == before
+
+
+def test_E1_a_packet_bound_to_a_review_never_appends_to_an_eyes_review_bound_to_no_review():
+    import time
+    with Project() as pj:
+        d4_reporter(pj, D4_CHARGES + [D4_OBSERVATION])
+        unbound = os.path.join(pj.dir, ".dwitbuk", "unbound")
+        eyes_answer(pj, unbound, "e1-unbound")
+        time.sleep(1.1)
+        assert run("review", "--since", pj.base, "--target", pj.dir)[0] == 0
+        ordinary = pj.latest()
+        bound = os.path.join(pj.dir, ".dwitbuk", "bound")
+        packet, _ = eyes_answer(pj, bound, "e1-bound")
+        assert packet["source"].get("review") == ordinary["id"], packet["source"]
+        assert run("eyes", "consume", "--dir", unbound, "--target", pj.dir)[0] == 0
+        eyes_null = pj.latest()
+        assert eyes_null["id"] != ordinary["id"] and eyes_null.get("eyes-of", "absent") is None, eyes_null
+        null_bytes = review_bytes(pj, eyes_null["id"])
+        code, out = run("eyes", "consume", "--dir", bound, "--target", pj.dir)
+        assert code == 0, out
+        assert review_bytes(pj, eyes_null["id"]) == null_bytes, "an eyes review of no review is not the bound review's eyes review"
+        new = pj.latest()
+        assert new["id"] not in (ordinary["id"], eyes_null["id"]) and new.get("eyes-of") == ordinary["id"], new
+
+
+# --- 11-06 E2: pluginroot.resolve never raises on what it reads; collect never dies on a reporter it cannot resolve.
+
+def e2_resolve(h, name, host="claude-code", **extra):
+    """h.resolve, with any exception turned into a failed assertion: resolve must never raise on what it reads."""
+    try:
+        return h.resolve(name, host, **extra)
+    except AssertionError:
+        raise
+    except Exception as err:
+        raise AssertionError("pluginroot.resolve raised %s: %s" % (type(err).__name__, err))
+
+
+def e2_review(pj):
+    try:
+        return run("review", "--since", pj.base, "--target", pj.dir)
+    except Exception as err:
+        raise AssertionError("dwitbuk review stopped with %s: %s" % (type(err).__name__, err))
+
+
+def test_E2_a_linked_root_whose_manifest_is_not_an_object_is_a_root_with_no_version():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        for i, bad in enumerate(("[]", '"x"', "3", "null", "{not json")):
+            co = made(os.path.join(h.base, "linked-%d" % i))
+            write(os.path.join(co, ".claude-plugin", "plugin.json"), bad)
+            h.local({"links": {"probe": co}})
+            for host in ("claude-code", "codex"):
+                got = e2_resolve(h, "probe", host)
+                assert got["root"] is not None and same(got["root"], co), (bad, host, got)
+                assert got["version"] is None, ("a manifest that is not an object gives no version", bad, host, got)
+
+
+def test_E2_an_installed_copy_whose_manifest_is_not_an_object_does_not_raise():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        cl = h.claude_install("probe", "m", "1.0.0")
+        cx = h.codex_install("probe", "m", "1.0.0")
+        write(os.path.join(cl, ".claude-plugin", "plugin.json"), "[]")
+        write(os.path.join(cx, ".codex-plugin", "plugin.json"), '"x"')
+        got = e2_resolve(h, "probe", "claude-code")
+        assert got["version"] is None and (got["root"] is not None or "plugin.json" in (got["reason"] or "")), got
+        got = e2_resolve(h, "probe", "codex")
+        assert got["version"] is None and (got["root"] is not None or "plugin.json" in (got["reason"] or "")), got
+
+
+def test_E2_a_malformed_or_non_object_installed_plugins_json_gives_no_root_and_the_reason_names_it():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.claude_install("probe", "m", "1.0.0")
+        reg = os.path.join(h.claude, "plugins", "installed_plugins.json")
+        for bad in ("{not json", "[]", '[{"probe@m": []}]', '"x"', ""):
+            write(reg, bad)
+            got = e2_resolve(h, "probe")
+            assert got["root"] is None and "installed_plugins.json" in (got["reason"] or ""), (bad, got)
+        os.unlink(reg)
+        made(reg)   # unreadable: a directory where the file should be
+        got = e2_resolve(h, "probe")
+        assert got["root"] is None and "installed_plugins.json" in (got["reason"] or ""), got
+        h.declare("probe", None)   # undeclared: the same
+        got = e2_resolve(h, "probe")
+        assert got["root"] is None and "installed_plugins.json" in (got["reason"] or ""), got
+
+
+def test_E2_a_malformed_config_toml_on_codex_gives_no_root_and_the_reason_names_it():
+    with Hosts() as h:
+        h.declare("probe", "m")
+        h.codex_install("probe", "m", "1.0.0")
+        cfg = os.path.join(h.codex, "config.toml")
+        for bad in ('[plugins."probe@m"\nenabled = \n', "model = \n", "= = =\n"):
+            write(cfg, bad)
+            got = e2_resolve(h, "probe", "codex")
+            assert got["root"] is None and "config.toml" in (got["reason"] or ""), (bad, got)
+        os.unlink(cfg)
+        made(cfg)   # unreadable
+        got = e2_resolve(h, "probe", "codex")
+        assert got["root"] is None and "config.toml" in (got["reason"] or ""), got
+
+
+def test_E2_a_hunsu_json_or_hunsu_local_json_that_is_not_an_object_does_not_raise():
+    with Hosts() as h:
+        cl = h.claude_install("probe", "solo", "1.0.0")
+        for fname in ("hunsu.json", "hunsu.local.json"):
+            for bad in ("[]", '["probe"]', '"x"', "{not json"):
+                for other in ("hunsu.json", "hunsu.local.json"):
+                    p = os.path.join(h.target, other)
+                    if os.path.lexists(p):
+                        os.unlink(p)
+                write(os.path.join(h.target, fname), bad)
+                for host in ("claude-code", "codex"):
+                    got = e2_resolve(h, "probe", host)
+                    if got["root"] is None:
+                        assert fname in (got["reason"] or "") or host == "codex", (fname, bad, host, got)
+                assert same(e2_resolve(h, "probe")["root"], cl) or fname in (e2_resolve(h, "probe")["reason"] or ""), (fname, bad)
+        # a hunsu.json whose plugins or entry are not objects
+        for doc in ({"plugins": []}, {"plugins": "x"}, {"plugins": {"probe": []}}, {"plugins": {"probe": "m"}}):
+            os.unlink(os.path.join(h.target, "hunsu.local.json")) if os.path.exists(os.path.join(h.target, "hunsu.local.json")) else None
+            write(os.path.join(h.target, "hunsu.json"), doc)
+            e2_resolve(h, "probe")
+            e2_resolve(h, "probe", "codex")
+        write(os.path.join(h.target, "hunsu.json"), {"plugins": {"probe": {"marketplace": "solo"}}})
+        for doc in ({"links": []}, {"links": "x"}, {"links": {"probe": 3}}, {"dev": []}, {"dev": {"probe": 3}}):
+            h.local(doc)
+            e2_resolve(h, "probe")
+            e2_resolve(h, "probe", "codex")
+
+
+def test_E2_a_malformed_known_marketplaces_json_or_catalog_does_not_raise():
+    with Hosts() as h:
+        h.declare("probe", "dev")
+        h.claude_install("probe", "dev", "1.0.0")
+        known = os.path.join(h.claude, "plugins", "known_marketplaces.json")
+        for bad in ("{not json", "[]", '{"dev": []}', '{"dev": {"source": "x"}}'):
+            write(known, bad)
+            got = e2_resolve(h, "probe")
+            assert got["root"] is not None or "known_marketplaces.json" in (got["reason"] or ""), (bad, got)
+        market = os.path.join(h.base, "dir-market")
+        made(market)
+        h.claude_directory_market("dev", market)
+        catalog = os.path.join(market, ".claude-plugin", "marketplace.json")
+        for bad in ("{not json", "[]", '{"plugins": {}}', '{"plugins": ["probe"]}', '{"plugins": [{"name": "probe", "source": 3}]}'):
+            write(catalog, bad)
+            got = e2_resolve(h, "probe")
+            assert got["root"] is not None or "marketplace.json" in (got["reason"] or ""), (bad, got)
+        co = made(os.path.join(h.base, "checkout"))
+        h.local({"links": {"probe": co}})
+        for bad in ("{not json", "[]", '{"plugins": [{"name": "probe", "source": []}]}'):
+            write(os.path.join(co, ".claude-plugin", "marketplace.json"), bad)
+            write(os.path.join(co, ".agents", "plugins", "marketplace.json"), bad)
+            for host in ("claude-code", "codex"):
+                got = e2_resolve(h, "probe", host)
+                assert got["root"] is not None or "marketplace.json" in (got["reason"] or ""), (bad, host, got)
+
+
+def test_E2_a_review_whose_reporter_hits_a_non_object_manifest_finishes():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        path = h.claude_install("probe", "m", "1.0.0")
+        write(os.path.join(path, ".claude-plugin", "plugin.json"), "[]")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        with h.os_environ("claude-code"):
+            code, out = e2_review(pj)
+        assert code == 0 and "Traceback" not in out, out
+        r = pj.latest()
+        assert r["head"], r
+        failed = [f for f in r["findings"] if f["kind"] == "reporter-failed" and "probe-report" in f["where"]]
+        assert "reporter-failed" not in kinds(r) or failed, r["findings"]
+
+
+def test_E2_a_review_whose_registry_is_malformed_records_reporter_failed_for_its_reporter():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        path = h.claude_install("probe", "m", "1.0.0")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        for bad in ("{not json", "[]"):
+            write(os.path.join(h.claude, "plugins", "installed_plugins.json"), bad)
+            with h.os_environ("claude-code"):
+                code, out = e2_review(pj)
+            assert code == 0 and "Traceback" not in out, (bad, out)
+            failed = [f for f in pj.latest()["findings"] if f["kind"] == "reporter-failed" and "probe-report" in f["where"]]
+            assert len(failed) == 1, (bad, pj.latest()["findings"])
+            import time; time.sleep(1.1)
+
+
+def test_E2_a_review_whose_codex_config_is_malformed_records_reporter_failed_for_its_reporter():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        path = h.codex_install("probe", "m", "1.0.0")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        write(os.path.join(h.codex, "config.toml"), '[plugins."probe@m"\nenabled = \n')
+        with h.os_environ("codex"):
+            code, out = e2_review(pj)
+        assert code == 0 and "Traceback" not in out, out
+        failed = [f for f in pj.latest()["findings"] if f["kind"] == "reporter-failed" and "probe-report" in f["where"]]
+        assert len(failed) == 1, pj.latest()["findings"]
+
+
+# --- 11-06 E3: the version note says what hunsu.json declares and what the copy found is.
+
+def e3_assert_note(got, name, declared, found, who):
+    note = got["note"]
+    assert note, got
+    assert "hunsu.json declares" in note, ("the declaration is hunsu.json's, not the plugin's", note)
+    assert name in note and declared in note and found in note, note
+    root = got["root"]
+    assert root and (root in note or os.path.realpath(root) in note), ("the note names the root", root, note)
+    rest = note.replace(os.path.realpath(root), "").replace(root, "")
+    assert who in rest, ("the note names the host or the link, beside the root", who, note)
+    assert "declares version" not in note, ("the plugin declares nothing", note)
+
+
+def test_E3_the_version_note_on_claude_code_says_hunsu_json_declares_and_the_claude_code_copy_is():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        h.claude_install("probe", "m", "1.3.0")
+        got = h.resolve("probe", "claude-code")
+        e3_assert_note(got, "probe", "1.0.0", "1.3.0", "claude-code")
+
+
+def test_E3_the_version_note_on_codex_says_hunsu_json_declares_and_the_codex_copy_is():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        h.codex_install("probe", "m", "1.4.0")
+        got = h.resolve("probe", "codex")
+        e3_assert_note(got, "probe", "1.0.0", "1.4.0", "codex")
+
+
+def test_E3_the_version_note_for_a_link_says_hunsu_json_declares_and_the_linked_copy_is():
+    with Hosts() as h:
+        h.declare("probe", "m", "1.0.0")
+        co = os.path.join(h.base, "checkout")
+        plugin_dir(os.path.join(co, "plugin"), "probe", version="1.7.0")
+        write(os.path.join(co, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": "./plugin"}]})
+        h.local({"links": {"probe": "../checkout"}})
+        for host in ("claude-code", "codex"):
+            got = h.resolve("probe", host)
+            assert got["via"] == "link" and got["version"] == "1.7.0", (host, got)
+            e3_assert_note(got, "probe", "1.0.0", "1.7.0", "linked")
+
+
+def test_E3_the_review_finding_carries_the_new_note():
+    with Project() as pj, Hosts() as h:
+        h.target = pj.dir
+        h.declare("probe", "m", "1.0.0")
+        path = h.claude_install("probe", "m", "1.5.0")
+        doc = {"artifact-type": "dwitbuk/findings@1", "source": "probe", "findings": []}
+        write(os.path.join(path, "report.py"), "print(%r)\n" % json.dumps(doc))
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+        lock.setdefault("reporters", {})["probe-report"] = [sys.executable, "{plugin:probe}/report.py"]
+        write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        with h.os_environ("claude-code"):
+            code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        assert code == 0, out
+        pv = [f for f in pj.latest()["findings"] if f["kind"] == "plugin-version"]
+        assert len(pv) == 1 and "hunsu.json declares" in pv[0]["text"] and "claude-code" in pv[0]["text"], pv
 
 
 if __name__ == "__main__":

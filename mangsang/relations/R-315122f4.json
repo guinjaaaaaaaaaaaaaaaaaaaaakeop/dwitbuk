@@ -1,0 +1,15 @@
+{
+  "id": "R-315122f4",
+  "src": "plugin/dwitbuk.py:answered",
+  "predicate": "realizes",
+  "dst": "concept:one-answer-per-charge",
+  "evidence": "out[charge(f)] = f[\"disposition\"]",
+  "seen": {
+    "plugin/dwitbuk.py:answered": "9776adccc510",
+    "concept:one-answer-per-charge": "5e90527716e1"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

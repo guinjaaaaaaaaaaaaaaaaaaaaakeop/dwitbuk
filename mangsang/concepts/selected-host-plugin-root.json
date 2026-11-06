@@ -1,0 +1,8 @@
+{
+  "name": "selected-host-plugin-root",
+  "means": "A {plugin:NAME} root comes from one vendored resolver (plugin/pluginroot.py) for the host the process runs on — AGENT_HOST=codex is Codex, any other value Claude Code: a hunsu.local.json link first (a missing link directory gives no root), else the marketplace hunsu.json declares (hunsu.local.json dev overriding it) installed on that host for this project — Claude Code's directory marketplace in place, else its local, project or user entry with an existing installPath; Codex's enabled entry with a cached copy, the declared version among several — never another host's copy or another marketplace's plugin of that name; undeclared, only one unambiguous install; a copy whose version differs from the declared one keeps its root with a note a review records as a plugin-version objection, and anything else, an unreadable file included, gives no root and a reason.",
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

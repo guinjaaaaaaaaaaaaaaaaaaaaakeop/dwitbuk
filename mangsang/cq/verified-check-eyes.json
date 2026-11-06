@@ -1,0 +1,28 @@
+{
+  "id": "verified-check-eyes",
+  "text": "Is cmd_eyes (the eyes command, whose consume refuses an answer that is not bound to its request, target and unchanged source) proven by a test that runs it? check_eyes, which it calls, has no direct test; its coverage is held by realizes.",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "verifies",
+    "anchors": "plugin/dwitbuk.py:cmd_eyes",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's 2026-11-06 instruction (umbrella reinforce-1106, relayed by the coordinator): revise the coverage invariant to a symbol with a direct verifies; the late-eyes test reached check_eyes only through eyes consume (R-b063ffa9 retired) and verifies cmd_eyes directly; no person read or approved this invariant"
+  },
+  "history": [
+    {
+      "text": "Is check_eyes (the request and source binding) proven by a test?",
+      "verify": {
+        "kind": "coverage",
+        "predicate": "verifies",
+        "anchors": "plugin/dwitbuk.py:check_eyes",
+        "as": "dst"
+      },
+      "declared": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): a core symbol of a covered contract; no person read or approved this invariant"
+      }
+    }
+  ],
+  "written_by": "mangsang 2.0.1"
+}

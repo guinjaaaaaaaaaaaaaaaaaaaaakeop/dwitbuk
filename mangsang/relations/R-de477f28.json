@@ -1,0 +1,15 @@
+{
+  "id": "R-de477f28",
+  "src": "plugin/README.md#`/dwitbuk:eyes`",
+  "predicate": "documents",
+  "dst": "plugin/dwitbuk.py:grounded",
+  "evidence": "other findings require both a record and a tree quote.",
+  "seen": {
+    "plugin/README.md#`/dwitbuk:eyes`": "6bae0150c3cb",
+    "plugin/dwitbuk.py:grounded": "bfb70100ef39"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "verified-layer",
+  "text": "Is cmd_review (the review command, whose collect gives each finding its layer through layer) proven by a test that runs it? layer itself has no test that exercises its own rules; cmd_review's fingerprint reads layer, so an edit to layer makes that verifies stale.",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "verifies",
+    "anchors": "plugin/dwitbuk.py:cmd_review",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's 2026-11-06 instruction (umbrella reinforce-1106): revise the coverage invariant to a symbol with a direct verifies; the eyes review round 3 found the only direct call of layer unable to fail on layer's own rule (R-899ccedc retired); no person read or approved this invariant"
+  },
+  "history": [
+    {
+      "text": "Is layer (the fail-closed classification) proven by a test?",
+      "verify": {
+        "kind": "coverage",
+        "predicate": "verifies",
+        "anchors": "plugin/dwitbuk.py:layer",
+        "as": "dst"
+      },
+      "declared": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): a core symbol of a covered contract; no person read or approved this invariant"
+      }
+    }
+  ],
+  "written_by": "mangsang 2.0.1"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "R-78ff3dce",
+  "src": "test_dwitbuk.py:test_layers_are_fail_closed_and_a_reporter_may_mark_its_own_kind_informational",
+  "predicate": "verifies",
+  "dst": "plugin/dwitbuk.py:cmd_review",
+  "evidence": "assert by_kind[\"totally-new-kind\"][\"layer\"] == \"objection\", \"unknown kinds fail closed\"",
+  "seen": {
+    "test_dwitbuk.py:test_layers_are_fail_closed_and_a_reporter_may_mark_its_own_kind_informational": "56b4e0f20825",
+    "plugin/dwitbuk.py:cmd_review": "30422e4bfa2a"
+  },
+  "confirmed": {
+    "agent": "Claude (claude-opus-5-5)"
+  },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's 2026-11-06 instruction (umbrella reinforce-1106) to keep only direct verifies, on the eyes review round 3: the test runs review (cmd_review's bare dispatch) and asserts on the layers the review writes; cmd_review's fingerprint reads layer; no person read or approved this relation"
+      },
+      "seen": {
+        "test_dwitbuk.py:test_layers_are_fail_closed_and_a_reporter_may_mark_its_own_kind_informational": "56b4e0f20825",
+        "plugin/dwitbuk.py:cmd_review": "8876b07f98de"
+      },
+      "evidence": "assert by_kind[\"totally-new-kind\"][\"layer\"] == \"objection\", \"unknown kinds fail closed\""
+    }
+  ],
+  "written_by": "mangsang 2.2.1"
+}

@@ -27,10 +27,12 @@ says: read `hunsu.json` with this machine's `hunsu.local.json`, then use the pin
 
 | path | installed | what |
 |---|---|---|
-| [plugin/](plugin/) | yes, all of it | the payload: `dwitbuk.py` (engine and CLI), `eyes_worker.py` (the eyes' host session), `hostcall.py` (the family's vendored host call), `hooks/`, `commands/`, `skills/review/SKILL.md`, the manifests `plugin.json`, `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, `README.md` and `LICENSE` |
+| [plugin/](plugin/) | yes, all of it | the payload: `dwitbuk.py` (engine and CLI), `eyes_worker.py` (the eyes' host session), `hostcall.py` (the family's vendored host call), `pluginroot.py` (the family's shared plugin-root resolver, vendored byte-identical), `hooks/`, `commands/`, `skills/review/SKILL.md`, the manifests `plugin.json`, `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`, `README.md` and `LICENSE` |
 | `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json` | no | the Claude and Codex catalogs; hosts read them to find `./plugin` |
 | [dwitbuk.py](dwitbuk.py), [eyes_worker.py](eyes_worker.py) | no | entry points for a checkout, no engine code (below) |
 | [test_dwitbuk.py](test_dwitbuk.py) | no | the self-check |
+| `mangsang/`, [MODEL.md](MODEL.md) | no | the mangsang model of dwitbuk's core contracts (records written by the installed mangsang engine) and what it does and does not claim |
+| [check_mangsang.py](check_mangsang.py), [test_check_mangsang.py](test_check_mangsang.py) | no | the model's guard (`--engine` names the installed mangsang) and its tests on disposable copies |
 | [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md) | no | maintainer guidance |
 | `hunsu.json`, `hunsu.lock.json`, `hunsu-judgments.json` | no | this repository's own agent environment: it is developed with the released family, not with this checkout |
 | `.chongdae/`, `reviews/`, `.dwitbuk/` | no | this repository's own run and review records and machine-local state |
@@ -49,8 +51,8 @@ resolvers released before this layout (chongdae 2.0.0's `{plugin:NAME}`) take a 
 the plugin's root. Each runs `plugin/<the same name>` as `__main__`, with `plugin/` first on `sys.path` and the root
 taken off it. Imported with a checkout root on `sys.path`, each puts the payload's module in its place in `sys.modules`,
 so every importer shares one engine instance. They are not installed, and code belongs in `plugin/`, never in them.
-`hostcall.py` is a module, not a command, and lives only in `plugin/`. A check that compares the family's vendored
-copies reads it there.
+`hostcall.py` and `pluginroot.py` are modules, not commands, and live only in `plugin/`. A check that compares the
+family's vendored copies reads them there.
 
 To try the working source in a project, add this checkout as a local marketplace (`claude plugin marketplace add
 <checkout>`) and use `hunsu dev dwitbuk --market <its name>`, or link the plugin to this checkout in `hunsu.local.json`.
@@ -86,6 +88,14 @@ shipped, and a link or in-place directory marketplace now resolves through its c
 removed or renamed: commands, hooks, the skill, roles, reads, artifacts and the Python floor are unchanged, and the root
 entry points keep checkout paths working.
 
+2.2.0 is a minor release: new fields and one new module, nothing removed. The verify packet keeps every path the task's
+record lists as touched but `.chongdae/` and `.claude/`, and names in `not_in_diff` what its diff does not hold whole; an
+accept names the touched files it left unread. A late-eyes packet's `source` binds the tree, what it packed from the runs
+(`records` is now that digest; `true` from 2.1.0 keeps the old rule) and the latest review (`review`); consume never
+rewrites a closed run's close review and writes a new review (`eyes-of`) instead. `plugin/pluginroot.py` resolves
+`{plugin:NAME}` for the host the process runs on, and a version that differs from the pin becomes a `plugin-version`
+objection. Commands, hooks, the skill, roles, reads and the Python floor are unchanged.
+
 ### Release and adoption
 
 Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged. Changes only to
@@ -115,3 +125,7 @@ once, with recorded provider responses where a model would have answered. No mod
 - A copy of `plugin/` alone, outside the checkout with no import path into it, runs the actual CLI through a small
   review, dispose and late-eyes workflow, with a fake `claude` on `PATH` as the host. It also runs the hooks.
 - The root entry points delegate to the payload with one module instance.
+
+The model's guard is `python3 check_mangsang.py --engine <the installed mangsang.py>`. It fails on an absent or shrunken
+model, and runs the engine's `check`, `cq` and `impact`. `python3 test_check_mangsang.py --engine <the same>` proves it on
+disposable copies. See [MODEL.md](MODEL.md).

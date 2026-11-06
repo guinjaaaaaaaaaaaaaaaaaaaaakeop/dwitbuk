@@ -1,0 +1,15 @@
+{
+  "id": "R-4648c97e",
+  "src": "test_dwitbuk.py:test_no_check_by_nature_stays_but_never_lifts_a_constituents_explicit_objection",
+  "predicate": "realizes",
+  "dst": "concept:fail-closed-layer",
+  "evidence": "assert got == {\"run-1\": \"observation\", \"run-2\": \"objection\", \"run-3\": \"observation\", \"run-4\": \"objection\"}, got",
+  "seen": {
+    "test_dwitbuk.py:test_no_check_by_nature_stays_but_never_lifts_a_constituents_explicit_objection": "da41a5323fe0",
+    "concept:fail-closed-layer": "a2062b734c79"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): the tests asserting the declared-setting and by-nature observation rules of the revised meaning; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

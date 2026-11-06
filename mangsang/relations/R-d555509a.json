@@ -1,0 +1,15 @@
+{
+  "id": "R-d555509a",
+  "src": "test_dwitbuk.py:test_D2_unread_touched_names_the_not_in_diff_files_the_eyes_did_not_open",
+  "predicate": "verifies",
+  "dst": "plugin/eyes_worker.py:unread_touched",
+  "evidence": "assert ut([\"Read %s\" % small]) == [\"big.py\"], \"small.py read, big.py not\"",
+  "seen": {
+    "test_dwitbuk.py:test_D2_unread_touched_names_the_not_in_diff_files_the_eyes_did_not_open": "9602404d33db",
+    "plugin/eyes_worker.py:unread_touched": "20b25c25fa81"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

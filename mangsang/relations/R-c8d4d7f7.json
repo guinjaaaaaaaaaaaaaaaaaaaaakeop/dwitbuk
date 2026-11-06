@@ -1,0 +1,15 @@
+{
+  "id": "R-c8d4d7f7",
+  "src": "test_dwitbuk.py:test_stop_hook_validates_before_displaying_even_without_a_review",
+  "predicate": "verifies",
+  "dst": "plugin/hooks/stop_eyes.py:main",
+  "evidence": "code = stop_eyes.main()",
+  "seen": {
+    "test_dwitbuk.py:test_stop_hook_validates_before_displaying_even_without_a_review": "a856744825eb",
+    "plugin/hooks/stop_eyes.py:main": "176f4d43d586"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's model-application Stage 1 task (2026-11-05, relayed by the root coordinator): each relation read against the quoted README section, code symbol or test; no person read or approved these relations"
+  },
+  "written_by": "mangsang 2.0.1"
+}

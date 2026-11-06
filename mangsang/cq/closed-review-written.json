@@ -1,0 +1,14 @@
+{
+  "id": "closed-review-written",
+  "text": "Where do late-eyes findings go when the review their packet was bound to was recorded at a run's close or is no longer the latest, and what becomes of that review?",
+  "verify": {
+    "kind": "answered-by",
+    "concepts": [
+      "closed-review-kept"
+    ]
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}
