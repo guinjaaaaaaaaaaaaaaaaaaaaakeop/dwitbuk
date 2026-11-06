@@ -18,10 +18,15 @@ back to os.path.expanduser only when HOME is absent.
 
 A hunsu.local.json links[name] wins, relative to target. A missing directory
 fails without fallback. Otherwise use in_place's catalog source, then
-<link>/<name> if a directory, then the link itself. Catalog sources must be
-local relative directories contained in their marketplace, with readable
-plugin manifests naming no other plugin. in_place also checks a nested
-<directory>/<name> catalog; Claude's catalog precedes Codex's local catalog.
+<link>/<name> if a directory, then the link itself. in_place checks the folder's
+own catalog, then its child's; Claude's catalog precedes Codex's local catalog.
+A catalog is read only when its realpath lies inside the folder it is read for.
+A child <directory>/<name> exists only for a one-component name, and its catalog
+is read only when the child's realpath lies inside the folder's. An escaping
+child (relative or absolute symlink, parent or chain) is taken as named, its
+catalog unread. Catalog sources must be local relative paths resolving by
+realpath to directories inside the catalog's folder, with readable plugin
+manifests naming no other plugin.
 
 Otherwise hunsu.json plugins[name] supplies marketplace and version;
 hunsu.local.json dev[name] overrides marketplace. Only the selected host and
@@ -30,6 +35,8 @@ in place (catalog, then <path>/<name>), else installed_plugins.json NAME@MARKET:
 local for this target, project for this target (real paths), then user scope,
 with an existing installPath. Codex requires config.toml plugins.NAME@MARKET
 enabled = true and manifest-bearing directories in plugins/cache/MARKET/NAME.
+MARKET and NAME must each be one path component. A Claude installPath and a
+Codex cache copy are taken as the host records them; no catalog inside is read.
 One copy wins; several require a unique manifest version matching the pin,
 otherwise fail and list the copies. No declared marketplace: enumerate only
 applicable installs with existing copies; exactly one marketplace resolves,
@@ -74,12 +81,25 @@ def catalog_local(directory, src):
     if os.path.isabs(src) or os.path.splitdrive(src)[0] or src.startswith(("/", "\\")):
         return None
     root = os.path.normpath(os.path.join(directory, src))
-    base, real = os.path.realpath(directory), os.path.realpath(root)
+    return root if inside(root, directory) and os.path.isdir(root) else None
+
+
+def inside(path, folder):
+    """Whether `path` resolves to `folder` itself or a path under it."""
+    base = os.path.realpath(folder)
     try:
-        inside = os.path.commonpath([base, real]) == base
+        return os.path.commonpath([base, os.path.realpath(path)]) == base
     except ValueError:   # different drives
-        inside = False
-    return root if inside and os.path.isdir(real) else None
+        return False
+
+
+def child(directory, name):
+    """The child as named, only for a single path component."""
+    if (not isinstance(name, str) or not name or name in (".", "..") or
+            any(sep in name for sep in ("/", "\\", os.sep, os.altsep) if sep) or
+            os.path.splitdrive(name)[0]):
+        return None
+    return os.path.join(directory, name)
 
 
 def manifest_names(root, errors=None):
@@ -111,10 +131,13 @@ def manifest_names(root, errors=None):
 def catalog_source(directory, name, errors=None):
     """The source a marketplace directory's catalog names for plugin `name` (Claude's `.claude-plugin/marketplace.json`, then
     `.agents/plugins/marketplace.json`'s local path), when it is a directory inside the catalog's (catalog_local) whose plugin
-    manifests name no other plugin; else None. A source checkout keeps its installed payload in a subdirectory (`./plugin`),
+    manifests name no other plugin; else None. The catalog's realpath must stay inside `directory` before it is read.
+    A source checkout keeps its installed payload in a subdirectory (`./plugin`),
     and only its catalog says which. A URL, an absolute path or a path out of the directory names nothing here (a fresh
     review, 2026-11-05: `../outside` resolved to a sibling and `https://…` to a local `https:/…` directory)."""
     for catalog in (os.path.join(directory, ".claude-plugin", "marketplace.json"), os.path.join(directory, ".agents", "plugins", "marketplace.json")):
+        if not inside(catalog, directory):
+            continue
         try:
             entries = load(catalog, errors).get("plugins") or []
             if not isinstance(entries, list):
@@ -134,10 +157,12 @@ def catalog_source(directory, name, errors=None):
 
 def in_place(directory, name, errors=None):
     """A plugin's root inside a directory used in place (a hunsu.local.json link, a directory marketplace): what the
-    directory's catalog names, else what `<directory>/<name>`'s own catalog names (a folder of checkouts); None when no
+    directory's catalog names, else what its one-component child's catalog names when the child stays inside by realpath;
+    None when no
     catalog names one — the caller keeps its earlier rule."""
-    sub = os.path.join(directory, name)
-    return catalog_source(directory, name, errors) or (catalog_source(sub, name, errors) if os.path.isdir(sub) else None)
+    sub = child(directory, name)
+    return catalog_source(directory, name, errors) or (catalog_source(sub, name, errors)
+            if sub is not None and inside(sub, directory) and os.path.isdir(sub) else None)
 
 
 def manifest_version(root, errors=None):
@@ -182,8 +207,8 @@ def _resolve(target, name, environ, errors):
         if not os.path.isdir(directory):
             result["reason"] = "plugin %s link directory is missing: %s" % (name, directory)
             return result
-        sub = os.path.join(directory, name)
-        return found(in_place(directory, name, errors) or (sub if os.path.isdir(sub) else directory), "link")
+        sub = child(directory, name)
+        return found(in_place(directory, name, errors) or (sub if sub is not None and os.path.isdir(sub) else directory), "link")
 
     user_home = env.get("HOME") if "HOME" in env else os.path.expanduser("~")
     if host == "codex":
@@ -192,9 +217,12 @@ def _resolve(target, name, environ, errors):
         installs = object_value(load(config, errors, toml=True).get("plugins"))
 
         def copies(marketplace):
+            market_dir = child(os.path.join(home, "plugins", "cache"), marketplace)
+            base = child(market_dir, name) if market_dir is not None else None
+            if base is None:
+                return []
             if object_value(installs.get(name + "@" + marketplace)).get("enabled") is not True:
                 return []
-            base = os.path.join(home, "plugins", "cache", marketplace, name)
             return [os.path.join(base, v) for v in sorted(os.listdir(base))
                     if os.path.isdir(os.path.join(base, v)) and
                     any(os.path.isfile(os.path.join(base, v, m)) for m in PLUGIN_MANIFESTS)] if os.path.isdir(base) else []
@@ -231,8 +259,8 @@ def _resolve(target, name, environ, errors):
         source = object_value(object_value(load(os.path.join(home, "plugins", "known_marketplaces.json"), errors).get(market)).get("source"))
         if source.get("source") == "directory" and isinstance(source.get("path"), str) and source["path"]:
             directory = source["path"]
-            sub = os.path.join(directory, name)
-            root = in_place(directory, name, errors) or (sub if os.path.isdir(sub) else None)
+            sub = child(directory, name)
+            root = in_place(directory, name, errors) or (sub if sub is not None and os.path.isdir(sub) else None)
             if root:
                 return found(root, "directory-marketplace")
     paths = copies(market)

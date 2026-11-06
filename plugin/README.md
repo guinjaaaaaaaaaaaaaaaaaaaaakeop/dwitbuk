@@ -53,6 +53,12 @@ version; `hunsu.local.json`'s `dev` may override the marketplace. Claude uses a 
 scope. Codex requires an enabled `config.toml` entry and a cache directory with a plugin manifest: one copy wins;
 several require one matching the declared version, otherwise resolution stops and names them.
 
+In-place lookup reads the folder's own catalog, then its child's. A catalog outside the folder never chooses the
+payload: each catalog and its source must stay inside the folder it is read for by real path, and a child's catalog
+is read only when the child stays inside its parent. An escaping child is used as named, without its catalog.
+A name that is not one path component makes no child; Codex cache paths require one-component marketplace and
+plugin names. Install records are taken as the host keeps them, without reading catalogs inside the installed copy.
+
 Without a declared marketplace, exactly one marketplace with an applicable installation may supply the copy;
 several require a declaration. It never borrows another host's or marketplace's copy. A found version differing
 from the declaration keeps its root and prints a note naming both versions and the root. For each reporter run,
@@ -312,7 +318,8 @@ worker never ran.
 - A link, and a directory marketplace (which the host runs in place), are read as marketplace directories: the plugin's
   root is the source the catalog names (`.claude-plugin/marketplace.json`, else the local path in
   `.agents/plugins/marketplace.json`) when a plugin manifest is there — a source checkout keeps its payload in `plugin/`.
-  Otherwise, as before 2.1.0, a link resolves to `<link>/<name>`, else the link, and a directory marketplace to
+  Next it checks the child's catalog, subject to the real-path containment rules in [Plugin roots](#plugin-roots).
+  Otherwise a link resolves to `<link>/<name>`, else the link, and a directory marketplace to
   `<path>/<name>`, else its install record.
 - Reporter plugin-path lookup follows the selected host's enabled installations and the project's declarations;
   see [Plugin roots](#plugin-roots). A cache directory alone is not an enabled Codex installation.
@@ -353,3 +360,6 @@ commands, hooks, roles and reads an installation runs keep their 2.0.2 names and
 2.2.0 adds fields and one module and removes nothing: the verify packet's `not_in_diff` and the accept's unread
 non-claim, a late-eyes packet's `source.records` (now a digest of what it packed; `true` from 2.1.0 keeps the old rule)
 and `source.review`, a review's `eyes-of`, the `plugin-version` finding, and [pluginroot.py](pluginroot.py).
+2.2.1 changes behavior only: no catalog outside a folder chooses its plugin root — a child that leaves the folder by real
+path is used as named without reading its catalog, and a name that is not one path component makes no child or Codex
+cache path (see [Plugin roots](#plugin-roots)).

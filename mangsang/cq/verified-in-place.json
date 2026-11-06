@@ -1,0 +1,14 @@
+{
+  "id": "verified-in-place",
+  "text": "Is pluginroot.in_place (which catalog a folder used in place is read through) proven by a test that calls it?",
+  "verify": {
+    "kind": "coverage",
+    "predicate": "verifies",
+    "anchors": "plugin/pluginroot.py:in_place",
+    "as": "dst"
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/pluginroot.py, plugin/README.md and test_dwitbuk.py as run-20261106-071013-fc24's build-d6 (62aff10) left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

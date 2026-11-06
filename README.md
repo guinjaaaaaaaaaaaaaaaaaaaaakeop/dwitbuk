@@ -96,6 +96,12 @@ rewrites a closed run's close review and writes a new review (`eyes-of`) instead
 `{plugin:NAME}` for the host the process runs on, and a version that differs from the pin becomes a `plugin-version`
 objection. Commands, hooks, the skill, roles, reads and the Python floor are unchanged.
 
+2.2.1 is a patch release: behavior only, every interface unchanged. The shared resolver `plugin/pluginroot.py` now holds
+chongdae's rule M1 — no catalog outside a folder chooses its plugin root. A folder's own catalog and a child's are read
+only inside the folder by real path, a child that escapes it (a relative or absolute symlink, the folder's parent, a
+chain) is used as named with its catalog unread, and a name that is not one path component makes no child or Codex
+cache path. chongdae and jokbo vendor the file byte-identical.
+
 ### Release and adoption
 
 Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged. Changes only to

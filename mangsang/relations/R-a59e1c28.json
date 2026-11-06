@@ -6,10 +6,22 @@
   "evidence": "assert got[\"host\"] == \"codex\" and same(got[\"root\"], path), got",
   "seen": {
     "test_dwitbuk.py:test_D5_environ_defaults_to_os_environ": "fe8a414a1f1b",
-    "plugin/pluginroot.py:resolve": "87670de9a8ca"
+    "plugin/pluginroot.py:resolve": "ff415344b24e"
   },
   "confirmed": {
-    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+    "agent": "Claude (claude-opus-5-5)"
   },
+  "history": [
+    {
+      "confirmed": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+      },
+      "seen": {
+        "test_dwitbuk.py:test_D5_environ_defaults_to_os_environ": "fe8a414a1f1b",
+        "plugin/pluginroot.py:resolve": "87670de9a8ca"
+      },
+      "evidence": "assert got[\"host\"] == \"codex\" and same(got[\"root\"], path), got"
+    }
+  ],
   "written_by": "mangsang 2.2.1"
 }

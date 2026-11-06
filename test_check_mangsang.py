@@ -453,16 +453,21 @@ def test_a_retired_required_model_fails_the_guard():
         assert code == 1 and any("required-model" in l for l in failed_lines(out)), out
 
 
-def test_projected_dropping_the_plugin_root_prefix_fails_the_guard():
+def test_projected_dropping_a_code_prefix_fails_the_guard():
+    """Narrowing projected's declared code media fails the guard whether or not the engine alone notices. Without
+    plugin/hooks/stop_eyes.py: every concept keeps a code projection (bound-late-answer stands in plugin/dwitbuk.py), so the
+    engine alone holds; without plugin/pluginroot.py: catalog-inside-folder loses its only code projection and the engine fails
+    too. Either way the guard names the narrowed prefix."""
     need_engine()
-    with Copy() as c:
-        revise(c, "projected", lambda v: v["media"]["code"].remove("plugin/pluginroot.py:"))
-        check = c.engine("check", "--require-model")
-        code, out = c.checker()
-        record("projected revised without code medium plugin/pluginroot.py:", code, out, engine_check_exit=check[0])
-        assert check[0] == 0, "the engine alone holds: another code projection still stands\n" + check[1]
-        want = "projection scope narrowed: projected no longer asks medium code for plugin/pluginroot.py:"
-        assert code == 1 and want in out, "want %r:\n%s" % (want, out)
+    for prefix, engine_holds in (("plugin/hooks/stop_eyes.py:", True), ("plugin/pluginroot.py:", False)):
+        with Copy() as c:
+            revise(c, "projected", lambda v, p=prefix: v["media"]["code"].remove(p))
+            check = c.engine("check", "--require-model")
+            code, out = c.checker()
+            record("projected revised without code medium %s" % prefix, code, out, engine_check_exit=check[0])
+            assert (check[0] == 0) == engine_holds, ("the engine alone %s without %s" % ("holds" if engine_holds else "fails", prefix), check[1])
+            want = "projection scope narrowed: projected no longer asks medium code for %s" % prefix
+            assert code == 1 and want in out, "want %r:\n%s" % (want, out)
 
 
 def test_projected_with_a_medium_the_declaration_does_not_name_fails_the_guard():

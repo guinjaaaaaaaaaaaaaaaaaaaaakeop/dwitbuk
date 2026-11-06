@@ -1,0 +1,8 @@
+{
+  "name": "catalog-inside-folder",
+  "means": "plugin/pluginroot.py lets no catalog outside a folder choose that folder's plugin root (chongdae 2.1.0's rule M1, held by the shared file): it reads a link's or a directory marketplace's own catalog only when the catalog's real path lies inside the folder, takes a child <folder>/<NAME> only for a NAME that is one path component and reads that child's catalog only when the child's real path lies inside the folder's — a child that escapes (a relative or absolute symlink, the folder's parent, a chain of links) is the root as named, its catalog not read — and counts a catalog's source only when it resolves by real path to a directory inside the catalog's own folder; a Claude installPath and a Codex cache copy (under a one-component MARKET and NAME) are taken as the host records them, and no catalog inside them is read.",
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/pluginroot.py, plugin/README.md and test_dwitbuk.py as run-20261106-071013-fc24's build-d6 (62aff10) left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "R-cbd1e1ca",
+  "src": "test_dwitbuk.py:test_D6_C6_a_claude_install_path_holding_a_catalog_is_taken_where_it_is",
+  "predicate": "realizes",
+  "dst": "concept:catalog-inside-folder",
+  "evidence": "assert same(got[\"root\"], path) and not same(got[\"root\"], os.path.join(path, \"plugin\")), got",
+  "seen": {
+    "test_dwitbuk.py:test_D6_C6_a_claude_install_path_holding_a_catalog_is_taken_where_it_is": "b85ff70813a1",
+    "concept:catalog-inside-folder": "2ad48ec21490"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections (verifies only where a test calls the symbol and asserts on it) and a question'), each quote read in plugin/pluginroot.py, plugin/README.md and test_dwitbuk.py as build-d6 (62aff10) and tests-d6 (000fc55) left them; no person read these relations"
+  },
+  "written_by": "mangsang 2.2.1"
+}

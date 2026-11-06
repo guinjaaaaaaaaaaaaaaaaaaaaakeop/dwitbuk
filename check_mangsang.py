@@ -1,4 +1,4 @@
-"""dwitbuk's model guard for the eight core contracts in MODEL.md. The installed mangsang engine's
+"""dwitbuk's model guard for the nine core contracts in MODEL.md. The installed mangsang engine's
 `check --require-model`, `cq` and `impact` decide model presence and the declared invariants; this guard keeps their
 required scope aligned with this project's declarations.
 
@@ -23,15 +23,17 @@ MODEL = "mangsang"
 
 # what MODEL.md says the model covers; dropping any of it is a scope change made here and there, not a silent loss
 CONCEPTS = ("quote-grounded-finding", "bound-late-answer", "one-answer-per-charge", "serialized-review-mutation", "fail-closed-layer",
-            "verifier-sees-touched", "closed-review-kept", "selected-host-plugin-root")
+            "verifier-sees-touched", "closed-review-kept", "selected-host-plugin-root", "catalog-inside-folder")
 QUESTIONS = {"finding-kept": "quote-grounded-finding", "late-answer-taken": "bound-late-answer",
              "charge-answered": "one-answer-per-charge", "concurrent-mutation": "serialized-review-mutation",
              "charge-or-fact": "fail-closed-layer", "touched-seen": "verifier-sees-touched",
-             "closed-review-written": "closed-review-kept", "plugin-root-chosen": "selected-host-plugin-root"}
+             "closed-review-written": "closed-review-kept", "plugin-root-chosen": "selected-host-plugin-root",
+             "catalog-outside-chooses": "catalog-inside-folder"}
 CORE = {"quote-grounded-finding": "plugin/dwitbuk.py:grounded", "bound-late-answer": "plugin/dwitbuk.py:check_eyes",
         "one-answer-per-charge": "plugin/dwitbuk.py:cmd_dispose", "serialized-review-mutation": "plugin/dwitbuk.py:ReviewLock",
         "fail-closed-layer": "plugin/dwitbuk.py:layer", "verifier-sees-touched": "plugin/dwitbuk.py:verify_packet",
-        "closed-review-kept": "plugin/dwitbuk.py:closed_reviews", "selected-host-plugin-root": "plugin/pluginroot.py:resolve"}
+        "closed-review-kept": "plugin/dwitbuk.py:closed_reviews", "selected-host-plugin-root": "plugin/pluginroot.py:resolve",
+        "catalog-inside-folder": "plugin/pluginroot.py:in_place"}
 # the symbol a test proves directly for each concept: the test calls it (or its bare command dispatch) and asserts on what it
 # returns or writes; a test that reaches a symbol only through another is a realizes, not a verifies. No test calls check_eyes
 # so (the late-eyes test reaches it through `eyes consume`), and the only direct calls of layer read layers review already
@@ -41,7 +43,7 @@ VERIFIED = {**CORE, "bound-late-answer": "plugin/dwitbuk.py:cmd_eyes", "fail-clo
             "closed-review-kept": "plugin/dwitbuk.py:cmd_eyes"}
 SLUGS = {"grounded": "quote-grounded-finding", "check-eyes": "bound-late-answer", "cmd-dispose": "one-answer-per-charge",
          "review-lock": "serialized-review-mutation", "layer": "fail-closed-layer", "verify-packet": "verifier-sees-touched",
-         "closed-reviews": "closed-review-kept", "plugin-root": "selected-host-plugin-root"}
+         "closed-reviews": "closed-review-kept", "plugin-root": "selected-host-plugin-root", "in-place": "catalog-inside-folder"}
 # what each coverage invariant asks: moving one to another symbol is a scope change made here and in MODEL.md, not a silent one
 COVERAGE = {**{"verified-%s" % k: ("verifies", VERIFIED[c]) for k, c in SLUGS.items()},
             **{"documented-%s" % k: ("documents", CORE[c]) for k, c in SLUGS.items()}}

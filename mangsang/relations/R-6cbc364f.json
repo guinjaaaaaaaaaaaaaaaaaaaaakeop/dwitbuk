@@ -1,0 +1,15 @@
+{
+  "id": "R-6cbc364f",
+  "src": "test_dwitbuk.py:test_D6_C1_a_directory_marketplace_whose_child_escapes_through_a_chain_is_the_child_as_named",
+  "predicate": "realizes",
+  "dst": "concept:catalog-inside-folder",
+  "evidence": "M/probe as named via directory-marketplace",
+  "seen": {
+    "test_dwitbuk.py:test_D6_C1_a_directory_marketplace_whose_child_escapes_through_a_chain_is_the_child_as_named": "9af0faeaa0dc",
+    "concept:catalog-inside-folder": "2ad48ec21490"
+  },
+  "confirmed": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections (verifies only where a test calls the symbol and asserts on it) and a question'), each quote read in plugin/pluginroot.py, plugin/README.md and test_dwitbuk.py as build-d6 (62aff10) and tests-d6 (000fc55) left them; no person read these relations"
+  },
+  "written_by": "mangsang 2.2.1"
+}

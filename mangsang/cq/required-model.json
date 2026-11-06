@@ -1,6 +1,6 @@
 {
   "id": "required-model",
-  "text": "Does the model still hold everything MODEL.md says it covers: the eight concepts, their eight questions, the registered, projection, resolved and coverage invariants, and each concept's core projection?",
+  "text": "Does the model still hold everything MODEL.md says it covers: the nine concepts, their nine questions, the registered, projection, resolved and coverage invariants, and each concept's core projection?",
   "verify": {
     "kind": "required",
     "concepts": [
@@ -11,7 +11,8 @@
       "fail-closed-layer",
       "verifier-sees-touched",
       "closed-review-kept",
-      "selected-host-plugin-root"
+      "selected-host-plugin-root",
+      "catalog-inside-folder"
     ],
     "questions": [
       "finding-kept",
@@ -21,7 +22,8 @@
       "charge-or-fact",
       "touched-seen",
       "closed-review-written",
-      "plugin-root-chosen"
+      "plugin-root-chosen",
+      "catalog-outside-chooses"
     ],
     "invariants": [
       "registered-payload",
@@ -43,7 +45,9 @@
       "documented-layer",
       "documented-verify-packet",
       "documented-closed-reviews",
-      "documented-plugin-root"
+      "documented-plugin-root",
+      "verified-in-place",
+      "documented-in-place"
     ],
     "relations": [
       {
@@ -85,11 +89,111 @@
         "src": "plugin/pluginroot.py:resolve",
         "predicate": "realizes",
         "dst": "concept:selected-host-plugin-root"
+      },
+      {
+        "src": "plugin/pluginroot.py:in_place",
+        "predicate": "realizes",
+        "dst": "concept:catalog-inside-folder"
       }
     ]
   },
   "declared": {
-    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'add a required invariant mirroring your acceptance checker's required lists'): the lists gain D6's concept catalog-inside-folder, its question catalog-outside-chooses, the coverage invariants verified-in-place and documented-in-place and the core projection plugin/pluginroot.py:in_place, as check_mangsang.py now declares; no person read or approved this wording"
   },
+  "history": [
+    {
+      "text": "Does the model still hold everything MODEL.md says it covers: the eight concepts, their eight questions, the registered, projection, resolved and coverage invariants, and each concept's core projection?",
+      "verify": {
+        "kind": "required",
+        "concepts": [
+          "quote-grounded-finding",
+          "bound-late-answer",
+          "one-answer-per-charge",
+          "serialized-review-mutation",
+          "fail-closed-layer",
+          "verifier-sees-touched",
+          "closed-review-kept",
+          "selected-host-plugin-root"
+        ],
+        "questions": [
+          "finding-kept",
+          "late-answer-taken",
+          "charge-answered",
+          "concurrent-mutation",
+          "charge-or-fact",
+          "touched-seen",
+          "closed-review-written",
+          "plugin-root-chosen"
+        ],
+        "invariants": [
+          "registered-payload",
+          "registered-source",
+          "projected",
+          "resolved",
+          "verified-grounded",
+          "verified-check-eyes",
+          "verified-cmd-dispose",
+          "verified-review-lock",
+          "verified-layer",
+          "verified-verify-packet",
+          "verified-closed-reviews",
+          "verified-plugin-root",
+          "documented-grounded",
+          "documented-check-eyes",
+          "documented-cmd-dispose",
+          "documented-review-lock",
+          "documented-layer",
+          "documented-verify-packet",
+          "documented-closed-reviews",
+          "documented-plugin-root"
+        ],
+        "relations": [
+          {
+            "src": "plugin/dwitbuk.py:grounded",
+            "predicate": "realizes",
+            "dst": "concept:quote-grounded-finding"
+          },
+          {
+            "src": "plugin/dwitbuk.py:check_eyes",
+            "predicate": "realizes",
+            "dst": "concept:bound-late-answer"
+          },
+          {
+            "src": "plugin/dwitbuk.py:cmd_dispose",
+            "predicate": "realizes",
+            "dst": "concept:one-answer-per-charge"
+          },
+          {
+            "src": "plugin/dwitbuk.py:ReviewLock",
+            "predicate": "realizes",
+            "dst": "concept:serialized-review-mutation"
+          },
+          {
+            "src": "plugin/dwitbuk.py:layer",
+            "predicate": "realizes",
+            "dst": "concept:fail-closed-layer"
+          },
+          {
+            "src": "plugin/dwitbuk.py:verify_packet",
+            "predicate": "realizes",
+            "dst": "concept:verifier-sees-touched"
+          },
+          {
+            "src": "plugin/dwitbuk.py:closed_reviews",
+            "predicate": "realizes",
+            "dst": "concept:closed-review-kept"
+          },
+          {
+            "src": "plugin/pluginroot.py:resolve",
+            "predicate": "realizes",
+            "dst": "concept:selected-host-plugin-root"
+          }
+        ]
+      },
+      "declared": {
+        "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/, plugin/README.md and test_dwitbuk.py as run-20261106-043206-73ed left them; no person read or approved this wording"
+      }
+    }
+  ],
   "written_by": "mangsang 2.2.1"
 }

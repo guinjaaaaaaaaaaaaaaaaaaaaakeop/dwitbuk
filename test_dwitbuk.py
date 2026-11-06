@@ -5322,6 +5322,409 @@ def test_E3_the_review_finding_carries_the_new_note():
         assert len(pv) == 1 and "hunsu.json declares" in pv[0]["text"] and "claude-code" in pv[0]["text"], pv
 
 
+# --- D6: a catalog is read only inside the folder it was found in (chongdae 2.1.0's rule M1) ---------------------------
+
+D6_CATALOGS = (("claude",), ("codex",), ("claude", "codex"))
+D6_HOSTS = ("claude-code", "codex")
+
+
+def d6_symlink(src, dst):
+    """os.symlink(src, dst); a Skip only where symlinks need a privilege this host lacks (Windows), never on macOS/Linux."""
+    try:
+        os.symlink(src, dst)
+    except (OSError, NotImplementedError) as err:
+        if os.name == "nt":
+            raise Skip("os.symlink is unavailable here: %s" % err)
+        raise
+
+
+def d6_inside(path, folder):
+    """realpath(path) is realpath(folder) or under it."""
+    p, f = os.path.realpath(path), os.path.realpath(folder)
+    return p == f or p.startswith(f.rstrip(os.sep) + os.sep)
+
+
+def d6_market(folder, catalogs=("claude",), name="probe"):
+    """`folder` holds the given catalogs, each selecting ./plugin, and folder/plugin a manifest naming `name` for each; the payload."""
+    payload = os.path.join(folder, "plugin")
+    for c in catalogs:
+        if c == "claude":
+            write(os.path.join(folder, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": name, "source": "./plugin"}]})
+            plugin_dir(payload, name)
+        else:
+            write(os.path.join(folder, ".agents", "plugins", "marketplace.json"),
+                  {"plugins": [{"name": name, "source": {"source": "local", "path": "./plugin"}}]})
+            plugin_dir(payload, name, kind=".codex-plugin")
+    return payload
+
+
+def d6_escape(h, style, catalogs):
+    """M, with M/probe a directory whose realpath leaves M, and the outside folder holding the catalogs and a real payload
+    naming probe (so a catalog read would succeed). Returns (M, outside, payload)."""
+    if style == "parent":
+        outside = made(os.path.join(h.base, "par"))
+        M = made(os.path.join(outside, "M"))
+        payload = d6_market(outside, catalogs)
+        d6_symlink("..", os.path.join(M, "probe"))
+    else:
+        M = made(os.path.join(h.base, "M"))
+        outside = made(os.path.join(h.base, "outside"))
+        payload = d6_market(outside, catalogs)
+        if style == "relative":
+            d6_symlink(os.path.join("..", "outside"), os.path.join(M, "probe"))
+        elif style == "absolute":
+            d6_symlink(os.path.abspath(outside), os.path.join(M, "probe"))
+        elif style == "chain":
+            d6_symlink(os.path.join("..", "outside"), os.path.join(M, "hop"))
+            d6_symlink("hop", os.path.join(M, "probe"))
+        else:
+            raise AssertionError("fixture: unknown escape style %r" % style)
+    probe = os.path.join(M, "probe")
+    assert os.path.isdir(probe), ("fixture: M/probe is a directory", style)
+    assert not d6_inside(probe, M), ("fixture: realpath(M/probe) is not inside realpath(M)", style, os.path.realpath(probe))
+    assert os.path.isfile(os.path.join(payload, ".claude-plugin" if "claude" in catalogs else ".codex-plugin", "plugin.json")), "fixture"
+    return M, outside, payload
+
+
+def d6_as_named(got, M, payload, via, ctx):
+    """root is the child as named — os.path.join(M, "probe") exactly — and not the outside payload nor anything under it."""
+    want = os.path.join(M, "probe")
+    assert got["root"] == want and got["via"] == via, ("the escaping child, as named", ctx, want, got)
+    assert not same(got["root"], payload) and not d6_inside(got["root"], payload), ("never the outside catalog's choice", ctx, got)
+
+
+def d6_link_escape(style):
+    for catalogs in D6_CATALOGS:
+        with Hosts() as h:
+            M, outside, payload = d6_escape(h, style, catalogs)
+            h.local({"links": {"probe": M}})
+            for host in D6_HOSTS:
+                d6_as_named(h.resolve("probe", host), M, payload, "link", (style, catalogs, host))
+
+
+def d6_market_escape(style):
+    for catalogs in D6_CATALOGS:
+        with Hosts() as h:
+            M, outside, payload = d6_escape(h, style, catalogs)
+            h.claude_directory_market("dev", M)
+            h.declare("probe", "dev")
+            h.claude_install("probe", "dev", "1.0.0")
+            d6_as_named(h.resolve("probe"), M, payload, "directory-marketplace", (style, catalogs))
+
+
+def test_D6_C1_in_place_reads_no_catalog_of_a_child_that_escapes_the_folder():
+    """C1: in_place(M, "probe") is None when M/probe's realpath leaves M — relative (Claude catalog) first, then every escape
+    style and catalog kind; the outside folder's catalog would have chosen a real payload naming probe."""
+    with Hosts() as h:
+        M, outside, payload = d6_escape(h, "relative", ("claude",))
+        got = pluginroot().in_place(M, "probe")
+        assert got is None, ("in_place read the catalog of a child outside M", got)
+    for style in ("relative", "absolute", "parent", "chain"):
+        for catalogs in D6_CATALOGS:
+            with Hosts() as h:
+                M, outside, payload = d6_escape(h, style, catalogs)
+                got = pluginroot().in_place(M, "probe")
+                assert got is None, ("in_place read the catalog of a child outside M", style, catalogs, got)
+
+
+def test_D6_C1_a_link_whose_child_escapes_by_a_relative_symlink_is_the_child_as_named():
+    """C1, relative (M/probe -> ../outside): a link to M resolves to M/probe as named, via link, on both hosts — Claude
+    catalog, Codex-only catalog, and both — never to outside/plugin."""
+    d6_link_escape("relative")
+
+
+def test_D6_C1_a_link_whose_child_escapes_by_an_absolute_symlink_is_the_child_as_named():
+    """C1, absolute (M/probe -> <abs>/outside): the link resolves to M/probe as named, never outside/plugin."""
+    d6_link_escape("absolute")
+
+
+def test_D6_C1_a_link_whose_child_is_the_folders_parent_is_the_child_as_named():
+    """C1, the folder's parent (M/probe -> ..; the parent holds the catalogs and plugin/): the link resolves to M/probe as named."""
+    d6_link_escape("parent")
+
+
+def test_D6_C1_a_link_whose_child_escapes_through_a_chain_is_the_child_as_named():
+    """C1, a chain (M/hop -> ../outside, M/probe -> hop): the link resolves to M/probe as named."""
+    d6_link_escape("chain")
+
+
+def test_D6_C1_a_directory_marketplace_whose_child_escapes_by_a_relative_symlink_is_the_child_as_named():
+    """C1, relative, Claude directory marketplace at M: M/probe as named via directory-marketplace, never outside/plugin."""
+    d6_market_escape("relative")
+
+
+def test_D6_C1_a_directory_marketplace_whose_child_escapes_by_an_absolute_symlink_is_the_child_as_named():
+    """C1, absolute, directory marketplace: M/probe as named via directory-marketplace."""
+    d6_market_escape("absolute")
+
+
+def test_D6_C1_a_directory_marketplace_whose_child_is_the_folders_parent_is_the_child_as_named():
+    """C1, the folder's parent, directory marketplace: M/probe as named via directory-marketplace."""
+    d6_market_escape("parent")
+
+
+def test_D6_C1_a_directory_marketplace_whose_child_escapes_through_a_chain_is_the_child_as_named():
+    """C1, a chain, directory marketplace: M/probe as named via directory-marketplace."""
+    d6_market_escape("chain")
+
+
+def d6_own_catalog_out(h, how):
+    """M (no M/probe) whose own catalog is reached through a symlink out of M; the outside catalog selects ./plugin and both
+    M/plugin and outside/plugin hold a manifest naming probe, so only the catalog's location decides."""
+    M = made(os.path.join(h.base, "M"))
+    outside = made(os.path.join(h.base, "outside"))
+    if how == "codex-dir":
+        d6_market(outside, ("codex",))
+        plugin_dir(os.path.join(M, "plugin"), "probe", kind=".codex-plugin")
+        d6_symlink(os.path.join("..", "outside", ".agents"), os.path.join(M, ".agents"))
+        catalog = os.path.join(M, ".agents", "plugins", "marketplace.json")
+    else:
+        d6_market(outside, ("claude",))
+        plugin_dir(os.path.join(M, "plugin"), "probe")
+        if how == "claude-dir":
+            d6_symlink(os.path.join("..", "outside", ".claude-plugin"), os.path.join(M, ".claude-plugin"))
+        else:
+            made(os.path.join(M, ".claude-plugin"))
+            d6_symlink(os.path.join("..", "..", "outside", ".claude-plugin", "marketplace.json"),
+                       os.path.join(M, ".claude-plugin", "marketplace.json"))
+        catalog = os.path.join(M, ".claude-plugin", "marketplace.json")
+    assert os.path.isfile(catalog) and not d6_inside(catalog, M), ("fixture: the catalog is reached and lies outside M", how)
+    return M
+
+
+def d6_C2_own(how):
+    with Hosts() as h:
+        M = d6_own_catalog_out(h, how)
+        got = pluginroot().catalog_source(M, "probe")
+        assert got is None, ("a catalog whose realpath leaves the folder named a source", how, got)
+        h.local({"links": {"probe": M}})
+        for host in D6_HOSTS:
+            got = h.resolve("probe", host)
+            assert got["root"] == M and got["via"] == "link", ("the link itself", how, host, got)
+
+
+def test_D6_C2_a_catalog_directory_symlinked_out_of_the_folder_names_nothing():
+    """C2 (a): M/.claude-plugin -> ../outside/.claude-plugin: catalog_source(M, "probe") is None; a link to M is M itself."""
+    d6_C2_own("claude-dir")
+
+
+def test_D6_C2_a_catalog_file_symlinked_out_of_the_folder_names_nothing():
+    """C2 (b): M/.claude-plugin/marketplace.json -> a file in outside: catalog_source(M, "probe") is None; the link is M."""
+    d6_C2_own("claude-file")
+
+
+def test_D6_C2_a_codex_catalog_directory_symlinked_out_of_the_folder_names_nothing():
+    """C2 (c): M/.agents -> ../outside/.agents (Codex-only): catalog_source(M, "probe") is None; the link is M."""
+    d6_C2_own("codex-dir")
+
+
+def test_D6_C2_a_childs_catalog_symlinked_out_of_the_folder_names_nothing():
+    """C2, a child: M/probe a real directory inside M whose .claude-plugin -> ../../outside/.claude-plugin: in_place(M,
+    "probe") is None and the link resolves to M/probe as named."""
+    with Hosts() as h:
+        M = made(os.path.join(h.base, "M"))
+        outside = made(os.path.join(h.base, "outside"))
+        d6_market(outside, ("claude",))
+        child = made(os.path.join(M, "probe"))
+        plugin_dir(os.path.join(child, "plugin"), "probe")
+        d6_symlink(os.path.join("..", "..", "outside", ".claude-plugin"), os.path.join(child, ".claude-plugin"))
+        assert d6_inside(child, M) and not d6_inside(os.path.join(child, ".claude-plugin", "marketplace.json"), M), "fixture"
+        got = pluginroot().in_place(M, "probe")
+        assert got is None, ("the child's catalog lies outside M and was read", got)
+        h.local({"links": {"probe": M}})
+        for host in D6_HOSTS:
+            got = h.resolve("probe", host)
+            assert got["root"] == child and got["via"] == "link", ("the child as named", host, got)
+
+
+def test_D6_C3_a_catalog_source_that_leaves_the_catalogs_folder_names_nothing():
+    """C3, a guard shown, not red (catalog_local already holds it): a link to M whose own catalog selects ./plugin, with
+    M/plugin -> ../outside/plugin, M/plugin -> M/hop -> ../outside/plugin, source "../outside/plugin", and an absolute
+    source — each names nothing and the link resolves to M."""
+    for case in ("symlink", "chain", "dotdot", "absolute"):
+        with Hosts() as h:
+            M = made(os.path.join(h.base, "M"))
+            outside = made(os.path.join(h.base, "outside"))
+            out_payload = plugin_dir(os.path.join(outside, "plugin"), "probe")
+            source = "./plugin"
+            if case == "symlink":
+                d6_symlink(os.path.join("..", "outside", "plugin"), os.path.join(M, "plugin"))
+            elif case == "chain":
+                d6_symlink(os.path.join("..", "outside", "plugin"), os.path.join(M, "hop"))
+                d6_symlink("hop", os.path.join(M, "plugin"))
+            elif case == "dotdot":
+                source = "../outside/plugin"
+            else:
+                source = os.path.abspath(out_payload)
+            write(os.path.join(M, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": source}]})
+            assert pluginroot().catalog_source(M, "probe") is None, case
+            h.local({"links": {"probe": M}})
+            for host in D6_HOSTS:
+                got = h.resolve("probe", host)
+                assert got["root"] == M and got["via"] == "link", ("the link itself", case, host, got)
+
+
+def test_D6_C3_an_inside_childs_catalog_source_that_leaves_it_names_nothing():
+    """C3, a guard shown, not red: M/probe a real directory whose catalog selects ./plugin with M/probe/plugin ->
+    ../../outside/plugin: the child's catalog names nothing and the link resolves to M/probe as named."""
+    with Hosts() as h:
+        M = made(os.path.join(h.base, "M"))
+        outside = made(os.path.join(h.base, "outside"))
+        plugin_dir(os.path.join(outside, "plugin"), "probe")
+        child = made(os.path.join(M, "probe"))
+        write(os.path.join(child, ".claude-plugin", "marketplace.json"), {"plugins": [{"name": "probe", "source": "./plugin"}]})
+        d6_symlink(os.path.join("..", "..", "outside", "plugin"), os.path.join(child, "plugin"))
+        assert pluginroot().catalog_source(child, "probe") is None
+        h.local({"links": {"probe": M}})
+        for host in D6_HOSTS:
+            got = h.resolve("probe", host)
+            assert got["root"] == child and got["via"] == "link", (host, got)
+
+
+D6_BAD_NAMES = ("..", ".", "", "a/b", "../outside", "a\\b")
+
+
+def d6_bad_name_folder(h, name):
+    """M inside a dedicated parent; os.path.join(M, name) exists as a directory and, where it is not M itself, holds a
+    catalog selecting ./plugin with a manifest naming `name`."""
+    par = made(os.path.join(h.base, "par"))
+    M = made(os.path.join(par, "M"))
+    d = made(os.path.join(M, name))
+    assert os.path.isdir(os.path.join(M, name)), ("fixture", name)
+    if os.path.normpath(d) != os.path.normpath(M):
+        d6_market(d, ("claude",), name=name)
+    return M
+
+
+def test_D6_C4_in_place_takes_no_child_for_a_name_that_is_not_one_component():
+    """C4: for "..", ".", "", "a/b", "../outside" and a name with a backslash, in_place(M, NAME) reads only M's own catalog
+    (none here: None), though os.path.join(M, NAME) is a directory whose catalog would choose a payload naming NAME."""
+    for name in D6_BAD_NAMES:
+        with Hosts() as h:
+            M = d6_bad_name_folder(h, name)
+            got = pluginroot().in_place(M, name)
+            assert got is None, ("a name that is not one path component made a child", name, got)
+
+
+def test_D6_C4_a_link_with_a_name_that_is_not_one_component_is_the_link_itself():
+    """C4: a link to M for each such NAME resolves to M itself (root == M exactly), via link, on both hosts."""
+    for name in D6_BAD_NAMES:
+        with Hosts() as h:
+            M = d6_bad_name_folder(h, name)
+            h.local({"links": {name: M}})
+            for host in D6_HOSTS:
+                got = h.resolve(name, host)
+                assert got["root"] == M and got["via"] == "link", ("the link itself", repr(name), host, got)
+
+
+def test_D6_C4_a_directory_marketplace_with_a_name_that_is_not_one_component_is_the_install():
+    """C4: a Claude directory marketplace at M, NAME declared in hunsu.json with marketplace "dev", and a user-scope install
+    record: the install, not os.path.join(M, NAME)."""
+    for name in D6_BAD_NAMES:
+        with Hosts() as h:
+            M = d6_bad_name_folder(h, name)
+            h.claude_directory_market("dev", M)
+            h.declare(name, "dev")
+            path = made(os.path.join(h.claude, "plugins", "cache", "dev", "d6-install", "1.0.0"))
+            write(os.path.join(path, ".claude-plugin", "plugin.json"), {"name": name, "version": "1.0.0"})
+            h.installed["%s@dev" % name] = [{"scope": "user", "installPath": path, "version": "1.0.0"}]
+            write(os.path.join(h.claude, "plugins", "installed_plugins.json"), {"version": 2, "plugins": h.installed})
+            got = h.resolve(name)
+            assert same(got["root"], path), ("the install record", repr(name), got)
+            assert not same(got["root"], os.path.join(M, name)), (repr(name), got)
+
+
+def test_D6_C5_a_codex_marketplace_or_name_that_is_not_one_component_is_no_cache_path():
+    """C5: a declared marketplace "../m" (or a NAME "../probe"), enabled in config.toml, whose path under plugins/cache
+    reaches a copy with a manifest outside its place: no root on codex, with a reason."""
+    for market, name in (("../m", "probe"), ("m", "../probe")):
+        with Hosts() as h:
+            h.declare(name, market)
+            copy = made(os.path.join(h.codex, "plugins", "cache", market, name, "1.0.0"))
+            write(os.path.join(copy, ".codex-plugin", "plugin.json"), {"name": name, "version": "1.0.0"})
+            h.config["%s@%s" % (name, market)] = True
+            h.write_config()
+            assert os.path.isdir(copy), "fixture"
+            got = h.resolve(name, "codex")
+            assert got["root"] is None and got["reason"], ("a cache path from a name that is not one component", market, name, got)
+
+
+def test_D6_C5_a_codex_copy_holding_a_catalog_is_the_copy_itself():
+    """C5, a guard shown, not red: an ordinary Codex copy holding a catalog selecting ./plugin (a manifest there naming
+    probe) resolves to the copy itself — no catalog inside a host's copy chooses the payload."""
+    with Hosts() as h:
+        h.declare("probe", "m")
+        copy = h.codex_install("probe", "m", "1.0.0")
+        d6_market(copy, ("claude", "codex"))
+        got = h.resolve("probe", "codex")
+        assert same(got["root"], copy) and not same(got["root"], os.path.join(copy, "plugin")), got
+
+
+def test_D6_C6_a_claude_install_path_holding_a_catalog_is_taken_where_it_is():
+    """C6, a guard shown, not red: an installPath holding .claude-plugin/marketplace.json that selects ./plugin (with a
+    manifest there naming probe) resolves to the installPath itself."""
+    with Hosts() as h:
+        h.declare("probe", "m")
+        path = h.claude_install("probe", "m", "1.0.0")
+        d6_market(path, ("claude",))
+        got = h.resolve("probe")
+        assert same(got["root"], path) and not same(got["root"], os.path.join(path, "plugin")), got
+
+
+def test_D6_C7_a_child_symlink_that_stays_inside_the_folder_is_followed():
+    """C7 (a), a control, not red: M/probe -> real (relative) and, separately, M/probe -> <abs>/M/real, with M/real's
+    catalog selecting ./plugin: in_place(M, "probe"), a link to M and a directory marketplace at M give M/real/plugin."""
+    for absolute in (False, True):
+        with Hosts() as h:
+            M = made(os.path.join(h.base, "M"))
+            payload = d6_market(made(os.path.join(M, "real")), ("claude",))
+            d6_symlink(os.path.abspath(os.path.join(M, "real")) if absolute else "real", os.path.join(M, "probe"))
+            assert d6_inside(os.path.join(M, "probe"), M), "fixture"
+            assert same(pluginroot().in_place(M, "probe"), payload), absolute
+            h.local({"links": {"probe": M}})
+            for host in D6_HOSTS:
+                got = h.resolve("probe", host)
+                assert same(got["root"], payload) and got["via"] == "link", (absolute, host, got)
+            h.local({})
+            h.claude_directory_market("dev", M)
+            h.declare("probe", "dev")
+            h.claude_install("probe", "dev", "1.0.0")
+            got = h.resolve("probe")
+            assert same(got["root"], payload) and got["via"] == "directory-marketplace", (absolute, got)
+
+
+def test_D6_C7_a_link_whose_own_path_is_a_symlink_to_a_checkout_reads_the_checkouts_catalog():
+    """C7 (b), a control, not red: hunsu.local.json links probe to L, L -> <abs>/checkout with its catalog selecting
+    ./plugin: the checkout's payload — the folder is wherever its link points."""
+    with Hosts() as h:
+        co = made(os.path.join(h.base, "checkout"))
+        payload = d6_market(co, ("claude",))
+        d6_symlink(os.path.abspath(co), os.path.join(h.base, "L"))
+        h.local({"links": {"probe": "../L"}})
+        for host in D6_HOSTS:
+            got = h.resolve("probe", host)
+            assert same(got["root"], payload) and got["via"] == "link", (host, got)
+
+
+def test_D6_C7_a_plain_child_with_its_own_catalog_resolves_as_before():
+    """C7 (c), a control, not red: a plain M/probe directory with its own catalog: in_place, the link and the directory
+    marketplace give M/probe/plugin."""
+    with Hosts() as h:
+        M = made(os.path.join(h.base, "M"))
+        payload = d6_market(made(os.path.join(M, "probe")), ("claude",))
+        assert same(pluginroot().in_place(M, "probe"), payload)
+        h.local({"links": {"probe": M}})
+        for host in D6_HOSTS:
+            got = h.resolve("probe", host)
+            assert same(got["root"], payload) and got["via"] == "link", (host, got)
+        h.local({})
+        h.claude_directory_market("dev", M)
+        h.declare("probe", "dev")
+        h.claude_install("probe", "dev", "1.0.0")
+        got = h.resolve("probe")
+        assert same(got["root"], payload) and got["via"] == "directory-marketplace", got
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

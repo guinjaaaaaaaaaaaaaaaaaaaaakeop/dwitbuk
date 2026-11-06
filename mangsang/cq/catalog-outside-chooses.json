@@ -1,0 +1,14 @@
+{
+  "id": "catalog-outside-chooses",
+  "text": "Can a catalog outside the folder a plugin was found in choose its root, and what does the resolver take instead?",
+  "verify": {
+    "kind": "answered-by",
+    "concepts": [
+      "catalog-inside-folder"
+    ]
+  },
+  "declared": {
+    "delegated": "agent judgment by claude-code claude-opus-5-5 under the owner's Stage C request (2026-11-06, relayed by the umbrella coordinator, reinforce-1106, D6: 'Where a fix creates a contract the model should hold, add the concept, its doc/code/test projections and a question'), read against plugin/pluginroot.py, plugin/README.md and test_dwitbuk.py as run-20261106-071013-fc24's build-d6 (62aff10) left them; no person read or approved this wording"
+  },
+  "written_by": "mangsang 2.2.1"
+}
