@@ -813,6 +813,7 @@ def verify_packet(request):
     since = request.get("since") or {}
     diff = ""
     not_in_diff = []
+    shown_whole = set()
     for path in touched:
         repo, inner = repo_of(target, path, since)
         cwd, base = os.path.join(target, repo) if repo != "." else target, since.get(repo)
@@ -822,30 +823,30 @@ def verify_packet(request):
         d = git(cwd, "diff", "--src-prefix=a/" + lead, "--dst-prefix=b/" + lead, base or "HEAD", "--", ":(literal)" + inner)
         if d:
             diff += d
+            if re.search(r"^new file mode ", d, re.M) and not re.search(r"^(?:Binary files |GIT binary patch)", d, re.M):
+                shown_whole.add(path)
         elif os.path.isfile(os.path.join(target, path)) and os.path.getsize(os.path.join(target, path)) < 40000:
-            diff += "+++ %s (new file)\n" % path + io.open(os.path.join(target, path), encoding="utf-8", errors="replace").read() + "\n"
+            text = io.open(os.path.join(target, path), encoding="utf-8", errors="replace").read()
+            diff += "+++ %s (new file)\n" % path + text + "\n"
+            if "\0" not in text:
+                shown_whole.add(path)
         elif os.path.isfile(os.path.join(target, path)):
             not_in_diff.append(path)
             continue
         if len(diff) > 80000:
             not_in_diff.append(path)
-    # Record-path files the runner left out of `touched`, with their diff. A task whose scope names them instead includes
-    # them in `touched`; neither case makes the changed records an undeclared edit.
+    must_open = [path for path in dict.fromkeys(touched)
+                 if os.path.isfile(os.path.join(target, path)) and
+                 (path not in shown_whole or path in not_in_diff or b"\0" in io.open(os.path.join(target, path), "rb").read())]
+    # Excluded records belong outside this task; only their names reach its verifier.
     excluded = [p for p in ((request.get("excluded") or {}).get("record-paths") or []) if not is_record(p, (RUNS + "/",))]
-    # Git's literal pathspecs can recurse; declarations are judged by is_record.
-    excluded_names = []
-    for entry in excluded:
-        names = (git(target, "diff", "--no-renames", "--relative", "--name-only", "-z", "HEAD", "--",
-                     ":(literal)" + entry) or "").split("\0")
-        kept = [name for name in names if name and is_record(name, (entry,))]
-        excluded_names.extend(kept)
-    excluded_diff = path_diff(target, excluded_names, ("HEAD",), cut=40000)
     domain = request.get("domain")
     return {"artifact-type": "dwitbuk/eyes-request@1", "mode": "verify", "target": target, "run": request.get("run"), "task": request.get("task"),
             "brief": request.get("brief", ""), "contract": request.get("contract", {}), "checks": request.get("checks", []),
             "tests": request.get("tests", []), "touched": touched, "touched_since": request.get("touched_since", []), "diff": diff[:80000], "built": request.get("built"),
             **({"not_in_diff": not_in_diff} if not_in_diff else {}),
-            **({"excluded": excluded, "excluded_diff": excluded_diff[:40000]} if excluded else {}),
+            **({"must_open": must_open} if must_open else {}),
+            **({"excluded": excluded} if excluded else {}),
             "attempts": request.get("attempts", []), "kinds": EYES_KINDS, **({"domain": domain} if domain else {}),
             # whose words these are, in the data itself: a verifier read the tests writer's "I did not run the whole suite" as
             # `built.non-claims` and rejected a build whose full suite had passed (guin-site run a0ec, cache-build, 10-15)
@@ -868,12 +869,12 @@ def verify_packet(request):
                                 "the files changed after) — evidence chongdae observed, unlike a claim in `built.verified`: a check it shows passing "
                                 "is not a finding that it fails, unless what changed since could break it; whether it decides the sentence is still "
                                 "yours to judge. " if request.get("checked") else "")
-                             + ("`excluded` lists files under the products' record paths that differ from HEAD — the environment (hunsu's manifest, lock and "
-                                "judgments) and records such as mangsang/ — that the runner left out of `touched` by rule, not by omission "
-                                "(a task whose scope names them has them in `touched`): a change there is not an "
-                                "undeclared edit and no record-vs-tree finding. When the brief or contract says the task's work is that change (update a plugin, "
-                                "lock the environment, relate concepts), read it in `excluded_diff` as the slice's work and verify it against them. "
-                                if excluded else "")
+                             + ("`excluded` lists record files that differ from HEAD and were left out by rule: they are not this task's changes "
+                                "and may be another open task's. A task whose work is a record change scopes it and has it in `touched`, with its diff. "
+                                "The packet holds none of their changes. A change there is not an undeclared edit, not this slice's work "
+                                "and no record-vs-tree finding; do not verify them here. " if excluded else "")
+                             + ("Read every file in `must_open` under target before you accept: an accept is counted only when your session "
+                                "opened each of them. A reject needs no such reading. " if must_open else "")
                              + ("The files in `not_in_diff` have changes not wholly in `diff`; Read them under target. " if not_in_diff else "") +
                              "Every finding quotes both sides: `record_quote` from the contract or the builder's report, `tree_quote` from the diff or a file — "
                              "put each quoted sentence in backticks, verbatim, and name in `where` the field it is from (`built.verified[0]`, "
@@ -886,7 +887,9 @@ def verify_packet(request):
                                 "lists the files changed since that verdict. Check two things only: that each of those findings is resolved (still true: "
                                 "report it again, quoted), and that what changed since breaks no contract sentence. What was there at the last verdict "
                                 "and is unchanged was read then — do not read it again for new findings; say in `summary` if something outside "
-                                "that scope still looks wrong." if request.get("recheck") else "")
+                                "that scope still looks wrong."
+                                + (" The accepting session must still open every file in `must_open`; this is not a request for new findings." if must_open else "")
+                                if request.get("recheck") else "")
                              + (" This slice is a refactoring: placement may change, behavior and explanation may not. Also reject when a docstring, a comment or a "
                                 "public name that the diff removes does not reappear where its code went (record_quote: the removed text from the diff's `-` lines; "
                                 "tree_quote: the new place, or the `+` lines that lack it), or when a moved function's body differs from the original beyond the move."

@@ -31,8 +31,6 @@ says: read `hunsu.json` with this machine's `hunsu.local.json`, then use the pin
 | `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json` | no | the Claude and Codex catalogs; hosts read them to find `./plugin` |
 | [dwitbuk.py](dwitbuk.py), [eyes_worker.py](eyes_worker.py) | no | entry points for a checkout, no engine code (below) |
 | [test_dwitbuk.py](test_dwitbuk.py) | no | the self-check |
-| `mangsang/`, [MODEL.md](MODEL.md) | no | the mangsang model of dwitbuk's core contracts (records written by the installed mangsang engine) and what it does and does not claim |
-| [check_mangsang.py](check_mangsang.py), [test_check_mangsang.py](test_check_mangsang.py) | no | the model's guard (`--engine` names the installed mangsang) and its tests on disposable copies |
 | [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md) | no | maintainer guidance |
 | `hunsu.json`, `hunsu.lock.json`, `hunsu-judgments.json` | no | this repository's own agent environment: it is developed with the released family, not with this checkout |
 | `.chongdae/`, `reviews/`, `.dwitbuk/` | no | this repository's own run and review records and machine-local state |
@@ -102,6 +100,15 @@ only inside the folder by real path, a child that escapes it (a relative or abso
 chain) is used as named with its catalog unread, and a name that is not one path component makes no child or Codex
 cache path. chongdae and jokbo vendor the file byte-identical.
 
+2.3.0 is a minor release: one new packet field, two new answer keys and a changed verify contract. The verify packet names
+in `must_open` each touched file whose current text it does not show whole (a modified file, whose diff holds hunks; a
+change the diff cuts or a file too large for it; a binary change), and the eyes' accept stands only when their recorded
+session opened each of them; otherwise the answer has no verdict (`verdict: null`, `answered: "accept"`, `unread`), which
+chongdae reads as no answer and asks again. A reject is unchanged, and 2.2.0's unread non-claim is gone with it. A verify
+request's `excluded` record paths reach the eyes by name only, never with their diff: they are not the task's changes and
+may be another open task's (a task whose work is a record change scopes it and has it in `touched`). Commands, hooks, the
+skill, roles, reads and the Python floor are unchanged.
+
 ### Release and adoption
 
 Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged. Changes only to
@@ -131,7 +138,3 @@ once, with recorded provider responses where a model would have answered. No mod
 - A copy of `plugin/` alone, outside the checkout with no import path into it, runs the actual CLI through a small
   review, dispose and late-eyes workflow, with a fake `claude` on `PATH` as the host. It also runs the hooks.
 - The root entry points delegate to the payload with one module instance.
-
-The model's guard is `python3 check_mangsang.py --engine <the installed mangsang.py>`. It fails on an absent or shrunken
-model, and runs the engine's `check`, `cq` and `impact`. `python3 test_check_mangsang.py --engine <the same>` proves it on
-disposable copies. See [MODEL.md](MODEL.md).

@@ -5,9 +5,10 @@
 The request is a `dwitbuk/eyes-request@1` packet (late eyes: findings), or a `chongdae/request@1` with stage `verify` (the eyes
 placed before a gate: a `dwitbuk/review@1` verdict). The reader is the host's model: it gets the packet on stdin, may Read files
 under the target, and must answer with one JSON object whose findings quote the record and the tree. dwitbuk validates on consume;
-chongdae reads the verdict. A verdict carries what the eyes read (`read`, from the session's own stream), and an accept that read
-nothing of the tree, only the diff where the contract names behaviour, or leaves touched files outside the diff unread,
-says so in `non-claims` — still an accept.
+chongdae reads the verdict. A verdict carries what the eyes read (`read`, from the session's own stream), and an accept that left
+any required `must_open` file unread is not an accept. Every such file must be opened on record; without a recorded
+session nothing counts as opened. Once that requirement is met, an accept that read nothing of the tree or only the diff
+where the contract names behaviour says so in `non-claims`.
 """
 import argparse
 import json
@@ -111,7 +112,7 @@ def unread_accept(read, packet):
     behaviour in code the diff does not show whole (the slice has tests, or its files are not all documents or records). guin-site run a0ec,
     cache-build: the second verifier answered `accept` first, then ran one `git diff`, then the same verdict — 607 output
     tokens on exactly the input the first verifier rejected — and the record said only "accept". Kept as accept: what was
-    read is said, not judged. None when the eyes read the tree."""
+    read is said, not judged, after every `must_open` file has been opened on record. None when the eyes read the tree."""
     if read is None:
         return "accepted, and what the eyes read is not on record (no transcript of their session)"
     first = " — and gave the verdict before reading anything" if read.get("answered-before-reading") else ""
@@ -129,14 +130,14 @@ def unread_accept(read, packet):
 
 
 def unread_touched(read, packet):
-    """Touched paths whose change is not whole in the diff and whose file was not opened on record."""
+    """Files in `must_open`, in order, not opened on record by Read/Grep or a successful command with a shell word
+    resolving by real path to the file, relative to target unless absolute (skip empty words and options).
+    Git views, echoes and listings do not open files; without a session every required file is unread."""
     if read is None:
-        return []
+        return list(packet.get("must_open") or [])
     target = packet["target"]
     unread = []
-    for path in packet.get("touched") or []:
-        if path not in (packet.get("not_in_diff") or []):
-            continue
+    for path in packet.get("must_open") or []:
         absolute = os.path.join(target, path)
         real = os.path.realpath(absolute)
         opened = False
@@ -147,11 +148,32 @@ def unread_touched(read, packet):
                         else os.path.normpath(name) == os.path.normpath(path)):
                     opened = True
                     break
-        names = (path, absolute, real)
         if not opened:
-            opened = any(c.get("exit") in (0, None) and any(
-                re.search(r"(?<![\w./-])" + re.escape(name) + r"(?![\w/-]|\.\w)", c.get("command", ""))
-                for name in names) for c in read.get("commands") or [])
+            for command in read.get("commands") or []:
+                if command.get("exit") not in (0, None):
+                    continue
+                for part in re.split(r"&&|\|\||[;|\n]", command.get("command", "")):
+                    part = part.strip()
+                    if DIFF_ONLY.match(part) or SAYS_NOTHING.match(part):
+                        continue
+                    try:
+                        tokens = shlex.split(part)
+                    except ValueError:
+                        continue
+                    if tokens and tokens[0] not in ("ls", "stat", "wc", "test", "[", "file", "du", "find"):
+                        for word in tokens:
+                            if not word or word.startswith("-"):
+                                continue
+                            try:
+                                if os.path.realpath(os.path.join(target, word)) == real:
+                                    opened = True
+                                    break
+                            except (OSError, ValueError):
+                                continue
+                        if opened:
+                            break
+                if opened:
+                    break
         if not opened:
             unread.append(path)
     return unread
@@ -196,20 +218,25 @@ def main():
         out = weigh(out, packet)
         if out.get("verdict") == "reject" and not out["findings"]:
             out["verdict"], out["summary"] = "accept", "rejected without a quoted finding; counted as accept"
-        if out.get("verdict") == "accept" and isinstance(out.get("worker"), dict):
-            # what the eyes actually read, beside the verdict: an accept is auditable only if that is on record
-            read = eyes_read(os.path.join(os.path.dirname(os.path.abspath(args.response)), out["worker"]["transcript"])
-                             if out["worker"].get("transcript") else None)
+        if out.get("verdict") == "accept":
+            worker = out.get("worker")
+            transcript = worker.get("transcript") if isinstance(worker, dict) else None
+            read = eyes_read(os.path.join(os.path.dirname(os.path.abspath(args.response)), transcript) if transcript else None)
             if read is not None:
                 out["read"] = read
-            said = unread_accept(read, packet)
-            if said:
-                out["non-claims"] = list(out.get("non-claims") or []) + [said]
             unread = unread_touched(read, packet)
             if unread:
-                out["non-claims"] = list(out.get("non-claims") or []) + [
-                    "accepted with %d touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: %s"
-                    % (len(unread), ", ".join("`%s`" % path for path in unread))]
+                summary = "not an accept: required files left unread: " + ", ".join("`%s`" % path for path in unread)
+                if read is None:
+                    summary += "; what the eyes opened is not on record"
+                out.update(verdict=None, answered="accept", unread=unread, findings=[],
+                           summary=summary + ". " + (out.get("summary") or ""))
+                if "non-claims" in out:
+                    out["non-claims"] = [n for n in out["non-claims"] if not n.startswith("accepted")]
+            elif isinstance(worker, dict):
+                said = unread_accept(read, packet)
+                if said:
+                    out["non-claims"] = list(out.get("non-claims") or []) + [said]
         out = {"artifact-type": "dwitbuk/review@1", **out}
     else:
         check_eyes(packet, packet["target"])

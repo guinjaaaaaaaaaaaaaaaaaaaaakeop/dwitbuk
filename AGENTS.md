@@ -47,26 +47,3 @@ First establish whether the person wants to use dwitbuk or to change it.
      mismatch to reconcile in the declared roles with the person.
   4. Keep personal paths, secrets and logins in machine-local files (`hunsu.local.json`, the hosts' local settings),
      never in committed ones. Add no setup script or host dependency mechanism of your own.
-
-## Keeping the model
-
-The mangsang model in `mangsang/` covers only the contracts and files [MODEL.md](MODEL.md) lists, not the whole source.
-That bound is deliberate. Files outside it stay unregistered on purpose. In the payload and the root suites, each is
-named in a `registered` invariant's `except` with its reason (MODEL.md), so `check` prints no unseen line. A
-`registered` failure or an unseen line is a new file nobody classified: register and relate it when it carries a covered
-contract, otherwise except it with a reason. Never leave one standing as expected. Widen the scope only by adding a
-contract as MODEL.md says. Write the model's records only with the installed, locked mangsang engine, never with a
-working checkout.
-
-- Before changing a registered file, run `python3 <mangsang root>/mangsang.py lookup PATH --target .`. The relations
-  it lists belong to the same change.
-- The session that owns or orchestrates a change keeps the net coherent within it. It plans the relation update as its
-  own task after the edit, and that task carries `python3 check_mangsang.py --engine <mangsang root>/mangsang.py` as
-  its check. Covered work is complete when that check passes.
-- A bounded worker (a builder, a test writer, a reviewer) reports the anchors and relations its change affects. It
-  writes or signs model records only when its task contract says so. This guidance adds no write or signing authority
-  to any worker; signatures follow mangsang's operate skill.
-- `check_mangsang.py` checks that the model still holds its required concepts, questions, invariants and
-  projections, then runs the engine's `check`, `cq` and `impact`. It fails when any of them fails or the model is
-  absent.
-- A stale relation is read (`impact --show`) and then reconfirmed or changed; never reconfirm one unread.

@@ -110,7 +110,7 @@ findings is auditable (what did the eyes read?), not a bare word. The worker rea
 read goes beside the verdict as `read` (`files` a Claude session opened with Read/Grep/Glob, `commands` a Codex session ran
 with their exit codes, `answered-before-reading` when the first answer came before any of it), and an accept that read
 nothing of the tree — or only the diff (`git diff`/`status`/`show`/`log`) while the contract names behaviour (the slice has
-tests, or code among its files) — stays an accept with a `non-claims` line saying so: "accepted without reading the tree …"
+tests, or code among its files) — once the required files described below have been opened, stays an accept with a `non-claims` line saying so: "accepted without reading the tree …"
 or "accepted without reading the touched files or the tests: the eyes read the diff only …". A second verifier on
 cache-build (guin-site run a0ec) answered accept first, ran one `git diff`, and answered the same — 607 output tokens on the
 input the first verifier rejected — and the record said only "accept". Declared as the `eyes` role in this plugin's
@@ -126,10 +126,21 @@ characters; files without a git diff are added whole only below 40000 bytes. `no
 lists touched paths whose change is not wholly in that diff, in touched order: their section was cut or lies past the cut,
 or a file without a git diff was too large. The eyes are told to Read them under target.
 
-An accept with recorded reads also names files in `not_in_diff` the eyes did not open in a non-claim:
-"accepted with N touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: `a`, `b`".
-Reading one touched file does not account for the others. `read` (`files`, `commands`, `answered-before-reading`) is a stable
-field of the verdict a runner should keep with it: the evidence the accept's non-claims stand on.
+`must_open`, present only when non-empty, names each touched regular file whose current text the packet does not show
+whole, in touched order. A modified file's diff shows hunks; a large change can be cut; a binary cannot be shown as text.
+Small files dumped whole and uncut new-file text diffs need no separate opening. Deleted files and directories are not
+in the list. The eyes are told to open every file in `must_open` under target before accepting, including on a recheck.
+Opening means Read or Grep of that file, or a command that ran successfully (or has no recorded exit) and has a shell
+word that, taken relative to the target unless absolute, resolves by real path to that file (`./a.py` and an absolute
+or real path count). Git's view of the change, an echo or a listing does not count; nor does a directory search or Glob.
+
+An accept whose recorded session did not open each required file is not an accept: `verdict: null`, `answered: "accept"`,
+`unread` listing those paths, no findings, and a summary starting `not an accept:` that names them in backticks and keeps
+the earlier summary. chongdae asks the verifier again. With no recorded session nothing counts as opened, and the summary
+says so. A reject with a grounded, founded finding is unchanged. Once every required file was opened, or there are none,
+the accept and its non-claims stand as described above.
+`read` (`files`, `commands`, `answered-before-reading`) is a stable field a runner should keep with the verdict:
+the recorded evidence for the required openings and the accept's non-claims.
 
 `tests_non_claims` reaches the eyes as `{"whose": "the tests writer's statements about its own tests — not the builder's
 report …", "statements": {task: [sentence, …]}}`, and the instructions say a finding about the builder may not quote it as
@@ -140,7 +151,7 @@ file `where` names. A span found nowhere, or only in another hand's field (`test
 names `built`, makes the finding unfounded; so does a `claim-unverified` about a command `checked` shows chongdae ran with
 exit 0 and nothing changed since, unless it quotes the contract sentence the check is said not to decide. Unfounded
 findings leave the verdict's grounds and stay visible under `unfounded` (each with why); a reject that rested only on them
-is an accept, said in `summary`.
+is counted as accept, said in `summary`, subject to the required openings above.
 
 `checked` (from chongdae, stable): a list of `{"command": "python3 tests/run.py --all", "exit": 0, "tail": [last lines],
 "at": time, "changed_since": [files changed after it ran]}`, plus `"expect": "fail"` and `"outcome"` on an expected red run
@@ -226,12 +237,13 @@ carried as `undisposed` (only when that reporter answered this review; one that 
 A reporter that reads events over a range (a run's record since a commit) does not say it, and its findings are carried
 as before. An eyes finding stands on quotes from both sides, or — an `anomaly` — on the tree alone: one rule, for the
 review and for the verifier. A verify request's `excluded` (files under the record paths the runner left out of
-`touched`; a task whose scope names them has them in `touched`) reaches the eyes with its diff and a sentence:
-the runner left them out — no record-vs-tree finding;
-when the task's work is that change (update a plugin, lock the environment), it is verified as the slice's work. A verify
+`touched`) sends their names to the eyes, never their changes. They are not this task's work and may be another
+open task's; a task whose work is a record change scopes it and has it in `touched`, with its diff. A change in an
+excluded file is not an undeclared edit or a record-vs-tree finding, and the eyes do not verify it here. A verify
 request with `recheck` (the last reject's findings, the files changed since)
 is a re-verification: the eyes check that each finding is resolved and that what changed breaks no contract sentence,
-and do not re-read what they read at the last verdict for new findings.
+and do not re-read what they read at the last verdict for new findings. An accepting session still opens every
+file in `must_open`.
 A verify request's `since` — the commit each repository the work is in started from, the project's (`.`) and any nested
 one's by its path (`engine`) — is where the diff starts: each touched file is diffed in its own repository from there, so
 work committed during the task is in the diff (`git diff HEAD` showed it as nothing and the file as new; sagoforce 10-26:
@@ -332,7 +344,7 @@ worker never ran.
   disposal written for the cut form (before 1.13.0) answers the whole sentence.
 
 - `eyes_worker.py` starts its host session through `hostcall.py` — one host call for every worker of this family (hunsu's judge, mangsang's judge, dwitbuk's eyes,
-  hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The umbrella checkout's `tools/same-file.py` says when the copies drift.
+  hacheong's members), vendored: the same file in each plugin, since a plugin imports no other plugin. The maintainers' copy check says when the copies drift.
   Each worker child starts as its own host (`AGENT_HOST=claude-code` or `codex`, `AGENT_WORKER=1`), without the parent
   session's ids (`CODEX_THREAD_ID`, `CLAUDE_CODE_SESSION_ID`, `CHONGDAE_SESSION`, …); the rest of the environment is kept.
 
@@ -363,3 +375,7 @@ and `source.review`, a review's `eyes-of`, the `plugin-version` finding, and [pl
 2.2.1 changes behavior only: no catalog outside a folder chooses its plugin root — a child that leaves the folder by real
 path is used as named without reading its catalog, and a name that is not one path component makes no child or Codex
 cache path (see [Plugin roots](#plugin-roots)).
+2.3.0 adds the verify packet's `must_open` and an answer's `answered` and `unread`, and changes what an accept is: one
+whose recorded session left a `must_open` file unopened comes back with no verdict, and the 2.2.0 unread non-claim is no
+longer written (see [as chongdae's `verifier`](#as-chongdaes-verifier)). A verify packet no longer carries
+`excluded_diff`: the excluded record paths reach the eyes by name, never with another task's changes.

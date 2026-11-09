@@ -8,10 +8,12 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))   # the source checkout: these tests, the project's records
 PLUGIN = os.path.join(HERE, "plugin")   # the installed payload: what the tests exercise
@@ -87,7 +89,7 @@ def kinds(review):
 
 
 
-class Skip(Exception):
+class Skip(unittest.SkipTest):
     """Raised by a test that cannot run on this host; the runner reports it as SKIP, never as PASS."""
 
 
@@ -851,9 +853,13 @@ def test_verify_packet_carries_contract_touched_diff_and_the_builders_report():
         subprocess.run(["git", "add", "-A"], cwd=pj.dir, check=True)
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], cwd=pj.dir, check=True)
         write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": {"mangsang": {}}}\n')
+        # (11-09, D2: the packet names what was left out and holds none of its changes — another open task's, maybe)
         env = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["hunsu.json", ".chongdae/run-1/state.json"]}))
-        assert env["touched"] == [] and env["excluded"] == ["hunsu.json"] and '+{"plugins": {"mangsang": {}}}' in env["excluded_diff"], env.get("excluded_diff")
-        assert "by rule, not by omission" in env["instructions"] and "no record-vs-tree finding" in env["instructions"]
+        assert env["touched"] == [] and env["excluded"] == ["hunsu.json"], env.get("excluded")
+        assert "excluded_diff" not in env and '{"mangsang": {}}' not in json.dumps(env), sorted(env)
+        assert "by rule" in env["instructions"] and "no record-vs-tree finding" in env["instructions"]
+        assert "not this task's changes" in env["instructions"] and "none of their changes" in env["instructions"], env["instructions"]
+        assert "excluded_diff" not in env["instructions"], env["instructions"]
         # a re-verification: the last reject's findings and what changed since — the verifier checks those, not the whole slice again
         prior = [{"kind": "plan-vs-code", "where": "a.py", "record_quote": "prints one line", "tree_quote": "x = 2", "why": "two lines"}]
         p = dwitbuk.verify_packet(dict(req, recheck={"findings": prior, "changed_since": ["a.py"]}))
@@ -1093,18 +1099,34 @@ def test_a_verifier_finding_whose_quote_is_another_hands_or_nowhere_is_unfounded
         try:
             reqf, resp = os.path.join(d, "req.json"), os.path.join(d, "resp.json")
             write(reqf, req)
+            # (11-09, D1-3: a.py is modified, so in must_open; the eyes' session Read it, else the accept would not stand)
+            opened = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": pj.dir + "/a.py"}}]}})
             def fake(packet, schema, args):
                 assert packet["tests_non_claims"]["whose"] == dwitbuk.TESTS_NON_CLAIMS_WHOSE
+                assert packet.get("must_open") == ["a.py"], packet.get("must_open")
+                write(os.path.join(os.path.dirname(args.response), "resp.transcript.jsonl"), opened + "\n")
+                return {"verdict": "reject", "findings": [mis], "summary": "s", "worker": {"host": "claude-code", "model": "m", "transcript": "resp.transcript.jsonl"}}
+            def unrecorded(packet, schema, args):
                 return {"verdict": "reject", "findings": [mis], "summary": "s"}
-            old_claude, old_argv = w.claude, sys.argv
-            w.claude, sys.argv = fake, ["eyes_worker.py", "--request", reqf, "--response", resp]
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    assert w.main() == 0
-            finally:
-                w.claude, sys.argv = old_claude, old_argv
-            got = json.load(io.open(resp, encoding="utf-8"))
+            def worker(host):
+                old_claude, old_argv = w.claude, sys.argv
+                w.claude, sys.argv = host, ["eyes_worker.py", "--request", reqf, "--response", resp]
+                try:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        assert w.main() == 0
+                finally:
+                    w.claude, sys.argv = old_claude, old_argv
+                return json.load(io.open(resp, encoding="utf-8"))
+            got = worker(fake)
             assert got["verdict"] == "accept" and got["findings"] == [] and got["unfounded"][0]["unfounded"].startswith("quotes `I did not run"), got
+            assert got["read"]["files"] == ["Read %s/a.py" % pj.dir] and "unread" not in got and "answered" not in got, got
+            # with no transcript what the eyes opened is not on record: the reject-on-unfounded, counted as accept, is not an accept
+            got = worker(unrecorded)
+            assert "verdict" in got and got["verdict"] is None and got["answered"] == "accept" and got["unread"] == ["a.py"] and got["findings"] == [], got
+            assert got["unfounded"][0]["unfounded"].startswith("quotes `I did not run") and "read" not in got, got
+            assert got["summary"].startswith("not an accept:") and "`a.py`" in got["summary"] and "not on record" in got["summary"], got["summary"]
+            assert "counted as accept" in got["summary"], got["summary"]
+            assert not [n for n in got.get("non-claims") or [] if n.startswith("accepted")], got.get("non-claims")
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
@@ -1980,8 +2002,12 @@ def test_Q_strict_sites_verify_packet_gives_touched_and_excluded_to_git_literall
         assert p["touched"] == ["x[1].json"] and '+"new bracket"' in p["diff"], p["diff"]
         assert '"new one"' not in p["diff"] and "x1.json" not in p["diff"], "x[1].json is literal, never the glob that selects x1.json: " + p["diff"]
         env = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["x[1].json"]}))
-        assert env["excluded"] == ["x[1].json"] and '+"new bracket"' in env["excluded_diff"], env.get("excluded_diff")
-        assert '"new one"' not in env["excluded_diff"] and "x1.json" not in env["excluded_diff"], env["excluded_diff"]
+        assert env["excluded"] == ["x[1].json"] and "excluded_diff" not in env, sorted(env)   # 11-09, D2: the name, none of its changes
+        text = json.dumps(env)
+        assert '"new bracket"' not in text and '"new one"' not in text and "x1.json" not in text, text
+        # path_diff (the late-eyes request's) still takes the excluded name literally
+        pd = dwitbuk.path_diff(pj.dir, ["x[1].json"], ("HEAD",), cut=40000)
+        assert '+"new bracket"' in pd and '"new one"' not in pd and "x1.json" not in pd, pd
 
 
 def test_Q_strict_sites_source_state_changes_with_children_of_a_replaced_file():
@@ -2545,13 +2571,14 @@ def test_Q_review_fixes_excluded_diff_of_a_bare_entry_holds_nothing_under_a_dire
                "touched": [], "since": {".": dirs_base}, "excluded": {"record-paths": ["hunsu.json", "custom-record.json"]}}
         env = dwitbuk.verify_packet(req)
         assert sorted(env["excluded"]) == ["custom-record.json", "hunsu.json"], env.get("excluded")
-        ed = env.get("excluded_diff") or ""
+        assert "excluded_diff" not in env, sorted(env)   # 11-09, D2: the packet holds no diff of the excluded paths
+        assert "hchild" not in json.dumps(env) and "cchild" not in json.dumps(env), json.dumps(env)
+        ed = dwitbuk.path_diff(pj.dir, ["hunsu.json", "custom-record.json"], ("HEAD",), cut=40000)
         assert "child.py" not in ed and "hchild" not in ed and "cchild" not in ed, \
             "a bare entry names only that file, never files under a directory that took its name: " + ed
         both = dwitbuk.verify_packet(dict(req, touched=["hunsu.json/child.py", "custom-record.json/child.py"]))
         assert "+hchild = 2" in both["diff"] and "+cchild = 2" in both["diff"], "they are source, in diff when touched: " + both["diff"]
-        ed = both.get("excluded_diff") or ""
-        assert "child.py" not in ed and "hchild" not in ed and "cchild" not in ed, ed
+        assert "excluded_diff" not in both, sorted(both)
 
 
 def test_Q_review_fixes_excluded_diff_of_a_trailing_slash_entry_shows_its_files_and_a_bare_file_its_own():
@@ -2566,8 +2593,11 @@ def test_Q_review_fixes_excluded_diff_of_a_trailing_slash_entry_shows_its_files_
             write(os.path.join(pj.dir, rel), '"new %s"\n' % rel)
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": [], "since": {".": since}, "excluded": {"record-paths": ["alpha/", "notes.json"]}}
-        ed = dwitbuk.verify_packet(req).get("excluded_diff") or ""
-        assert '+"new alpha/x.json"' in ed and '+"new alpha/deep/y.json"' in ed, "an entry ending in / shows that directory's files: " + ed
+        env = dwitbuk.verify_packet(req)
+        assert env["excluded"] == ["alpha/", "notes.json"] and "excluded_diff" not in env, sorted(env)   # 11-09, D2
+        assert "new alpha" not in json.dumps(env) and "new notes" not in json.dumps(env), json.dumps(env)
+        ed = dwitbuk.path_diff(pj.dir, ["alpha/x.json", "alpha/deep/y.json", "notes.json"], ("HEAD",), cut=40000)
+        assert '+"new alpha/x.json"' in ed and '+"new alpha/deep/y.json"' in ed, "the directory's files, each its own section: " + ed
         assert '+"new notes.json"' in ed, "a bare entry that is a file shows that file: " + ed
         assert "notes.json.bak" not in ed, "and nothing beside it: " + ed
 
@@ -2782,13 +2812,14 @@ def test_Q_exact_sections_excluded_diff_of_a_bare_entry_replaced_by_a_directory_
                "touched": [], "since": {".": head}, "excluded": {"record-paths": ["custom-record.json"]}}
         env = dwitbuk.verify_packet(req)
         assert env.get("excluded") == ["custom-record.json"], env.get("excluded")
-        ed = env.get("excluded_diff") or ""
+        assert "excluded_diff" not in env and "recmark" not in json.dumps(env) and "cchild" not in json.dumps(env), json.dumps(env)   # 11-09, D2
+        ed = dwitbuk.path_diff(pj.dir, ["custom-record.json"], ("HEAD",), cut=40000)
         files = diff_files(ed)
         assert files.get("custom-record.json") == "deleted" and '-{"recmark": 1}' in ed, "the file's deletion: %r\n%s" % (files, ed)
         assert list(files) == ["custom-record.json", "a:custom-record.json"], "that path's section only: %r\n%s" % (files, ed)
         assert "child.py" not in ed and "cchild" not in ed, "nothing of the staged child.py: " + ed
         # the second call gives the same text
-        assert (dwitbuk.verify_packet(req).get("excluded_diff") or "") == ed
+        assert dwitbuk.path_diff(pj.dir, ["custom-record.json"], ("HEAD",), cut=40000) == ed
 
 
 def test_Q_exact_sections_a_batch_boundary_between_foo_and_foo_child_gives_each_section_once():
@@ -3016,15 +3047,18 @@ def test_Q_git_config_verify_packet_excluded_diff_is_the_same_text_whatever_the_
         changed_gitlink(nested)
         req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                "touched": ["src.py", "lib"], "since": {".": since}, "excluded": {"record-paths": ["recs/", "notes.json"]}}
-        def produce():
-            return dwitbuk.verify_packet(req).get("excluded_diff") or ""
+        env = dwitbuk.verify_packet(req)
+        assert env["excluded"] == ["recs/", "notes.json"] and "excluded_diff" not in env, sorted(env)   # 11-09, D2: no diff of the excluded paths
+        assert "new notes" not in json.dumps(env) and "new recs" not in json.dumps(env), json.dumps(env)
+        def produce():   # the diff the late-eyes request takes of these records, through path_diff
+            return dwitbuk.path_diff(pj.dir, ["notes.json", "recs/x.json", "recs/deep/y.json"], ("HEAD",), cut=40000)
         old_cwd = os.getcwd()
         os.chdir(os.path.join(pj.dir, "recs"))   # a caller standing in a subdirectory: diff.relative has something to bite on
         try:
             plain, configured = plain_and_configured(produce)
         finally:
             os.chdir(old_cwd)
-        assert plain, "excluded_diff is not empty"
+        assert plain, "the records' diff is not empty"
         sections_once(plain, ("notes.json", "recs/x.json", "recs/deep/y.json"))
         assert '+"new notes.json"' in plain and "srcmark" not in plain, plain
         assert "\x1b[" not in configured, "no colour: %r" % configured
@@ -3193,15 +3227,17 @@ def test_Q_conflict_verify_packet_excluded_diff_fails_rather_than_returning_part
             write(os.path.join(pj.dir, "notes.json"), '"new notes"\n')
             req = {"artifact-type": "chongdae/request@1", "stage": "verify", "target": pj.dir, "task": "T", "brief": "b", "contract": {}, "checks": [], "tests": [],
                    "touched": [], "since": {".": since}, "excluded": {"record-paths": ["notes.json"]}}
-            assert '+"new notes"' in (dwitbuk.verify_packet(req).get("excluded_diff") or ""), "control: the record's own section"
+            env = dwitbuk.verify_packet(req)
+            assert env["excluded"] == ["notes.json"] and "excluded_diff" not in env and "new notes" not in json.dumps(env), json.dumps(env)   # 11-09, D2
+            assert '+"new notes"' in dwitbuk.path_diff(pj.dir, ["notes.json"], ("HEAD",), cut=40000), "control: the record's own section"
             got, failure = None, None
             with unattributable_git(case) as seen:
                 try:
-                    got = dwitbuk.verify_packet(req)
+                    got = dwitbuk.path_diff(pj.dir, ["notes.json"], ("HEAD",), cut=40000)
                 except (Exception, SystemExit) as err:
                     failure = err
             assert seen, "%s: a real diff call was made and carried the extra text" % case
-            assert failure is not None, "%s: excluded_diff fails, not partial text: %r" % (case, (got or {}).get("excluded_diff"))
+            assert failure is not None, "%s: path_diff fails, not partial text: %r" % (case, got)
             assert clear_about_it(str(failure)), "%s: a clear error that says what could not be attributed: %r" % (case, failure)
 
 
@@ -3444,9 +3480,12 @@ def test_Q_bounded_excluded_diff_invokes_no_git_diff_batch_after_the_one_whose_s
                "touched": [], "since": {".": since}, "excluded": {"record-paths": list(names)}}
         with batch_bytes(limit), counted_subprocess_diffs() as seen:
             env = dwitbuk.verify_packet(req)
-        ed = env.get("excluded_diff") or ""
+        assert env["excluded"] == list(names) and "excluded_diff" not in env, sorted(env)   # 11-09, D2
+        assert not [a for a, n in seen if any("notes/" in x for x in a)], "verify_packet runs no git diff for the excluded paths: %r" % [a for a, n in seen]
+        with batch_bytes(limit), counted_subprocess_diffs() as seen:
+            ed = dwitbuk.path_diff(pj.dir, list(names), ("HEAD",), cut=40000)   # the late-eyes request's diff of them, bounded as before
         assert ed.startswith("diff --git a/%s b/%s\n" % (names[0], names[0])), ed[:200]
-        assert 0 < len(ed) <= 40000, "cut at 40000: %d" % len(ed)
+        assert 0 < len(ed) <= 40000 + 1, "cut at 40000 (path_diff keeps one character past it so a caller can say it was cut): %d" % len(ed)
         assert want.startswith(ed), "the cut text is the start of git's text"
         headers = re.findall(r"^diff --git a/(.*) b/", ed, re.M)
         assert len(headers) == len(set(headers)), headers
@@ -4047,40 +4086,67 @@ def unread_project(pj):
 UNREAD_BIG = "accepted with 1 touched file(s) left unread — neither whole in the packet's diff nor opened by the eyes: `big.py`"
 
 
+
 def test_D2_unread_touched_names_the_not_in_diff_files_the_eyes_did_not_open():
+    """11-06 D2, amended 11-09 (D1-3): unread_touched works over `must_open`, in its order; with no session on record every
+    must_open path is unread; a command opens a file by D1-3's rule (a whole token, a part that is not git's view, an echo
+    or a listing, and that ran)."""
     assert callable(getattr(w, "unread_touched", None)), "eyes_worker.unread_touched is missing"
     with Project() as pj:
-        packet = dict(dwitbuk.verify_packet(unread_project(pj)), not_in_diff=["big.py"])   # D2 alone: not_in_diff as D1 will give it
+        packet = dict(dwitbuk.verify_packet(unread_project(pj)), must_open=["big.py"])   # the rule alone: must_open as D1-1 would give it for big.py
         big, small = pj.dir + "/big.py", pj.dir + "/small.py"
         def ut(files=(), commands=()):
             return w.unread_touched({"files": list(files), "commands": list(commands)}, packet)
-        assert w.unread_touched(None, packet) == [], "not on record: the existing non-claim says so"
+        assert w.unread_touched(None, packet) == ["big.py"], "not on record: every must_open path is unread"
         assert ut() == ["big.py"]
         assert ut(["Read %s" % small]) == ["big.py"], "small.py read, big.py not"
         assert ut(["Read %s" % big]) == [], "absolute under the target"
         assert ut(["Read big.py"]) == [], "relative to the target"
+        assert ut(["Read %s" % os.path.realpath(big)]) == [], "the real path"
         assert ut(["Grep %s" % big]) == [], "a Grep of the file opens it"
         assert ut(["Grep %s" % pj.dir]) == ["big.py"], "a Grep of the directory opens none under it"
         assert ut(["Glob %s" % pj.dir]) == ["big.py"], "a Glob of the directory opens none under it"
+        assert ut(["Glob %s" % big]) == ["big.py"], "a Glob opens nothing"
         assert ut(["Read %s/big.py.bak" % pj.dir]) == ["big.py"], "another file's path is not this one"
         assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": 0}]) == []
         assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": None}]) == [], "exit None: it ran"
         assert ut(commands=[{"command": "sed -n '1,80p' big.py", "exit": 1}]) == ["big.py"], "a failed command read nothing"
         assert ut(commands=[{"command": "cat %s" % big, "exit": 0}]) == [], "absolute under the target"
+        assert ut(commands=[{"command": "cat %s" % os.path.realpath(big), "exit": 0}]) == [], "the real path"
         assert ut(commands=[{"command": "cat old_big.py", "exit": 0}]) == ["big.py"], "not a whole token"
         assert ut(commands=[{"command": "cat big.py.orig", "exit": 0}]) == ["big.py"], "not a whole token"
         assert ut(commands=[{"command": "rg -n big_ .", "exit": 0}]) == ["big.py"], "a search of the directory opens none"
-        # in the packet's touched order, and only what not_in_diff names
-        three = dict(packet, touched=["small.py", "big.py", "c.py"], not_in_diff=["c.py", "big.py"])
+        for view in ("git diff -- big.py", "git diff --stat HEAD -- big.py", "git show HEAD:big.py", "git log -- big.py", "git status -- big.py"):
+            assert ut(commands=[{"command": view, "exit": 0}]) == ["big.py"], "git's view of the change opens nothing: " + view
+        for says in ("echo big.py", "printf '%s' big.py", "cd big.py", "true big.py", "pwd big.py"):
+            assert ut(commands=[{"command": says, "exit": 0}]) == ["big.py"], "an echo opens nothing: " + says
+        for lists in ("ls big.py", "ls -l big.py", "stat big.py", "wc -l big.py", "test -f big.py", "[ -f big.py ]", "file big.py", "du big.py", "find . -name big.py"):
+            assert ut(commands=[{"command": lists, "exit": 0}]) == ["big.py"], "a listing opens nothing: " + lists
+        assert ut(commands=[{"command": "git diff -- big.py && cat big.py", "exit": 0}]) == [], "a part after && counts on its own"
+        assert ut(commands=[{"command": "ls big.py; sed -n 1,5p big.py", "exit": 0}]) == [], "a part after ; counts on its own"
+        assert ut(commands=[{"command": "git show HEAD:big.py || head big.py", "exit": 0}]) == [], "a part after || counts on its own"
+        assert ut(commands=[{"command": "echo big.py\ncat big.py", "exit": 0}]) == [], "a part on the next line counts on its own"
+        assert ut(commands=[{"command": "cat big.py | head", "exit": 0}]) == [], "a part before | counts on its own"
+        assert ut(commands=[{"command": "git diff -- big.py && cat big.py", "exit": 1}]) == ["big.py"], "a failed command opened nothing"
+        # in must_open's order, and only what must_open names
+        three = dict(packet, touched=["small.py", "big.py", "c.py"], must_open=["big.py", "c.py"])
         assert w.unread_touched({"files": [], "commands": []}, three) == ["big.py", "c.py"]
-        whole = {k: v for k, v in packet.items() if k != "not_in_diff"}
-        assert w.unread_touched({"files": [], "commands": []}, whole) == [], "nothing outside the diff: nothing unread"
+        assert w.unread_touched({"files": ["Read big.py"], "commands": []}, three) == ["c.py"]
+        assert w.unread_touched(None, three) == ["big.py", "c.py"]
+        whole = {k: v for k, v in packet.items() if k != "must_open"}
+        assert w.unread_touched({"files": [], "commands": []}, whole) == [], "nothing to open: nothing unread"
+        assert w.unread_touched(None, whole) == [], "nothing to open: nothing unread, even with no record"
+
 
 
 def test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_is_untouched():
+    """11-06 D2, amended 11-09 (D1-3): small.py (modified) and big.py (not in the diff) are both in must_open; an accept that
+    left either unread is not an accept (verdict null, answered accept, the unread named); reading both is an accept with
+    no non-claim; the 2.2.x "left unread" non-claim is never written; a reject is untouched."""
     assert callable(getattr(w, "unread_touched", None)), "eyes_worker.unread_touched is missing"
     with Project() as pj:
         req = unread_project(pj)
+        assert dwitbuk.verify_packet(req).get("must_open") == ["small.py", "big.py"], dwitbuk.verify_packet(req).get("must_open")
         reqf, resp = os.path.join(pj.dir, "local", "req.json"), os.path.join(pj.dir, "local", "resp.json")
         write(reqf, req)
         verdict = '{"verdict":"accept","findings":[]}'
@@ -4094,9 +4160,11 @@ def test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_i
         streams = {
             "read-small": [claude_tool("Read", file_path=pj.dir + "/small.py"), said],
             "read-big": [claude_tool("Read", file_path=pj.dir + "/big.py"), said],
+            "read-both": [claude_tool("Read", file_path=pj.dir + "/small.py"), claude_tool("Read", file_path=pj.dir + "/big.py"), said],
             "grep-dir": [claude_tool("Grep", pattern="big_", path=pj.dir), said],
             "sed-ok": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' big.py"), aggregated_output="big_00000 = 0", exit_code=0),
-                       codex_item(1, "agent_message", text=verdict)],
+                       codex_item(1, "command_execution", command=shell("cat small.py"), aggregated_output="small = 2", exit_code=0),
+                       codex_item(2, "agent_message", text=verdict)],
             "sed-failed": [codex_item(0, "command_execution", command=shell("sed -n '1,80p' big.py"), aggregated_output="", exit_code=1),
                            codex_item(1, "agent_message", text=verdict)],
         }
@@ -4112,25 +4180,612 @@ def test_D2_an_accept_that_left_a_big_touched_file_unread_says_so_and_a_reject_i
             finally:
                 w.codex, sys.argv = old_codex, old_argv
             return json.load(io.open(resp, encoding="utf-8"))
-        got = answer("read-small")
-        assert got["verdict"] == "accept" and got["read"]["files"] == ["Read %s/small.py" % pj.dir], got
-        assert got.get("non-claims") == [UNREAD_BIG], got.get("non-claims")
-        assert "small.py" not in got["non-claims"][0]
-        got = answer("read-big")
-        assert "non-claims" not in got and got["read"]["files"] == ["Read %s/big.py" % pj.dir], got
-        got = answer("grep-dir")   # a Grep over the directory opens none of the files under it
-        assert UNREAD_BIG in (got.get("non-claims") or []), got
+        def not_an_accept(got, unread):
+            assert "verdict" in got and got["verdict"] is None and got.get("answered") == "accept" and got.get("findings") == [], got
+            assert got.get("unread") == unread and "read" in got, got
+            assert got["summary"].startswith("not an accept:") and all("`%s`" % p in got["summary"] for p in unread), got["summary"]
+            assert not [n for n in got.get("non-claims") or [] if n.startswith("accepted") or "left unread" in n], got.get("non-claims")
+            assert UNREAD_BIG not in (got.get("non-claims") or []), "the 2.2.x non-claim is never written any more"
+            return got
+        got = not_an_accept(answer("read-small"), ["big.py"])
+        assert got["read"]["files"] == ["Read %s/small.py" % pj.dir], got
+        assert "`small.py`" not in got["summary"], got["summary"]
+        got = not_an_accept(answer("read-big"), ["small.py"])
+        assert got["read"]["files"] == ["Read %s/big.py" % pj.dir], got
+        got = answer("read-both")
+        assert got["verdict"] == "accept" and "non-claims" not in got and "unread" not in got and "answered" not in got, got
+        assert got["read"]["files"] == ["Read %s/small.py" % pj.dir, "Read %s/big.py" % pj.dir], got["read"]
+        not_an_accept(answer("grep-dir"), ["small.py", "big.py"])   # a Grep over the directory opens none of the files under it
         got = answer("sed-ok")
-        assert "non-claims" not in got and got["read"]["commands"][0]["command"].startswith("sed -n") and got["read"]["commands"][0]["exit"] == 0, got
-        got = answer("sed-failed")   # beside unread_accept's own, in its exact wording
-        nc = got.get("non-claims") or []
-        assert UNREAD_BIG in nc and len(nc) == 2, nc
-        assert [n for n in nc if n.startswith("accepted without reading the tree: the eyes opened no file and ran no command")], nc
+        assert got["verdict"] == "accept" and "non-claims" not in got and "unread" not in got, got
+        assert got["read"]["commands"][0]["command"].startswith("sed -n") and got["read"]["commands"][0]["exit"] == 0, got
+        got = not_an_accept(answer("sed-failed"), ["small.py", "big.py"])   # a failed command opened nothing — and no "accepted without reading the tree"
+        assert "non-claims" not in got, got.get("non-claims")
         anomaly = {"kind": "anomaly", "where": "small.py", "record_quote": "", "tree_quote": "small = 2", "why": "odd"}
         got = answer("read-small", "reject", [anomaly])
         assert got["verdict"] == "reject" and "non-claims" not in got and "read" not in got, got
+        assert "unread" not in got and "answered" not in got and got["findings"] == [anomaly], got
 
 
+# --- 11-09 V1: an accept stands only when the eyes opened every changed file the packet did not show whole -----------------
+# 11-09, dwitbuk 2.2.1: three files changed by small edits (every change in the diff as hunks); the verifier opened only
+# mod_a.py and said accept; the record said `"verdict": "accept"` with no non-claim at all. The packet now names in
+# `must_open` each touched file whose current text it does not hold whole, and an accept that left one unread is no accept.
+
+def v1_project(pj, touched=None, **kw):
+    """Three tracked files, each then changed by one small edit: every change is in the diff as hunks, no file whole."""
+    for n in ("mod_a.py", "mod_b.py", "mod_c.py"):
+        write(os.path.join(pj.dir, n), "%s = 1\nkeep = True\n" % n[:-3])
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "three files")
+    since = git(pj.dir, "rev-parse", "HEAD")
+    for n in ("mod_a.py", "mod_b.py", "mod_c.py"):
+        write(os.path.join(pj.dir, n), "%s = 2\nkeep = True\n" % n[:-3])
+    return verify_req(pj, touched or ["mod_a.py", "mod_b.py", "mod_c.py"], since, brief="three small edits",
+                      contract={"Q-three": "## Q-three\n\neach constant is two"}, checks=[["python3", "t.py"]], tests=["t.py"],
+                      built={"summary": "built", "verified": [], "non-claims": []}, **kw)
+
+
+V1_VERDICT = '{"verdict":"accept","findings":[]}'
+
+
+def v1_read(path):
+    """A Claude session's Read of `path` (absolute or relative to the target), as the host streams it."""
+    return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t-read", "name": "Read", "input": {"file_path": path}}]}})
+
+
+def v1_tool(name, **inp):
+    return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t-" + name, "name": name, "input": inp}]}})
+
+
+def v1_said(text=V1_VERDICT):
+    return json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}})
+
+
+def v1_ran(command, exit_code=0, n=0):
+    """A Codex session's command, as the host streams it: the argument of a login shell, with its exit code."""
+    return json.dumps({"type": "item.completed", "item": {"id": "item_%d" % n, "type": "command_execution", "command": "/bin/zsh -lc " + shlex.quote(command),
+                                                           "aggregated_output": "", "exit_code": exit_code}})
+
+
+def v1_answer(pj, req, events, verdict="accept", findings=(), transcript="resp.transcript.jsonl", summary=None, fail=None):
+    """eyes_worker.main on `req` through a fake host that writes `events` (None: no transcript at all) beside the response and
+    answers `verdict`/`findings` with a worker record naming `transcript` (None: no transcript key); the saved response."""
+    reqf, resp = os.path.join(pj.dir, "local", "req.json"), os.path.join(pj.dir, "local", "resp.json")
+    write(reqf, req)
+    for stale in (resp, os.path.join(pj.dir, "local", "resp.transcript.jsonl")):
+        if os.path.exists(stale):
+            os.unlink(stale)
+    def fake(packet, schema, args):
+        if fail:
+            raise SystemExit(fail)
+        if events is not None:
+            write(os.path.join(os.path.dirname(args.response), "resp.transcript.jsonl"), "\n".join(events) + "\n")
+        worker = {"host": "codex", "model": "m", **({"transcript": transcript} if transcript else {})}
+        return {"verdict": verdict, "findings": list(findings), **({"summary": summary} if summary else {}), "worker": worker}
+    old_codex, old_argv = w.codex, sys.argv
+    w.codex, sys.argv = fake, ["eyes_worker.py", "--request", reqf, "--response", resp, "--host", "codex"]
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert w.main() == 0
+    finally:
+        w.codex, sys.argv = old_codex, old_argv
+    return json.load(io.open(resp, encoding="utf-8"))
+
+
+def v1_not_an_accept(got, unread, on_record=True):
+    """D1-3: the shape of an answer the eyes called accept while a `must_open` file went unread."""
+    assert "verdict" in got and got["verdict"] is None, got
+    assert got.get("answered") == "accept", got
+    assert got.get("unread") == list(unread), got
+    assert got.get("findings") == [], got
+    assert ("read" in got) == on_record, got
+    summary = got.get("summary") or ""
+    assert summary.startswith("not an accept:"), summary
+    for path in unread:
+        assert "`%s`" % path in summary, (path, summary)
+    if not on_record:
+        assert "not on record" in summary, summary
+    assert not [n for n in got.get("non-claims") or [] if n.startswith("accepted")], got.get("non-claims")
+    assert not [n for n in got.get("non-claims") or [] if "left unread" in n], got.get("non-claims")
+    return got
+
+
+def v1_accept(got):
+    """D1-3: an accept that stands — exactly as today, nothing of the not-an-accept shape on it."""
+    assert got.get("verdict") == "accept" and got.get("findings") == [], got
+    assert "unread" not in got and "answered" not in got, got
+    assert not [n for n in got.get("non-claims") or [] if "left unread" in n], got.get("non-claims")
+    return got
+
+
+def test_V1_must_open_names_each_modified_file_and_not_a_file_the_diff_shows_whole():
+    """D1-1: a modified tracked file is in must_open; an untracked small new file (shown as `(new file)`), a file added and
+    committed since `since` (a new-file text diff) and a deleted file are not; when nothing qualifies the key is absent."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "m.py"), "m = 1\n")
+        write(os.path.join(pj.dir, "d.py"), "d = 1\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "c.py"), "c = 'committed since'\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "the task committed a new file")
+        write(os.path.join(pj.dir, "m.py"), "m = 2\n")
+        write(os.path.join(pj.dir, "n.py"), "n = 'untracked, small'\n")
+        os.unlink(os.path.join(pj.dir, "d.py"))
+        p = dwitbuk.verify_packet(verify_req(pj, ["n.py", "m.py", "c.py", "d.py"], since))
+        d = p["diff"]
+        assert "+++ n.py (new file)" in d and "new file mode" in d and "+c = 'committed since'" in d and "deleted file mode" in d and "+m = 2" in d, d
+        assert "not_in_diff" not in p, p.get("not_in_diff")
+        assert p.get("must_open") == ["m.py"], p.get("must_open")
+        assert isinstance(p["must_open"], list)
+        q = dwitbuk.verify_packet(verify_req(pj, ["n.py", "c.py", "d.py"], since))
+        assert "must_open" not in q, q.get("must_open")   # every file whole or gone: no key, as not_in_diff has none
+        assert "not_in_diff" not in q
+
+
+def test_V1_must_open_holds_the_files_not_in_diff_and_binary_changes_in_touched_order():
+    """D1-1: a big untracked new file (in not_in_diff), a file whose diff is cut by the 80000 limit, a binary change (modified,
+    or new in a new-file binary diff) and every modified file are in must_open, in touched order, each once; not_in_diff keeps
+    its meaning and its key beside it."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "a_small.py"), "small = 'before'\n")
+        write(os.path.join(pj.dir, "b_huge.py"), "huge = 0\n")
+        write(os.path.join(pj.dir, "c_after.py"), "after = 'before'\n")
+        with open(os.path.join(pj.dir, "bin_mod.dat"), "wb") as fh:
+            fh.write(b"\x00\x01binary-before\x00\n" * 50)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        with open(os.path.join(pj.dir, "bin_new.dat"), "wb") as fh:
+            fh.write(b"\x00\x02binary-new\x00\n" * 50)
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "a binary file added since")
+        write(os.path.join(pj.dir, "a_small.py"), "small = 'after'\n")
+        write(os.path.join(pj.dir, "b_huge.py"), "".join("huge_%05d = %d  # a long line of the huge change\n" % (i, i) for i in range(2500)))
+        write(os.path.join(pj.dir, "c_after.py"), "after = 'after'\n")
+        write(os.path.join(pj.dir, "d_big_new.txt"), "big new file line\n" * 3000)   # 54000 bytes, untracked: git has no diff
+        write(os.path.join(pj.dir, "n.py"), "n = 'small and new'\n")
+        with open(os.path.join(pj.dir, "bin_mod.dat"), "wb") as fh:
+            fh.write(b"\x00\x03binary-after\x00\n" * 50)
+        assert os.path.getsize(os.path.join(pj.dir, "b_huge.py")) > 80000 and os.path.getsize(os.path.join(pj.dir, "d_big_new.txt")) >= 40000
+        touched = ["d_big_new.txt", "n.py", "bin_new.dat", "a_small.py", "bin_mod.dat", "b_huge.py", "c_after.py"]
+        p = dwitbuk.verify_packet(verify_req(pj, touched, since))
+        assert p["touched"] == touched
+        assert "Binary files" in p["diff"] and "+++ n.py (new file)" in p["diff"], p["diff"][:600]
+        nid = p.get("not_in_diff")
+        assert isinstance(nid, list) and set(nid) == {"d_big_new.txt", "b_huge.py", "c_after.py"}, nid   # unchanged beside must_open
+        assert p.get("must_open") == ["d_big_new.txt", "bin_new.dat", "a_small.py", "bin_mod.dat", "b_huge.py", "c_after.py"], p.get("must_open")
+        # the same files touched in another order: must_open follows touched, and names each path once
+        shuffled = ["c_after.py", "a_small.py", "a_small.py", "bin_mod.dat", "n.py", "d_big_new.txt"]
+        q = dwitbuk.verify_packet(verify_req(pj, shuffled, since))
+        assert q.get("must_open") == ["c_after.py", "a_small.py", "bin_mod.dat", "d_big_new.txt"], q.get("must_open")
+
+
+def test_V1_must_open_follows_a_nested_repository_and_skips_what_is_not_a_regular_file():
+    """D1-1: a modified file inside a nested repository with its own `since` is in must_open (its diff taken there); a file
+    added and committed there since is not; a touched directory and a gitlink are not regular files and are not in it."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, ".gitignore"), "/engine/\n")
+        write(os.path.join(pj.dir, "pkg", "x.py"), "x = 1\n")
+        lib = os.path.join(pj.dir, "lib")
+        write(os.path.join(lib, "child.py"), "child = 1\n")
+        git(lib, "init", "-q"); git(lib, "add", "-A"); git(lib, "commit", "-qm", "lib")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-q", "-m", "base with pkg and a gitlink")
+        base = git(pj.dir, "rev-parse", "HEAD")
+        eng = os.path.join(pj.dir, "engine")
+        os.makedirs(eng)
+        git(eng, "init", "-q")
+        write(os.path.join(eng, "gate.py"), "limit = 1\n")
+        git(eng, "add", "-A"); git(eng, "commit", "-q", "-m", "base")
+        start = git(eng, "rev-parse", "HEAD")
+        write(os.path.join(eng, "gate.py"), "limit = 2\n")
+        write(os.path.join(eng, "new.py"), "fresh = 1\n")
+        git(eng, "add", "-A"); git(eng, "commit", "-q", "-m", "the task's work, committed in the nested repository")
+        write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+        write(os.path.join(pj.dir, "pkg", "x.py"), "x = 2\n")
+        changed_gitlink(lib)
+        req = verify_req(pj, ["a.py", "engine/new.py", "engine/gate.py", "pkg", "pkg/x.py", "lib"], base)
+        req["since"] = {".": base, "engine": start}
+        p = dwitbuk.verify_packet(req)
+        assert "-limit = 1" in p["diff"] and "+limit = 2" in p["diff"] and "+fresh = 1" in p["diff"] and "+x = 2" in p["diff"], p["diff"]
+        assert not os.path.isfile(os.path.join(pj.dir, "pkg")) and not os.path.isfile(os.path.join(pj.dir, "lib"))
+        assert p.get("must_open") == ["a.py", "engine/gate.py", "pkg/x.py"], p.get("must_open")
+
+
+def test_V1_must_open_never_holds_a_path_only_in_excluded_and_is_absent_when_nothing_qualifies():
+    """D1-1: a record path in the request's `excluded` (not in `touched`) is never in must_open, however it changed; the same
+    path in `touched` is the task's and follows the rule like any file."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": "before"}\n')
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        write(os.path.join(pj.dir, "hunsu.json"), '{"plugins": "after"}\n')
+        write(os.path.join(pj.dir, "n.py"), "n = 'small and new'\n")
+        excluded = {"record-paths": ["hunsu.json", ".chongdae/run-1/state.json"]}
+        p = dwitbuk.verify_packet(verify_req(pj, ["n.py"], since, excluded=excluded))
+        assert p["excluded"] == ["hunsu.json"] and "+++ n.py (new file)" in p["diff"], p
+        assert "must_open" not in p, p.get("must_open")
+        q = dwitbuk.verify_packet(verify_req(pj, [], since, excluded=excluded))
+        assert q["touched"] == [] and q["excluded"] == ["hunsu.json"] and "must_open" not in q, q.get("must_open")
+        r = dwitbuk.verify_packet(verify_req(pj, ["hunsu.json", "n.py"], since, excluded=excluded))
+        assert r.get("must_open") == ["hunsu.json"] and '+{"plugins": "after"}' in r["diff"], r.get("must_open")
+
+
+def test_V1_instructions_name_must_open_only_when_it_is_present():
+    """D1-2: with must_open the instructions tell the eyes to open (Read) each of its files under target before they accept and
+    that an accept counts only when their session opened each; without it they do not mention must_open."""
+    with Project() as pj:
+        req = v1_project(pj)
+        p = dwitbuk.verify_packet(req)
+        assert p.get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"], p.get("must_open")
+        instr = p["instructions"]
+        assert "`must_open`" in instr, instr
+        assert "Read" in instr and "accept" in instr and "reject" in instr, instr
+        write(os.path.join(pj.dir, "n.py"), "n = 'small and new'\n")
+        q = dwitbuk.verify_packet(dict(req, touched=["n.py"]))
+        assert "must_open" not in q and "must_open" not in q["instructions"], q["instructions"]
+
+
+def test_V1_an_accept_that_left_a_must_open_file_unread_is_not_an_accept():
+    """D1-3, the 11-09 reproduction: three modified files, the eyes opened only mod_a.py and said accept — verdict null,
+    answered accept, unread the other two in must_open order, a summary that starts `not an accept:` and names them in
+    backticks, no non-claim starting "accepted". A session that opened nothing on that diff is not an accept either."""
+    with Project() as pj:
+        req = v1_project(pj)
+        got = v1_not_an_accept(v1_answer(pj, req, [v1_read(pj.dir + "/mod_a.py"), v1_said()]), ["mod_b.py", "mod_c.py"])
+        assert got["read"]["files"] == ["Read %s/mod_a.py" % pj.dir], got["read"]
+        assert "`mod_a.py`" not in got["summary"], got["summary"]
+        assert "non-claims" not in got, got.get("non-claims")
+        got = v1_not_an_accept(v1_answer(pj, req, [v1_said()]), ["mod_a.py", "mod_b.py", "mod_c.py"])
+        assert got["read"] == {"files": [], "commands": [], "answered-before-reading": True}, got["read"]
+        # a Grep of the directory, a Glob, a search of the directory: none opens a file under it
+        got = v1_not_an_accept(v1_answer(pj, req, [v1_tool("Grep", pattern="keep", path=pj.dir), v1_tool("Glob", pattern="*.py", path=pj.dir),
+                                                   v1_ran("rg -n keep .", 0), v1_said()]), ["mod_a.py", "mod_b.py", "mod_c.py"])
+        assert len(got["read"]["files"]) == 2 and len(got["read"]["commands"]) == 1, got["read"]
+
+
+def test_V1_an_accept_whose_session_opened_every_must_open_file_stands():
+    """D1-3: opening all three — a Claude Read by absolute path, a Read by target-relative path, a Grep of the file; or Codex's
+    `sed -n` and `cat` — is an accept exactly as today: `read` kept, no `unread`, no `answered`, no non-claim."""
+    with Project() as pj:
+        req = v1_project(pj)
+        assert dwitbuk.verify_packet(req).get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"], "the accept stands against a must_open that names all three"
+        got = v1_accept(v1_answer(pj, req, [v1_read(pj.dir + "/mod_a.py"), v1_read("mod_b.py"), v1_tool("Grep", pattern="keep", path=pj.dir + "/mod_c.py"), v1_said()]))
+        assert got["read"]["files"] == ["Read %s/mod_a.py" % pj.dir, "Read mod_b.py", "Grep %s/mod_c.py" % pj.dir] and "non-claims" not in got, got
+        got = v1_accept(v1_answer(pj, req, [v1_ran("sed -n 1,9p mod_a.py", 0, 0), v1_ran("cat %s/mod_b.py" % pj.dir, 0, 1),
+                                            v1_ran("sed -n '1,80p' mod_c.py | head -3", 0, 2), v1_said()]))
+        assert [c["exit"] for c in got["read"]["commands"]] == [0, 0, 0] and "non-claims" not in got, got
+        # the real path of the target, when the eyes resolved a symlinked temporary directory
+        real = os.path.realpath(pj.dir)
+        got = v1_accept(v1_answer(pj, req, [v1_read(real + "/mod_a.py"), v1_read(real + "/mod_b.py"), v1_read(real + "/mod_c.py"), v1_said()]))
+        assert "non-claims" not in got, got
+
+
+def test_V1_an_accept_with_no_recorded_session_is_not_an_accept():
+    """D1-3: with no transcript (the worker record names none, or names a file that is missing) nothing is on record as
+    opened: every must_open file is unread, there is no `read`, and the summary says what the eyes opened is not on record."""
+    with Project() as pj:
+        req = v1_project(pj)
+        got = v1_not_an_accept(v1_answer(pj, req, None, transcript=None), ["mod_a.py", "mod_b.py", "mod_c.py"], on_record=False)
+        assert got.get("worker", {}).get("host") == "codex", got.get("worker")
+        got = v1_not_an_accept(v1_answer(pj, req, None, transcript="gone.transcript.jsonl"), ["mod_a.py", "mod_b.py", "mod_c.py"], on_record=False)
+        assert not os.path.exists(os.path.join(pj.dir, "local", "gone.transcript.jsonl"))
+        # an answer with no worker record at all (a host that gave none): the same
+        reqf, resp = os.path.join(pj.dir, "local", "req.json"), os.path.join(pj.dir, "local", "resp.json")
+        write(reqf, req)
+        old_claude, old_argv = w.claude, sys.argv
+        w.claude, sys.argv = (lambda packet, schema, args: {"verdict": "accept", "findings": []}), ["eyes_worker.py", "--request", reqf, "--response", resp]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert w.main() == 0
+        finally:
+            w.claude, sys.argv = old_claude, old_argv
+        v1_not_an_accept(json.load(io.open(resp, encoding="utf-8")), ["mod_a.py", "mod_b.py", "mod_c.py"], on_record=False)
+
+
+def test_V1_a_command_opens_a_file_only_when_it_reads_it_as_a_whole_token_and_ran():
+    """D1-3, the command rule: git's view of the change, an echo and a listing open nothing, nor does a command that failed or
+    one naming another file; `cat`, `sed -n`, `head` do, by the target-relative, absolute or real path, and a part after `&&`
+    counts on its own. mod_b.py and mod_c.py are Read in every case; the command under test is mod_a.py's only opening."""
+    with Project() as pj:
+        req = v1_project(pj)
+        real = os.path.realpath(pj.dir)
+        def outcome(command, exit_code=0):
+            return v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_ran(command, exit_code), v1_said()])
+        for command in ("git diff -- mod_a.py", "git diff --stat HEAD -- mod_a.py", "git show HEAD:mod_a.py", "git log --oneline -- mod_a.py", "git status --short mod_a.py",
+                        "ls -l mod_a.py", "wc -l mod_a.py", "stat mod_a.py", "file mod_a.py", "du -h mod_a.py", "test -f mod_a.py", "[ -f mod_a.py ]", "find . -name mod_a.py",
+                        "echo mod_a.py", "printf '%s\\n' mod_a.py", "cat mod_a.py.orig", "cat old_mod_a.py", "cat mod_a.pyc", "git diff -- mod_a.py; echo mod_a.py",
+                        "cat %s/mod_a.py.bak" % pj.dir):
+            got = outcome(command)
+            v1_not_an_accept(got, ["mod_a.py"])
+            assert got["read"]["commands"] == [{"command": command, "exit": 0}], (command, got["read"])
+        for command in ("cat mod_a.py", "sed -n 1,9p mod_a.py", "head -5 mod_a.py", "cat %s/mod_a.py" % pj.dir, "cat %s/mod_a.py" % real,
+                        "git diff -- mod_a.py && cat mod_a.py", "git log -- mod_a.py || sed -n '1,80p' mod_a.py", "ls\ncat mod_a.py", "cat mod_a.py | head -3"):
+            v1_accept(outcome(command))
+        v1_not_an_accept(outcome("cat mod_a.py", 1), ["mod_a.py"])   # a command that failed opened nothing
+        v1_not_an_accept(outcome("git diff -- mod_a.py && cat mod_a.py", 1), ["mod_a.py"])
+        v1_accept(outcome("cat mod_a.py", None))   # no exit recorded: it ran
+
+
+def test_V1_an_empty_must_open_keeps_todays_accept_and_its_non_claim():
+    """D1-3: with no must_open (only a small new file and a deleted file touched) an accept that read nothing stands as today,
+    with today's "accepted without reading the tree" non-claim; with no transcript, today's "not on record" non-claim."""
+    with Project() as pj:
+        write(os.path.join(pj.dir, "d.py"), "d = 1\n")
+        git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base")
+        since = git(pj.dir, "rev-parse", "HEAD")
+        os.unlink(os.path.join(pj.dir, "d.py"))
+        write(os.path.join(pj.dir, "n.py"), "n = 'small and new'\n")
+        req = verify_req(pj, ["n.py", "d.py"], since, contract={"Q-n": "## Q-n\n\nn is new"}, tests=["t.py"], built={"summary": "built", "verified": [], "non-claims": []})
+        assert "must_open" not in dwitbuk.verify_packet(req)
+        got = v1_accept(v1_answer(pj, req, [v1_said()]))
+        assert got["read"] == {"files": [], "commands": [], "answered-before-reading": True}, got["read"]
+        assert len(got["non-claims"]) == 1 and got["non-claims"][0].startswith("accepted without reading the tree: the eyes opened no file and ran no command"), got["non-claims"]
+        got = v1_accept(v1_answer(pj, req, None, transcript=None))
+        assert "read" not in got and got["non-claims"] == ["accepted, and what the eyes read is not on record (no transcript of their session)"], got
+        # and the 2.2.x "left unread" non-claim is never written: a must_open file unread is not an accept, never a note
+        three = v1_project(pj)
+        got = v1_not_an_accept(v1_answer(pj, three, [v1_said()]), ["mod_a.py", "mod_b.py", "mod_c.py"])
+        assert "non-claims" not in got, got.get("non-claims")
+
+
+def test_V1_a_reject_weigh_counts_as_accept_with_an_unread_must_open_file_is_not_an_accept():
+    """D1-3: a reject on unfounded findings only, which weigh counts as accept, is not an accept while a must_open file is
+    unread: `unfounded` stays and the summary keeps weigh's "counted as accept" after `not an accept:`; with every file
+    opened it is the accept weigh made of it."""
+    with Project() as pj:
+        req = v1_project(pj)
+        nowhere = {"kind": "claim-unverified", "where": "built.verified[0]", "record_quote": "`I ran nothing at all`", "tree_quote": "keep = True", "why": "says so"}
+        got = v1_not_an_accept(v1_answer(pj, req, [v1_said()], "reject", [nowhere], summary="s"), ["mod_a.py", "mod_b.py", "mod_c.py"])
+        assert len(got.get("unfounded") or []) == 1 and got["unfounded"][0]["where"] == "built.verified[0]", got.get("unfounded")
+        assert "counted as accept" in got["summary"] and "the eyes said: s" in got["summary"], got["summary"]
+        opened = [v1_read("mod_a.py"), v1_read("mod_b.py"), v1_read("mod_c.py"), v1_said()]
+        got = v1_accept(v1_answer(pj, req, opened, "reject", [nowhere], summary="s"))
+        assert len(got["unfounded"]) == 1 and got["summary"].startswith("rejected only on unfounded finding(s)") and "counted as accept" in got["summary"], got
+        # a reject with no finding at all, counted as accept, follows the same rule
+        got = v1_not_an_accept(v1_answer(pj, req, [v1_read("mod_a.py"), v1_said()], "reject", []), ["mod_b.py", "mod_c.py"])
+        assert "counted as accept" in got["summary"] and "unfounded" not in got, got["summary"]
+
+
+def test_V1_a_reject_with_a_grounded_finding_stays_a_reject_while_the_same_unread_session_cannot_accept():
+    """D1-4: a reject whose grounded, founded finding stands is not changed — no `unread`, no `read`, no `answered`, its verdict,
+    findings and summary as today — although the eyes opened nothing; the same session saying accept is not an accept. A
+    null verdict from a host that failed stays as today."""
+    with Project() as pj:
+        req = v1_project(pj)
+        anomaly = {"kind": "anomaly", "where": "mod_a.py", "record_quote": "", "tree_quote": "mod_a = 2", "why": "odd"}
+        got = v1_answer(pj, req, [v1_said('{"verdict":"reject","findings":[]}')], "reject", [anomaly], summary="the eyes' own words")
+        assert got["verdict"] == "reject" and got["findings"] == [anomaly] and got["summary"] == "the eyes' own words", got
+        assert "unread" not in got and "read" not in got and "answered" not in got and "non-claims" not in got and "unfounded" not in got, got
+        founded = {"kind": "plan-vs-code", "where": "contract.Q-three; mod_a.py", "record_quote": "`each constant is two`", "tree_quote": "mod_a = 2", "why": "three"}
+        got = v1_answer(pj, req, None, "reject", [founded], transcript=None)
+        assert got["verdict"] == "reject" and got["findings"] == [founded] and "unread" not in got and "answered" not in got, got
+        v1_not_an_accept(v1_answer(pj, req, [v1_said()]), ["mod_a.py", "mod_b.py", "mod_c.py"])
+        got = v1_answer(pj, req, None, fail="codex exited 1: boom")
+        assert got["verdict"] is None and got["findings"] == [] and got["summary"] == "codex exited 1: boom", got
+        assert "answered" not in got and "unread" not in got and "read" not in got, got
+
+
+# --- 11-09 V2: a verify packet holds only its own task's changes --------------------------------------------------------------
+# 11-09, dwitbuk 2.2.1: a record another open task wrote and did not commit, listed in the request's excluded record paths and
+# not in this task's touched, reached the packet with its diff in excluded_diff — another task's work handed to this verifier.
+
+def v2_project(pj):
+    """Two relation records and a source file committed; then another task changes R-other (uncommitted), this task changes
+    R-mine and the source file. Returns the request: R-mine and src/a.py touched, both records in `excluded.record-paths`."""
+    write(os.path.join(pj.dir, "hunsu.lock.json"), {"record-paths": {"mangsang": ["mangsang/"]}})
+    write(os.path.join(pj.dir, "mangsang", "relations", "R-other.json"), '{"id": "R-other", "v": "other-task-old-relation"}\n')
+    write(os.path.join(pj.dir, "mangsang", "relations", "R-mine.json"), '{"id": "R-mine", "v": "my-old-relation"}\n')
+    write(os.path.join(pj.dir, "src", "a.py"), "src_a = 'before'\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base with records")
+    since = git(pj.dir, "rev-parse", "HEAD")
+    write(os.path.join(pj.dir, "mangsang", "relations", "R-other.json"), '{"id": "R-other", "v": "other-task-new-relation"}\n')
+    write(os.path.join(pj.dir, "mangsang", "relations", "R-mine.json"), '{"id": "R-mine", "v": "my-new-relation"}\n')
+    write(os.path.join(pj.dir, "src", "a.py"), "src_a = 'after'\n")
+    return verify_req(pj, ["src/a.py", "mangsang/relations/R-mine.json"], since,
+                      excluded={"record-paths": ["mangsang/relations/R-other.json", "mangsang/relations/R-mine.json", ".chongdae/run-1/state.json"]})
+
+
+# --- 11-09 V1 fix: the command rule resolves each shell word as a path, not as one of three spellings -------------------------
+# Late eyes on the 2.2.1 build: `cat ./mod_a.py`, `sed -n 1,9p ./mod_a.py` and `head -3 pkg/../mod_a.py`, run in the target,
+# did not count as opening mod_a.py — the command rule compared each word with exactly three spellings of the file, unnormalized,
+# while the Read/Grep branch beside it normalized a relative path. The amended rule: a word, taken as a path relative to the
+# target (an absolute word stays absolute), opens the file when it resolves by real path to the file's real path under the target.
+
+def v1_fix_outcome(pj, req, command, exit_code=0):
+    """mod_b.py and mod_c.py Read; `command` is mod_a.py's only chance of being opened."""
+    return v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_ran(command, exit_code), v1_said()])
+
+
+def v1_fix_nested(pj):
+    """The target as `proj` under the temporary area, whose parent really holds a mod_a.py of its own (so `../mod_a.py` names
+    a real, different file); the project handle for the helpers, and the parent's file."""
+    parent_file = os.path.join(pj.dir, "mod_a.py")
+    write(parent_file, "mod_a = 'the parent directory has one too'\n")
+    sub = made(os.path.join(pj.dir, "proj"))
+    git(sub, "init", "-q", "-b", "main")
+    inner = argparse.Namespace(dir=sub)
+    return inner, parent_file
+
+
+def v1_fix_link(pj, target):
+    """A symlink in the temporary area to the target directory; Skip where the host will not let a test make one."""
+    link = os.path.join(pj.dir, "link")
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError) as err:
+        raise Skip("os.symlink is not available to this test on this host: %s" % err)
+    assert os.path.isfile(os.path.join(link, "mod_a.py")), "the link reaches the target's files"
+    return link
+
+
+def test_V1_fix_a_command_opens_a_file_by_every_spelling_that_resolves_to_it():
+    """The amended command rule: `./mod_a.py`, `pkg/../mod_a.py` (pkg a real directory) and `<target>/./mod_a.py` each open
+    mod_a.py, as the target-relative, absolute and real paths already do — with cat, sed -n and head alike, and in a part after
+    `&&` or before `|`. The real path of the temporary directory is a symlinked spelling of the target on macOS."""
+    with Project() as pj:
+        req = v1_project(pj)
+        made(os.path.join(pj.dir, "pkg"))
+        real = os.path.realpath(pj.dir)
+        assert dwitbuk.verify_packet(req).get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"]
+        for command in ("cat ./mod_a.py", "sed -n 1,9p ./mod_a.py", "head -3 pkg/../mod_a.py", "cat %s/./mod_a.py" % pj.dir, "sed -n '1,80p' ./pkg/../mod_a.py",
+                        "cat %s/pkg/../mod_a.py" % real, "git diff -- ./mod_a.py && cat ./mod_a.py", "cat ./mod_a.py | head -3", "ls ./mod_a.py; sed -n 1,9p ./mod_a.py",
+                        "cat mod_a.py", "cat %s/mod_a.py" % pj.dir, "cat %s/mod_a.py" % real):
+            got = v1_fix_outcome(pj, req, command)
+            assert got.get("verdict") == "accept", "%r opens mod_a.py: %s" % (command, {k: got.get(k) for k in ("verdict", "answered", "unread", "summary")})
+            v1_accept(got)
+            assert got["read"]["commands"] == [{"command": command, "exit": 0}], (command, got["read"])
+            assert got["read"]["files"] == ["Read mod_b.py", "Read mod_c.py"], got["read"]
+        v1_accept(v1_fix_outcome(pj, req, "cat ./mod_a.py", None))   # no exit recorded: it ran
+
+
+def test_V1_fix_a_command_naming_another_path_opens_nothing_whatever_the_spelling():
+    """The rule resolves a word, it does not search for the name: `mod_a.py.orig`, `old_mod_a.py`, `./mod_a.pyc`, `./pkg/mod_a.py`
+    (a real file of another directory) and `<target>/./mod_a.py.bak` leave mod_a.py unread; and the exclusions keep their reach
+    under the new spellings — git's view, a listing, an echo of `./mod_a.py` open nothing, nor does a `cat ./mod_a.py` that failed."""
+    with Project() as pj:
+        req = v1_project(pj)
+        write(os.path.join(pj.dir, "pkg", "mod_a.py"), "other = 'another file'\n")
+        assert dwitbuk.verify_packet(req).get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"], "an untracked pkg/mod_a.py is not the task's change"
+        for command in ("cat mod_a.py.orig", "cat old_mod_a.py", "cat ./mod_a.pyc", "cat ./pkg/mod_a.py", "sed -n 1,9p pkg/mod_a.py", "cat %s/./mod_a.py.bak" % pj.dir,
+                        "cat %s/pkg/mod_a.py" % pj.dir, "cat ./mod_a.py.", "cat ./",
+                        "git diff -- ./mod_a.py", "git show HEAD:./mod_a.py", "git log --oneline -- ./mod_a.py", "ls ./mod_a.py", "ls -l ./mod_a.py", "wc -l ./mod_a.py",
+                        "stat ./mod_a.py", "echo ./mod_a.py", "printf '%s\\n' ./mod_a.py", "echo pkg/../mod_a.py", "ls %s/./mod_a.py" % pj.dir):
+            got = v1_fix_outcome(pj, req, command)
+            assert got.get("verdict") is None, "%r does not open mod_a.py: %s" % (command, {k: got.get(k) for k in ("verdict", "answered", "unread")})
+            v1_not_an_accept(got, ["mod_a.py"])
+            assert got["read"]["commands"] == [{"command": command, "exit": 0}], (command, got["read"])
+        v1_not_an_accept(v1_fix_outcome(pj, req, "cat ./mod_a.py", 1), ["mod_a.py"])   # a failed command opened nothing
+        v1_not_an_accept(v1_fix_outcome(pj, req, "head -3 pkg/../mod_a.py", 2), ["mod_a.py"])
+        v1_not_an_accept(v1_fix_outcome(pj, req, "git diff -- ./mod_a.py && cat ./mod_a.py", 1), ["mod_a.py"])
+
+
+def test_V1_fix_the_parent_directorys_mod_a_is_not_this_one():
+    """`../mod_a.py`, relative to the target, resolves to the parent directory's own mod_a.py — a real file that is not the
+    task's — so a session that read only that one left mod_a.py unread; `../proj/mod_a.py` comes back to this one and opens it."""
+    with Project() as pj:
+        inner, parent_file = v1_fix_nested(pj)
+        req = v1_project(inner)
+        assert req["target"] == inner.dir and os.path.isfile(parent_file) and os.path.isfile(os.path.join(inner.dir, "..", "mod_a.py"))
+        assert dwitbuk.verify_packet(req).get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"]
+        for command in ("cat ../mod_a.py", "sed -n 1,9p ../mod_a.py", "head -3 ./../mod_a.py", "cat %s/../mod_a.py" % inner.dir, "cat %s" % parent_file):
+            got = v1_fix_outcome(inner, req, command)
+            assert got.get("verdict") is None, "%r is the parent's file, not this one: %s" % (command, {k: got.get(k) for k in ("verdict", "answered", "unread")})
+            v1_not_an_accept(got, ["mod_a.py"])
+        # the Read branch agrees: a Read of the parent's file is not a Read of this one
+        v1_not_an_accept(v1_answer(inner, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read("../mod_a.py"), v1_said()]), ["mod_a.py"])
+        v1_not_an_accept(v1_answer(inner, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read(parent_file), v1_said()]), ["mod_a.py"])
+        # and a relative word that leaves the target and comes back names this one (red until the rule resolves the word)
+        got = v1_fix_outcome(inner, req, "cat ../proj/mod_a.py")
+        assert got.get("verdict") == "accept", "../proj/mod_a.py resolves to the target's own mod_a.py: %s" % {k: got.get(k) for k in ("verdict", "answered", "unread")}
+        v1_accept(got)
+
+
+def test_V1_fix_a_symlinked_spelling_of_the_target_opens_the_file():
+    """A symlink to the target directory made in the temporary area: `<link>/mod_a.py` (absolute) and `../link/mod_a.py`
+    (relative, out through the parent and back through the link) each resolve by real path to the target's mod_a.py and open
+    it — by command and by Read alike. Skipped only where the host will not let a test make a symlink."""
+    with Project() as pj:
+        inner, _ = v1_fix_nested(pj)
+        req = v1_project(inner)
+        link = v1_fix_link(pj, inner.dir)
+        assert os.path.realpath(os.path.join(link, "mod_a.py")) == os.path.realpath(os.path.join(inner.dir, "mod_a.py"))
+        for command in ("cat %s/mod_a.py" % link, "sed -n 1,9p %s/mod_a.py" % link, "cat ../link/mod_a.py", "head -3 %s/./mod_a.py" % link):
+            got = v1_fix_outcome(inner, req, command)
+            assert got.get("verdict") == "accept", "%r resolves to the target's mod_a.py: %s" % (command, {k: got.get(k) for k in ("verdict", "answered", "unread")})
+            v1_accept(got)
+        for command in ("ls %s/mod_a.py" % link, "echo ../link/mod_a.py", "git diff -- %s/mod_a.py" % link, "cat %s/mod_a.py.orig" % link, "cat %s/pkg/mod_a.py" % link):
+            v1_not_an_accept(v1_fix_outcome(inner, req, command), ["mod_a.py"])
+        v1_not_an_accept(v1_fix_outcome(inner, req, "cat %s/mod_a.py" % link, 1), ["mod_a.py"])
+        got = v1_answer(inner, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read(link + "/mod_a.py"), v1_said()])
+        assert got.get("verdict") == "accept", "a Read by the symlinked absolute path opens the file: %s" % {k: got.get(k) for k in ("verdict", "answered", "unread")}
+        v1_accept(got)
+
+
+def test_V1_fix_a_read_of_a_dot_slash_path_still_opens_it_and_agrees_with_the_command_rule():
+    """The Read/Grep branch keeps its behaviour — a relative path normalized, an absolute one by real path — and the two branches
+    now say the same of the same spelling: `./mod_a.py` opens mod_a.py whether Read or cat'd; `./pkg/mod_a.py` does not, either way."""
+    with Project() as pj:
+        req = v1_project(pj)
+        write(os.path.join(pj.dir, "pkg", "mod_a.py"), "other = 'another file'\n")
+        v1_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read("./mod_a.py"), v1_said()]))
+        v1_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read("pkg/../mod_a.py"), v1_said()]))
+        v1_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read(pj.dir + "/./mod_a.py"), v1_said()]))
+        v1_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_tool("Grep", pattern="keep", path="./mod_a.py"), v1_said()]))
+        v1_not_an_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read("./pkg/mod_a.py"), v1_said()]), ["mod_a.py"])
+        v1_not_an_accept(v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read("./mod_a.pyc"), v1_said()]), ["mod_a.py"])
+        for spelling in ("./mod_a.py", "pkg/../mod_a.py", pj.dir + "/./mod_a.py"):
+            by_read = v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read(spelling), v1_said()])
+            by_command = v1_fix_outcome(pj, req, "cat " + spelling)
+            assert by_read.get("verdict") == by_command.get("verdict") == "accept", (spelling, by_read.get("verdict"), by_command.get("verdict"))
+        for spelling in ("./pkg/mod_a.py", "./mod_a.pyc"):
+            by_read = v1_answer(pj, req, [v1_read("mod_b.py"), v1_read("mod_c.py"), v1_read(spelling), v1_said()])
+            by_command = v1_fix_outcome(pj, req, "cat " + spelling)
+            assert by_read.get("verdict") is None and by_command.get("verdict") is None, (spelling, by_read.get("verdict"), by_command.get("verdict"))
+
+
+def test_V1_fix_unread_touched_resolves_a_command_word_as_a_path_relative_to_the_target():
+    """unread_touched on the packet itself, with a hand-built read of commands only: `cat ./mod_a.py`, `head -3 pkg/../mod_a.py`
+    and `cat <target>/./mod_a.py` leave mod_b.py and mod_c.py unread and nothing else; `cat ../mod_a.py` (the parent's real file),
+    `cat ./pkg/mod_a.py`, `cat ./mod_a.pyc` and `git diff -- ./mod_a.py` leave all three."""
+    assert callable(getattr(w, "unread_touched", None)), "eyes_worker.unread_touched is missing"
+    with Project() as pj:
+        inner, parent_file = v1_fix_nested(pj)
+        req = v1_project(inner)
+        made(os.path.join(inner.dir, "pkg"))
+        packet = dwitbuk.verify_packet(req)
+        assert packet.get("must_open") == ["mod_a.py", "mod_b.py", "mod_c.py"]
+        def ut(*commands, exit_code=0):
+            return w.unread_touched({"files": [], "commands": [{"command": c, "exit": exit_code} for c in commands]}, packet)
+        assert ut() == ["mod_a.py", "mod_b.py", "mod_c.py"]
+        for command in ("cat ./mod_a.py", "sed -n 1,9p ./mod_a.py", "head -3 pkg/../mod_a.py", "cat %s/./mod_a.py" % inner.dir, "cat %s/pkg/../mod_a.py" % os.path.realpath(inner.dir),
+                        "cat ../proj/mod_a.py", "git diff -- ./mod_a.py && cat ./mod_a.py"):
+            assert ut(command) == ["mod_b.py", "mod_c.py"], "%r opens mod_a.py: unread %r" % (command, ut(command))
+        assert ut("cat ./mod_a.py", "cat ./mod_b.py", "head -3 ./pkg/../mod_c.py") == []
+        for command in ("cat ../mod_a.py", "cat %s" % parent_file, "cat ./pkg/mod_a.py", "cat ./mod_a.pyc", "cat old_mod_a.py", "cat mod_a.py.orig",
+                        "git diff -- ./mod_a.py", "ls ./mod_a.py", "echo ./mod_a.py", "echo pkg/../mod_a.py"):
+            assert ut(command) == ["mod_a.py", "mod_b.py", "mod_c.py"], "%r does not open mod_a.py: unread %r" % (command, ut(command))
+        assert ut("cat ./mod_a.py", exit_code=1) == ["mod_a.py", "mod_b.py", "mod_c.py"], "a failed command opened nothing"
+        assert ut("cat ./mod_a.py", exit_code=None) == ["mod_b.py", "mod_c.py"], "exit None: it ran"
+
+
+def test_V2_verify_packet_holds_no_diff_of_another_tasks_excluded_record():
+    """D2-1: the 11-09 reproduction — `excluded` names the other task's record (today's list, without .chongdae/), there is no
+    `excluded_diff`, and none of that record's changed text is anywhere in the packet; a record path also in `touched` keeps
+    its diff in `diff`. D2-3: path_diff stays, for the late-eyes request."""
+    with Project() as pj:
+        req = v2_project(pj)
+        p = dwitbuk.verify_packet(req)
+        assert p["excluded"] == ["mangsang/relations/R-other.json", "mangsang/relations/R-mine.json"], p["excluded"]
+        assert "excluded_diff" not in p, sorted(p)
+        text = json.dumps(p, ensure_ascii=False)
+        assert "other-task-new-relation" not in text and "other-task-old-relation" not in text, text
+        assert "R-other" in text, "the name stays: the eyes know the file differs from HEAD and was left out by rule"
+        assert '-{"id": "R-mine", "v": "my-old-relation"}' in p["diff"] and '+{"id": "R-mine", "v": "my-new-relation"}' in p["diff"], p["diff"]
+        assert "-src_a = 'before'" in p["diff"] and "+src_a = 'after'" in p["diff"], p["diff"]
+        assert p["touched"] == ["src/a.py", "mangsang/relations/R-mine.json"]
+        # the other task's record alone in excluded, nothing touched: the name, no text
+        q = dwitbuk.verify_packet(dict(req, touched=[], excluded={"record-paths": ["mangsang/relations/R-other.json"]}))
+        assert q["excluded"] == ["mangsang/relations/R-other.json"] and "excluded_diff" not in q and q["diff"] == "", q
+        assert "other-task-new-relation" not in json.dumps(q, ensure_ascii=False)
+        # path_diff is unchanged: the late-eyes request still reads a record's diff through it
+        pd = dwitbuk.path_diff(pj.dir, ["mangsang/relations/R-other.json"], ("HEAD",), cut=40000)
+        assert '+{"id": "R-other", "v": "other-task-new-relation"}' in pd and "R-mine" not in pd, pd
+
+
+def test_V2_instructions_say_excluded_files_are_not_this_tasks_changes_and_name_no_excluded_diff():
+    """D2-2: with `excluded` the instructions say those files are not this task's changes and may be another open task's,
+    that the packet holds none of their changes, not an undeclared edit, no record-vs-tree finding, not verified here; the
+    2.2.x sentence reading `excluded_diff` as the slice's work is gone. Without `excluded`, nothing of it."""
+    with Project() as pj:
+        req = v2_project(pj)
+        instr = dwitbuk.verify_packet(req)["instructions"]
+        assert "`excluded`" in instr, instr
+        assert "not this task's changes" in instr, instr
+        assert "another open task" in instr, instr
+        assert "none of their changes" in instr, instr
+        assert "undeclared edit" in instr and "no record-vs-tree finding" in instr, instr
+        assert "excluded_diff" not in instr, instr
+        assert "as the slice's work" not in instr, instr
+        bare = dwitbuk.verify_packet(dict(req, excluded={"record-paths": [".chongdae/run-1/state.json"]}))
+        assert "excluded" not in bare and "`excluded`" not in bare["instructions"] and "excluded_diff" not in bare["instructions"], bare["instructions"]
 
 
 # --- D3: a live-tree eyes packet is bound to what it quoted, not to every record ---------------------------------------------
