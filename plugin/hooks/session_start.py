@@ -3,10 +3,11 @@
 The reviewer is placed by the runner when a run ends (chongdae's `reviewer` role, declared in hunsu.json), so reviews now
 accumulate without anyone asking for them; what still needs a person is the disposition. This line says so at the start of
 a session — a count and the review's id, never an instruction on what to decide. Nothing open, no reviews, or a worker
-session (AGENT_WORKER=1): silent. Never blocks, never writes. Under hunsu's probe (HUNSU_SURVEY=1, an empty temporary
+session (AGENT_WORKER=1): silent. Never blocks; keeps machine-local session notification state. Under hunsu's probe (HUNSU_SURVEY=1, an empty temporary
 project): its standing text — what the line says in any state, as a template with no review id or count — since the empty
 project's answer was nothing and a judge reading it learned nothing of what dwitbuk tells a session.
 """
+import hashlib
 import json
 import os
 import sys
@@ -16,11 +17,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import dwitbuk  # noqa: E402
 
 
-STANDING = ("dwitbuk: at session start, when the latest review holds objections nobody has disposed of, one line: "
-            "`dwitbuk: N undisposed objection(s) in <review> (<kind> N, …; N of them carried, already in the count)` — each open "
-            "charge once, under the kind it makes — and the commands: `dwitbuk.py follow --target .` lists them, `dispose "
-            "<review>/<n> --as accepted|dismissed --why ... --by NAME` answers one. A count and where, never what to decide; "
-            "nothing open, no reviews, or a worker session: nothing.")
+STANDING = ("dwitbuk: when objections are open, the full line `dwitbuk: N undisposed objection(s) in <review> (<kind> N, …)` "
+            "is said once per session; later starts of the same "
+            "session while nothing changed get a short line without the count. `follow` lists them; a person disposes each "
+            "with `dispose`; an agent never disposes one on its own; nothing open, no reviews, or a worker session: silent.")
 
 
 def open_objections(cwd):
@@ -48,8 +48,36 @@ def main():
     if not open_:
         return 0
     engine = os.path.join(os.path.dirname(HERE), "dwitbuk.py").replace(os.sep, "/")
-    msg = ("dwitbuk: %d undisposed objection(s) in %s (%s) — `python3 \"%s\" follow --target .` lists them; `dispose <review>/<n> --as accepted|dismissed --why ... --by NAME` answers one."
-           % (len(dwitbuk.distinct(open_)), rid, dwitbuk.count_text(open_), engine))   # each charge once, by the kind it makes; carries said after
+    msg = ('dwitbuk: %d undisposed objection(s) in %s (%s) — `python3 "%s" follow --target .` lists them; a person disposes each: '
+           '`python3 "%s" dispose %s/<n> --as accepted|dismissed --why "<their words>" --by <name> --target .`; an agent never disposes one on its own.'
+           % (len(dwitbuk.distinct(open_)), rid, dwitbuk.count_text(open_), engine, engine, rid))
+    session = payload.get("session_id")
+    if session:
+        path = os.path.join(cwd, ".dwitbuk", "session-start.json")
+        digest = hashlib.sha256(json.dumps(sorted([list(dwitbuk.charge(f)) for f in open_])).encode()).hexdigest()
+        current = {"review": rid, "open": digest}
+        try:
+            try:
+                with open(path, encoding="utf-8") as stream:
+                    state = json.load(stream)
+                sessions = state["sessions"]
+                if not isinstance(sessions, dict) or any(not isinstance(v, dict) for v in sessions.values()):
+                    raise ValueError("invalid session state")
+            except (OSError, ValueError, TypeError, KeyError):
+                state = {"sessions": {}}
+            sessions = state["sessions"]
+            same = sessions.get(session) == current
+            if not same:
+                sessions.pop(session, None)
+                sessions[session] = current
+                while len(sessions) > 64:
+                    del sessions[next(iter(sessions))]
+            dwitbuk.save(path, state)
+            if same:
+                msg = ("dwitbuk: %s's undisposed objection(s) are as this session was told — unchanged; "
+                       '`python3 "%s" follow --target .` lists them, and a person disposes each.' % (rid, engine))
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": msg}}))
     return 0
 

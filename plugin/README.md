@@ -72,27 +72,37 @@ Each runs the engine and shows its output. `dwitbuk.py --help` for arguments.
 
 Collect `dwitbuk/findings@1` from the reporters the lock declares (chongdae `report`, mangsang `impact --findings` and
 `cq --findings`, hunsu `check --findings`, …), carry dispositions and recurrence, write `reviews/<id>.json`. No
-reporters: the review says so and is late eyes and dispositions only
+reporters: the review says so and is late eyes and dispositions only.
+
+New objections are listed in full. Charges still open from the previous review appear as one
+`standing, unchanged since <previous>` group, with their finding indices and the `dispose` command;
+`follow` lists them whole. With standing charges the last line separates `N new objection(s)` from
+`S standing, unchanged since <previous>`, with their kind counts, and names `follow` and the person's
+`dispose` command. Otherwise the last line remains `N objection(s)`.
+A carried reporter failure with `heard-in` gets a line saying the reporter has answered since that review:
+the failure is not current, and stays open until a person disposes it.
 
 ### `/dwitbuk:dispose`
 
 Record a disposition of a finding — a person's (`--as accepted|dismissed --why "…" --by NAME`) or one no person read
-(`--as … --delegated WHY`, recorded as a delegation like a gate); observations refuse it (they are not debt). The
+(`--as … --delegated WHY --by NAME`, recording the person’s hand-off); observations refuse it (they are not debt). The
 disposition copies the finding's own `text` and `where` at disposal time (`finding_text`), and `--quote` may add a
 verbatim quote from the record or the tree that grounds it — so a person reading the review later sees the pair
 (finding, reason) side by side and can weigh whether the reason addresses the finding, without resolving ids across
 reviews. Disposing a quote-grounded finding (`contradiction`, `anomaly`) without `--quote` warns, not refuses.
 `--by` names the person whose words `--why` carries. With `--delegated` no person read the finding, so `by` stays `null`;
 `--by NAME` there names who handed it off (`delegated-by`) and `--approved-in source:ID` where they said so — a session
-disposing at the owner's request says whose request it was (before 1.14.0 the name was refused, and twelve delegated
-disposals on a site read `by: null`, the owner's words only in each reason's prose)
+disposing at the person's request says whose request it was.
+Both `--why` and `--delegated` require `--by`; without it the command refuses to write.
+An agent never disposes a finding on its own judgment or records a delegation nobody gave.
 
 ### `/dwitbuk:follow`
 
 The latest review's objections that nobody disposed of, each whole — `where`, the full text, `files` and the
 record/tree quotes when the finding has them — grouped by kind with a count, behind the `<review>/<n>` handle `dispose`
 takes. A carried charge is listed under the kind of the charge it carries, with `raised in <review>/<n>` and when it
-was first seen. A disposal round reads the charges here, not in `reviews/*.json`. The last line stays `undisposed findings: N`;
+was first seen. A carry with `heard-in` also says `reporter <where> has answered since <review>:
+not a current failure; a person disposes it`. A disposal round reads the charges here, not in `reviews/*.json`. The last line stays `undisposed findings: N`;
 the exit code is 1 while any is open. `follow --path FILE` (relative to `--target`) keeps only those whose `where` or
 `files` name that file as a whole token (`src/a.html:12`, `doc.md#Heading`) — what is open on a file before editing it
 
@@ -102,6 +112,22 @@ all (exit 0) when nothing is open on the file, so a reader is never told "0". Th
 read in `reads` (beside `file`, the whole `follow --path`), which jokbo runs at the agent's first look at a file
 
 ### as chongdae's `verifier`
+
+The worker prompt names the running copy's `skills/review/SKILL.md` by absolute path when it exists,
+for both hosts and `--prompt-only`; the packet's `instructions` remain this request's whole procedure.
+The packet and its request binding are unchanged.
+
+Quote weighing reads every candidate file whole, with no size cap: the tests, touched files and files
+named by `where`, restricted to regular files inside the target by real path. Backticked elided spans
+(`…` or three or more dots, optionally bracketed) match pieces in order without overlap in one text:
+one packet string field or one file. Pieces spread across texts do not match.
+If a span is absent from everything read but a candidate could not be read, the finding stays with
+`unchecked`, naming the span, each unreadable file and its exception type: it stands unweighed.
+A reject counted as accept because its findings were unfounded carries an
+`accepted only because the eyes' reject rested on finding(s) dropped as unfounded: …` non-claim
+naming each kind and location. A reject with no grounded finding likewise says so and counts the
+findings dropped for missing quotes. These notes are removed if the required-file rule below
+turns the accept into no verdict.
 
 The same eyes before a gate: `eyes_worker.py --request <chongdae request> --response ...` reads the task's contract,
 touched files and the builder's report and answers `dwitbuk/review@1` — accept, or reject with quoted findings — plus
@@ -167,15 +193,21 @@ review per run, since the previous one's head
 
 ### SessionStart hook
 
-One fact when there is one: `dwitbuk: N undisposed objection(s) in <review> (kinds)` and the `follow`/`dispose`
-commands. The kinds are counted by one rule, the same as `review`'s last line: each distinct open charge once (two copies
-of one charge are one), under the kind of the charge it makes — a carry (`undisposed`) under the kind it carries — then how
-many of them are carries, said as already in the count: `cq-failed 2, non-claim 10; 3 of them carried, already in the
-count` (a bare "; 3 carried" can be read as three more). Open is: layer objection, no disposition, and no disposition of the same charge in
-any review — what the reviews the runner placed still need from a person. Nothing open, no reviews, or a worker session:
-silent. Never blocks, never writes. Under hunsu's probe (`HUNSU_SURVEY=1`, an empty project) it answers its standing text
-— the line as a template (`N undisposed objection(s) in <review> (<kind> N, …)`, the two commands, when it is silent), no
-id, count or path — so hunsu's judge reads what dwitbuk tells a session, not the nothing an empty project gets
+When objections are open, the full line names the latest review, the distinct open count and kinds,
+and the `follow` and `dispose` commands. A person disposes each; an agent never disposes one on its own.
+Each charge counts once, under its own kind; carries are said as already in the count.
+
+With a session id, the hook keeps the latest review and a digest of the open charges per session in
+`.dwitbuk/session-start.json`, machine-local, retaining at most 64 sessions. The full line is said once
+per session; later starts (resume, compact, clear) while nothing changed get a short line without the
+count: `dwitbuk: <review>'s undisposed objection(s) are as this session was told — unchanged`,
+followed by `follow` and the reminder that a person disposes each. A changed review or open set
+makes the next line full again. With no session id, every start gets the full line and nothing is
+written. Unreadable or unwritable state falls back to the full line and never fails the hook.
+
+Nothing open, no reviews, or a worker session: silent, with nothing written. Under hunsu's probe
+(`HUNSU_SURVEY=1`) it gives standing text describing these rules without an id, count or path,
+and writes nothing.
 
 ### Stop hook
 
@@ -229,6 +261,7 @@ directories under `.dwitbuk/` so overlapping calls cannot replace one another's 
 
 | path | committed | what |
 |---|---|---|
+| `.dwitbuk/session-start.json` | no | machine-local session notification state, at most 64 sessions |
 | `reviews/<id>.json` | yes | a review: `since`, `head`, findings (kind, where, text, layer, first-seen, disposition). Which reporters were asked is the lock's `reporters` |
 
 A reporter that reads the state as it is now — the environment's drift, the model's stale relations and questions — says
@@ -253,15 +286,18 @@ The latest review is the open set: it holds every open charge, each once. A find
 and text, the changing counts struck — inherits its disposition, from whichever earlier review answered it; an objection
 that stops recurring without one is carried as `undisposed`: the charge's own text, whole, with `carries` (the charge it
 is), `first-seen`, and `raised-in` (`<review>/<n>`, where it was raised in full) — a reference, not a new objection in
-words of its own. A carry carried again keeps its `raised-in`; a charge reported again while carried is the reporter's
+words of its own. A reporter-failure carry keeps `heard-in`, the first review where that reporter answered again.
+A carry carried again keeps its `raised-in`; a charge reported again while carried is the reporter's
 finding, one copy, with its first sighting. One charge is answered once: `dispose` writes the answer where the charge stands
 now (the latest review, whichever copy's handle it was given) and nowhere else; every other copy, in any review, is answered
 by it, and the earlier reviews stay as they were written. An observation that stops recurring simply stops. An
-observation is written in full once: the reviews after it count everything already on record in one `unchanged` line
-whose `seen-in` lists the reviews that hold it, and read those to recognize it again — so a project's hundred delegated
-relations are on record once, not in every review (they were 58 KB of every 96 KB review on a site), and what a review
-writes in full is what is new since the last one. A fact whose text changed is a new fact, written in full: a relation
-judged again is a new judgment. Older reviews (an `unchanged` line per holding review, `undisposed` text cut behind a
+observation reported again is counted as unchanged only when the previous review stood on it, in full
+or through an `unchanged` line's `held`. That sorted list contains the observation identity hashes
+(first 12 SHA-256 hex characters); `seen-in` names the reviews holding the full text.
+An observation absent from the previous review is written in full when reported again.
+An older `unchanged` line without `held` keeps the earlier rule: its `seen-in` chain holds all
+observations it reaches. A fact whose text changed is new and written in full.
+Older reviews (an `unchanged` line per holding review, `undisposed` text cut behind a
 prefix, the answer copied into every review, a `review-debt` line) are read as they are. `eyes request` puts its packets
 under `--out` (default `dwitbuk-eyes/`); `eyes_worker.py` writes the response at `--response` and the transcript beside
 it. Use the same packet directory for both so `consume` can pair them. Keep reviewer packets in a subdirectory such as
@@ -302,7 +338,7 @@ before or after a task found, with its quote), `verifier-reject` (a verdict that
 sides), `delegation-stamp` (one reason stamped on 3+ judgments); mangsang's `stale`, `broken`, and from its `cq
 --findings` reporter `cq-failed`, `cq-unanswerable`, `cq-unquestioned`; hunsu's `drift`, `unreviewed`. dwitbuk's own:
 `undisposed` (an open charge carried, once, by reference), `unchanged` (observations earlier reviews hold in full,
-counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`, `reporter-failed`, `plugin-version` (a reporter plugin differs from its declared version). `review-debt` (the
+counted in one line), `contradiction` and `anomaly` (late eyes), `no-reporters`, `reporter-failed` (a reporter gave no findings; a carry’s `heard-in` names its first later answer, so the failure is no longer current but remains open for a person), `plugin-version` (a reporter plugin differs from its declared version). `review-debt` (the
 previous review's open count) is no longer written: the carried charges are the debt, each once, and the line restated
 their count in every review; older reviews keep theirs, read as an observation.
 
@@ -379,3 +415,7 @@ cache path (see [Plugin roots](#plugin-roots)).
 whose recorded session left a `must_open` file unopened comes back with no verdict, and the 2.2.0 unread non-claim is no
 longer written (see [as chongdae's `verifier`](#as-chongdaes-verifier)). A verify packet no longer carries
 `excluded_diff`: the excluded record paths reach the eyes by name, never with another task's changes.
+2.4.0 adds a verify finding's `unchecked`, a carry's `heard-in`, an `unchanged` line's `held` and the SessionStart hook's
+`.dwitbuk/session-start.json`, and changes `dispose`: `--why` and `--delegated` each need `--by`, and a disposal that names no
+one is refused. Quote weighing reads whole files and matches elided spans piecewise; `review` lists new objections in full
+and groups the standing ones; the hook's full line is said once per session (see [Commands](#commands)).

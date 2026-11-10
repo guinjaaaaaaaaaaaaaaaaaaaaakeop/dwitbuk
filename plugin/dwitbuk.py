@@ -2,7 +2,7 @@
 
   review [--since COMMIT] [--target DIR]   collect `dwitbuk/findings@1` from the reporters the lock declares (hunsu.lock.json `reporters`),
                                            carry dispositions and recurrence from the last review, write reviews/<id>.json
-  dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY [--by NAME]) [--approved-in SOURCE:ID] [--quote QUOTE]
+  dispose <review>/<finding> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY --by NAME) [--approved-in SOURCE:ID] [--quote QUOTE]
                                            the disposition copies the finding's own text and where at disposal time; --quote grounds it in the record/tree;
                                            with --delegated, --by is who handed it off (`delegated-by`; `by` stays null: no person read it)
   follow [--path FILE] [--target DIR]      the latest review's undisposed objections, whole and grouped by kind; --path: only those
@@ -330,6 +330,7 @@ def cmd_review(args):
         carried = carried_observations(prior)
         origin = raised(prior)
         kept, unchanged = [], {}
+        observation_keys = []
         for f in findings:
             i_old, old = last.pop(charge(f), None) or last.pop(cut_charge(f), (None, None))
             if old:
@@ -343,6 +344,7 @@ def cmd_review(args):
             # review as a charge, it was never written there as an observation: written in full now, counted from the next
             written_in = (prior[-1]["id"] if layer(old) == "observation" else None) if old else carried.get(identity(f), (None, None))[1]
             if written_in and layer(f) == "observation" and f.get("kind") != "unchanged":
+                observation_keys.append(observation_key(f))
                 unchanged.setdefault(written_in, {})[f["kind"]] = unchanged.get(written_in, {}).get(f["kind"], 0) + 1
                 continue
             kept.append(f)
@@ -355,7 +357,7 @@ def cmd_review(args):
                 for k, n in kinds_.items():
                     by_kind[k] = by_kind.get(k, 0) + n
             held = sorted(unchanged)
-            findings.append({"kind": "unchanged", "layer": "observation", "where": "%d earlier review(s)" % len(held), "seen-in": held,
+            findings.append({"kind": "unchanged", "layer": "observation", "where": "%d earlier review(s)" % len(held), "seen-in": held, "held": sorted(observation_keys),
                              "text": "%d observation(s) written in full in %d earlier review(s) and unchanged since (%s)"
                                      % (sum(by_kind.values()), len(held), ", ".join("%s %d" % kv for kv in sorted(by_kind.items())))})
         for i_old, old in last.values():
@@ -374,19 +376,44 @@ def cmd_review(args):
 
     import secrets, time
     rid = "review-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), secrets.token_hex(2))   # sorts by time on one machine, still unique across machines
+    for f in findings:
+        if f.get("kind") == "undisposed" and kind_of(f) == "reporter-failed" and f.get("where") in heard:
+            f.setdefault("heard-in", rid)
     # the review is `since`, `head` and the findings: which reporters were asked is the lock's to say (a `reporters` list was
     # written here and read by nothing; `source` on each finding, `files` on outside-run, `count` on unchanged — the same)
     save(os.path.join(target, REVIEWS, rid + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rid, "since": base, "head": head, "findings": findings})
     obs = [(i, f) for i, f in enumerate(findings) if layer(f) == "observation"]
     answered_ = [(i, f) for i, f in enumerate(findings) if layer(f) == "objection" and f.get("disposition")]
-    carried_ = 0
-    for i, f in enumerate(findings):
-        if layer(f) == "objection" and not f.get("disposition"):
+    settled = answered(prior)
+    previous = {charge(f) for f in prior[-1].get("findings", [])
+                if layer(f) == "objection" and not f.get("disposition") and charge(f) not in settled} if prior else set()
+    open_pairs = [(i, f) for i, f in enumerate(findings)
+                  if layer(f) == "objection" and not f.get("disposition") and charge(f) not in settled]
+    standing = [(i, f) for i, f in open_pairs if charge(f) in previous]
+    new = [f for _, f in open_pairs if charge(f) not in previous]
+    carried_ = sum(bool(f.get("raised-in")) for _, f in open_pairs)
+    for i, f in open_pairs:
+        if charge(f) not in previous:
             if f.get("raised-in"):
-                carried_ += 1
                 print("  %-12s %d  %s — %s  (carried: raised in %s)" % (kind_of(f), i, f["where"], f["text"], f["raised-in"]))
             else:
                 print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
+        if f.get("heard-in"):
+            print("  reporter %s has answered since %s: the failure charged at %s/%d is not current; it stays open until a person disposes it" %
+                  (f["where"], f["heard-in"], rid, i))
+    if standing:
+        ranges = []
+        for i, _ in standing:
+            if ranges and i == ranges[-1][-1] + 1:
+                ranges[-1].append(i)
+            else:
+                ranges.append([i])
+        indices = ", ".join(str(r[0]) if len(r) == 1 else "%d-%d" % (r[0], r[-1]) for r in ranges)
+        standing_fs = distinct([f for _, f in standing])
+        engine = os.path.abspath(__file__).replace(os.sep, "/")
+        print("standing, unchanged since %s: %d (%s) — shown before, not listed again: findings %s of %s" %
+              (prior[-1]["id"], len(standing_fs), count_text(standing_fs), indices, rid))
+        print('  a person disposes each: python3 "%s" dispose %s/<n> --as accepted|dismissed --why "<their words>" --by <name> --target .  (`python3 "%s" follow --target .` lists them whole)' % (engine, rid, engine))
     if carried_:
         print("carried from earlier reviews, each once: %d (not raised again; one disposal answers each)" % carried_)
     if answered_:
@@ -397,7 +424,11 @@ def cmd_review(args):
         for i, f in obs:
             print("  %-12s %d  %s — %s" % (f["kind"], i, f["where"], f["text"]))
     open_ = distinct([f for f in findings if layer(f) == "objection" and not f.get("disposition")])
-    print("%s: %d objection(s) (%s), %d observation(s) since %s" % (rid, len(open_), count_text(open_), len(obs), base or "the beginning"))
+    if standing:
+        print('%s: %d new objection(s) (%s), %d observation(s) since %s; %d standing, unchanged since %s (%s) — `follow` lists them; a person disposes each: `dispose %s/<n> --as accepted|dismissed --why ... --by NAME`' %
+              (rid, len(distinct(new)), count_text(new), len(obs), base or "the beginning", len(standing_fs), prior[-1]["id"], count_text(standing_fs), rid))
+    else:
+        print("%s: %d objection(s) (%s), %d observation(s) since %s" % (rid, len(open_), count_text(open_), len(obs), base or "the beginning"))
     return 0
 
 
@@ -496,19 +527,32 @@ def carried_observations(prior):
     and — following each `unchanged` line's `seen-in` back — those an earlier review wrote in full and later reviews only
     counted. So an observation is written once, however many reviews follow, and still recognized as the same fact."""
     by_id = {r.get("id"): r for r in prior}
-    out, seen, queue = {}, set(), [prior[-1]]
-    while queue:
-        r = queue.pop(0)
-        if r.get("id") in seen:
-            continue
-        seen.add(r.get("id"))
+    memo = {}
+    def held_by(r, visiting):
+        if r.get("id") in memo:
+            return memo[r.get("id")]
+        if r.get("id") in visiting:
+            return {}
+        visiting = visiting | {r.get("id")}
+        out = {}
         for f in r.get("findings", []):
             if f.get("kind") == "unchanged":
                 seen_in = f.get("seen-in")
-                queue.extend(by_id[x] for x in (seen_in if isinstance(seen_in, list) else [seen_in]) if x in by_id)
+                held = set(f["held"]) if "held" in f else None
+                for rid in seen_in if isinstance(seen_in, list) else [seen_in]:
+                    if rid in by_id:
+                        for key, pair in held_by(by_id[rid], visiting).items():
+                            if held is None or observation_key(pair[0]) in held:
+                                out.setdefault(key, pair)
             elif layer(f) == "observation":
                 out.setdefault(identity(f), (f, r.get("id")))
-    return out
+        memo[r.get("id")] = out
+        return out
+    return held_by(prior[-1], set()) if prior else {}
+
+
+def observation_key(f):
+    return hashlib.sha256(json.dumps(list(identity(f)), ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
 
 
 def raised(prior):
@@ -637,9 +681,13 @@ def cmd_dispose(args):
     if layer(f) == "observation":
         raise SystemExit("dispose: %s is an observation — an observation is a fact, not a charge; there is nothing to dispose" % args.finding)
     if bool(args.why) == bool(args.delegated):
-        raise SystemExit("dispose: --why WHY --by NAME (a person's words) or --delegated WHY (no person read this; why it was handed off) — one of the two")
+        raise SystemExit("dispose: --why WHY --by NAME (a person's words) or --delegated WHY --by NAME (no person read this; why the named person handed it off) — one of the two")
     if args.approved_in is not None and not re.match(r"^[\w.-]+:\S+$", args.approved_in):
         raise SystemExit("dispose: --approved-in %r: where the person agreed, as source:ID (a mangsang source, `source:at-63`) or KIND:REF" % args.approved_in)
+    if not args.by:
+        if args.delegated:
+            raise SystemExit("dispose: --by names the person who handed the finding off; an agent never records a delegation no person gave")
+        raise SystemExit("dispose: --by names the person whose words --why carries")
     # a delegated disposal: no person read the finding (`by` stays null), but someone handed it off — `--by` with --delegated
     # names who (`delegated-by`), `--approved-in` where they said so. Refused until 1.14.0, so all twelve of guin-site review
     # a3c2's disposals read `by: null`, the owner's "뒷북 검토 진행" kept only in each reason's prose
@@ -926,13 +974,39 @@ def quoted_spans(f, packet):
     for sp in QUOTE_SPAN.findall(str(f.get("record_quote") or "")):
         sp = flat(sp).strip(" \"'\u201c\u201d\u2018\u2019")
         sp = sp.rstrip(".,;:") if len(sp.rstrip(".,;:")) >= 4 else sp
-        if len(sp) < 4 or (FIELD_PATH.match(sp) and re.split(r"[.\[]", sp)[0] in packet):
+        short = not any(len(p) >= 4 for p in span_pieces(sp)) if re.search(r"…|\.{3,}", sp) else len(sp) < 4
+        if short or (FIELD_PATH.match(sp) and re.split(r"[.\[]", sp)[0] in packet):
             continue
         out.append(sp)
     return out
 
 
-def unfounded(f, packet):
+def span_pieces(span):
+    return [p.strip(" |/,;:·.-–—") for p in
+            re.split(r"(?:\[\s*|\(\s*)?(?:…|\.{3,})(?:\s*\]|\s*\))?", span)
+            if p.strip(" |/,;:·.-–—")]
+
+
+def span_in(span, texts):
+    if not re.search(r"…|\.{3,}", span):
+        return span in flat("\n".join(texts))
+    pieces = span_pieces(span)
+    for text in texts:
+        text = flat(text)
+        if span in text:
+            return True
+        offset = 0
+        for piece in pieces:
+            found = text.find(piece, offset)
+            if found < 0:
+                break
+            offset = found + len(piece)
+        else:
+            return bool(pieces)
+    return False
+
+
+def unfounded(f, packet, unchecked=None):
     """Why a verify finding stands on nothing in the request, or None. Each backticked span of its `record_quote` must occur in
     the request: in the builder's own fields, the contract, the brief, or the files the slice touched, its tests and the files
     `where` names (the eyes Read them) — or, only
@@ -945,28 +1019,39 @@ def unfounded(f, packet):
     own = [s_ for k, v in packet.items() if k not in OTHER_HANDS + PACKET_META for s_ in strings(v)]
     target = packet.get("target") or "."
     named = re.findall(r"[\w.-]+(?:/[\w.-]+)*\.\w+", str(f.get("where") or ""))   # `plan/PLAN.md:260-264; src/a.ts:36`: a file the eyes Read
-    for rel in list(packet.get("tests") or []) + list(packet.get("touched") or []) + named:
+    named += [re.split(r"[#:]", token.strip("`\"'[](){}<>"))[0]
+              for token in re.split(r"[\s;,]+", str(f.get("where") or ""))]
+    unreadable = []
+    for rel in dict.fromkeys(list(packet.get("tests") or []) + list(packet.get("touched") or []) + named):
         path = os.path.join(target, rel)
         if os.path.realpath(path) != os.path.realpath(target) and not os.path.realpath(path).startswith(os.path.realpath(target) + os.sep):
             continue
-        if os.path.isfile(path) and os.path.getsize(path) < 200000:
-            own.append(io.open(path, encoding="utf-8", errors="replace").read())
-    own = flat("\n".join(own))
-    other = flat("\n".join(s_ for k in OTHER_HANDS for s_ in strings(packet.get(k))))
+        if os.path.isfile(path):
+            try:
+                with io.open(path, encoding="utf-8", errors="replace") as stream:
+                    own.append(stream.read())
+            except (OSError, MemoryError) as err:
+                unreadable.append("%s could not be read (%s)" % (os.path.relpath(path, target).replace(os.sep, "/"), type(err).__name__))
+    other = [s_ for k in OTHER_HANDS for s_ in strings(packet.get(k))]
     charges_builder = re.search(r"\bbuilt\b", str(f.get("where") or "")) is not None
     spans = quoted_spans(f, packet)
     for sp in spans:
-        if sp in own:
+        if span_in(sp, own):
             continue
-        if sp in other:
+        if span_in(sp, other):
             if charges_builder:
                 return "quotes `%s` as the builder's, but it is only in %s — %s" % (
-                    sp, " / ".join(k for k in OTHER_HANDS if sp in flat("\n".join(strings(packet.get(k))))), TESTS_NON_CLAIMS_WHOSE)
+                    sp, " / ".join(k for k in OTHER_HANDS if span_in(sp, strings(packet.get(k)))), TESTS_NON_CLAIMS_WHOSE)
             continue
+        if unreadable:
+            if unchecked is not None:
+                original = next((raw for raw in QUOTE_SPAN.findall(str(f.get("record_quote") or "")) if sp in flat(raw)), sp)
+                unchecked.append("quotes `%s`, not found in what could be read; %s — the finding stands unweighed" % (original, "; ".join(unreadable)))
+            return None
         return "quotes `%s`, which is nowhere in the request" % sp
     if f.get("kind") == "claim-unverified":
-        contract = flat("\n".join(strings(packet.get("contract"))))
-        about_contract = any(sp in contract for sp in spans)
+        contract = list(strings(packet.get("contract")))
+        about_contract = any(span_in(sp, contract) for sp in spans)
         said = flat("%s %s" % (f.get("where") or "", f.get("record_quote") or ""))
         for c in packet.get("checked") or []:
             cmd = flat(" ".join(c["command"]) if isinstance(c.get("command"), list) else c.get("command") or "")
@@ -981,13 +1066,20 @@ def weigh(out, packet):
     accept, and says so in `summary`."""
     kept, notes = [], []
     for f in out.get("findings") or []:
-        why = unfounded(f, packet)
+        f = dict(f)
+        unchecked = []
+        why = unfounded(f, packet, unchecked)
+        if unchecked:
+            f["unchecked"] = "; ".join(unchecked)
         (notes.append(dict(f, unfounded=why)) if why else kept.append(f))
     out["findings"] = kept
     if notes:
         out["unfounded"] = notes
         if out.get("verdict") == "reject" and not kept:
             out["verdict"] = "accept"
+            out["non-claims"] = list(out.get("non-claims") or []) + [
+                "accepted only because the eyes' reject rested on finding(s) dropped as unfounded: " +
+                "; ".join("%s at %s" % (n["kind"], n["where"]) for n in notes)]
             out["summary"] = "rejected only on unfounded finding(s) (%s); counted as accept%s" % (
                 "; ".join(n["unfounded"] for n in notes), " — the eyes said: " + out["summary"] if out.get("summary") else "")
     return out
@@ -1253,6 +1345,7 @@ def cmd_eyes(args):
                 by_kind[f["kind"]] = by_kind.get(f["kind"], 0) + 1
                 held.add(rid)
             findings.append({"kind": "unchanged", "layer": "observation", "where": "%d earlier review(s)" % len(held), "seen-in": sorted(held),
+                             "held": sorted(observation_key(f) for f, _ in observations.values()),
                              "text": "%d observation(s) written in full in %d earlier review(s) and unchanged since (%s)"
                                      % (sum(by_kind.values()), len(held), ", ".join("%s %d" % kv for kv in sorted(by_kind.items())))})
         while True:
@@ -1310,6 +1403,8 @@ def cmd_follow(args):
         for rid, i, f in group:
             print("  open  %s/%d  %s" % (rid, i, f["where"]) + ("  (carried: raised in %s, first seen %s)" % (f["raised-in"], f.get("first-seen")) if f.get("raised-in") else ""))
             print("        %s" % f["text"])
+            if f.get("heard-in"):
+                print("        reporter %s has answered since %s: not a current failure; a person disposes it" % (f["where"], f["heard-in"]))
             if f.get("files"):
                 print("        files: %s" % ", ".join(f["files"]))
             for q in ("record_quote", "tree_quote"):
@@ -1338,12 +1433,13 @@ def main(argv=None):
             p.add_argument("--path", default=None, help="only open objections whose `where` or `files` name this file (relative to --target)")
             p.add_argument("--brief", action="store_true", help="with --path: at most two lines (the first charge cut at ~120 chars, then +N more); nothing open: no output, exit 0")
         if name == "dispose":
+            p.usage = "%(prog)s [-h] [--target TARGET] finding --as {accepted,dismissed} (--why WHY --by NAME | --delegated WHY --by NAME) [--approved-in SOURCE:ID] [--quote QUOTE]"
             p.add_argument("finding")
             p.add_argument("--as", dest="as_", choices=["accepted", "dismissed"], required=True)
-            p.add_argument("--why", default=None, help="a person's words")
-            p.add_argument("--by", default=None, help="with --why: the person whose words they are; with --delegated: who handed the finding off (`delegated-by`)")
+            p.add_argument("--why", default=None, help="a person's words; --by NAME (whose words they are) is required with it")
+            p.add_argument("--by", default=None, help="required with either --why or --delegated: with --why, the person whose words they are; with --delegated, who handed the finding off (`delegated-by`)")
             p.add_argument("--approved-in", dest="approved_in", default=None, metavar="SOURCE:ID", help="where the person agreed (a mangsang source, `source:at-63`)")
-            p.add_argument("--delegated", default=None, help="no person read this finding: why it was handed off (recorded as such, like a gate)")
+            p.add_argument("--delegated", default=None, help="records a person's hand-off: no person read this finding; --by NAME (who handed it off) is required with it")
             p.add_argument("--quote", default=None, help="a verbatim quote from the record or the tree that grounds this disposal")
     args = ap.parse_args(argv)
     return {"review": cmd_review, "dispose": cmd_dispose, "follow": cmd_follow, "eyes": cmd_eyes}[args.cmd](args)

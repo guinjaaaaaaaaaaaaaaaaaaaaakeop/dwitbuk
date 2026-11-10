@@ -109,6 +109,16 @@ request's `excluded` record paths reach the eyes by name only, never with their 
 may be another open task's (a task whose work is a record change scopes it and has it in `touched`). Commands, hooks, the
 skill, roles, reads and the Python floor are unchanged.
 
+2.4.0 is a minor release: new keys and a changed `dispose` contract. The verify path's quote weighing reads every candidate
+file whole (no size cap), matches an elided backticked span piecewise in one text, keeps a finding standing with `unchecked`
+when a candidate cannot be read, and a reject counted as accept says so in `non-claims`. `review` prints in full only the
+objections new since the previous review and shows the standing ones as one group with the `dispose` command; a carried
+reporter failure gets `heard-in` when its reporter answers again; an `unchanged` line carries `held`, and an observation the
+previous review did not stand on is written in full. The SessionStart hook says its full line once per session and keeps
+`.dwitbuk/session-start.json`. `dispose` refuses `--why` or `--delegated` without `--by`, and the skill says an agent never
+disposes a finding or records a delegation nobody gave. The eyes' prompt names the running copy's review skill by absolute
+path. Commands, hooks, the skill, roles, reads and the Python floor are unchanged.
+
 ### Release and adoption
 
 Documentation and shared instruction edits also need a patch bump when interfaces stay unchanged. Changes only to

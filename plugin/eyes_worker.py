@@ -26,8 +26,13 @@ PROMPT = ("This is a dwitbuk late-eyes request. Change no files. Follow the pack
           "Read a file under `target` when the diff is not enough. Output one JSON object only, no prose, no code fence.\n")
 
 
+def prompt():
+    skill = Path(__file__).resolve().parent / "skills" / "review" / "SKILL.md"
+    return PROMPT + (f"This is dwitbuk's review skill: {skill.as_posix()}; the packet's `instructions` are this request's whole procedure.\n" if skill.is_file() else "")
+
+
 def claude(packet, schema, args):
-    code, stdout, stderr = run_claude(PROMPT + json.dumps(packet, ensure_ascii=False), schema, cwd=packet["target"], add_dirs=[packet["target"]], model=args.model, effort=args.effort, max_turns=args.max_turns)
+    code, stdout, stderr = run_claude(prompt() + json.dumps(packet, ensure_ascii=False), schema, cwd=packet["target"], add_dirs=[packet["target"]], model=args.model, effort=args.effort, max_turns=args.max_turns)
     worker = worker_record(stdout, args.response, "claude-code", args.model)
     if code:
         raise SystemExit("claude exited %d: %s" % (code, stderr[-500:]))
@@ -39,7 +44,7 @@ def claude(packet, schema, args):
 
 
 def codex(packet, schema_doc, args):
-    code, stdout, stderr, last = run_codex(PROMPT + json.dumps(packet, ensure_ascii=False), schema_doc, packet["target"], model=args.model, effort=args.effort, beside=args.response)
+    code, stdout, stderr, last = run_codex(prompt() + json.dumps(packet, ensure_ascii=False), schema_doc, packet["target"], model=args.model, effort=args.effort, beside=args.response)
     if code:
         raise SystemExit("codex exited %d: %s" % (code, stderr[-500:]))
     out = json.loads(last or "")
@@ -201,7 +206,7 @@ def main():
         schema = {**EYES_SCHEMA, "required": EYES_SCHEMA["required"] + ["request"],
                   "properties": {**EYES_SCHEMA["properties"], "request": {"type": "string", "enum": [fingerprint(packet)]}}}
     if args.prompt_only:
-        print(PROMPT + json.dumps(packet, ensure_ascii=False) + "\n\n# Answer\n\nYour whole final message is one JSON object, nothing else, matching this schema:\n" + json.dumps(schema))
+        print(prompt() + json.dumps(packet, ensure_ascii=False) + "\n\n# Answer\n\nYour whole final message is one JSON object, nothing else, matching this schema:\n" + json.dumps(schema))
         return 0
     try:
         out = (claude if args.host == "claude" else codex)(packet, schema, args)
@@ -212,12 +217,15 @@ def main():
     if verify:
         # the verifier's own rule, enforced here too: a reject without a grounded finding (quoted from both sides, or from the
         # tree for an anomaly) is not a reject
+        original_count = len(out.get("findings") or [])
         out["findings"] = [f for f in out.get("findings", []) if grounded(f)]
         # and a quote must be where the finding says it is: a sentence of the tests writer's read as the builder's turned a
         # passing build into a reject (guin-site run a0ec) — dropped from the grounds, kept visible under `unfounded`
         out = weigh(out, packet)
         if out.get("verdict") == "reject" and not out["findings"]:
             out["verdict"], out["summary"] = "accept", "rejected without a quoted finding; counted as accept"
+            out["non-claims"] = list(out.get("non-claims") or []) + [
+                "accepted only because the eyes' reject had no grounded finding; %d finding(s) dropped for missing quotes" % original_count]
         if out.get("verdict") == "accept":
             worker = out.get("worker")
             transcript = worker.get("transcript") if isinstance(worker, dict) else None

@@ -256,10 +256,13 @@ def test_dispositions_carry_and_vanished_findings_become_undisposed():
         u = next(i for i, f in enumerate(first["findings"]) if f["kind"] == "unattributed")
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--target", pj.dir)[0] != 0, "one of --why / --delegated is required"
         assert run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--why", "x", "--delegated", "y", "--target", pj.dir)[0] != 0, "not both"
+        # 2.4.0 (W3-1): a delegation no person gave is never recorded — without --by (who handed it off) it is refused
         code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "the person was away; the run is a test", "--target", pj.dir)
+        assert code != 0 and "--by" in out and "disposition" not in pj.latest()["findings"][u], out
+        code, out = run("dispose", "%s/%d" % (first["id"], u), "--as", "dismissed", "--delegated", "the person was away; the run is a test", "--by", "kim", "--target", pj.dir)
         du = pj.latest()["findings"][u]["disposition"]
-        assert code == 0 and "(delegated, nobody named as handing it off" in out and du["as"] == "dismissed" and du["delegated"] == "the person was away; the run is a test" and du["by"] is None
-        assert "delegated-by" not in du, du
+        assert code == 0 and "(delegated by kim" in out and du["as"] == "dismissed" and du["delegated"] == "the person was away; the run is a test" and du["by"] is None
+        assert du["delegated-by"] == "kim", du
         # the disposal carries the charge it answers: the finding's own text and where, copied at disposal time
         assert du["finding_text"] == first["findings"][u]["text"] and du["where"] == first["findings"][u]["where"], du
         r = load_review(pj); r["findings"][u].pop("disposition"); save_review(pj, r)
@@ -1331,7 +1334,9 @@ def test_a_typed_observation_across_reviews_keeps_identity_disposition_and_histo
         assert f2["A"]["first-seen"] == r1["id"] == f2["B"]["first-seen"] and "disposition" not in f2["B"], f2
         carried = [f for f in r2["findings"] if f["kind"] == "undisposed"]
         assert len(carried) == 1 and carried[0]["raised-in"] == "%s/%d" % (r1["id"], r1["findings"].index(f1["C"])), carried
-        assert "1 objection(s) (non-claim 1; 1 of them carried, already in the count), 3 observation(s)" in out2, out2
+        # 2.4.0 (W2-2): C stood open in r1 — standing, not new
+        assert "0 new objection(s) (none), 3 observation(s)" in out2 and \
+            "1 standing, unchanged since %s (non-claim 1; 1 of them carried, already in the count)" % r1["id"] in out2, out2
         i_b = r2["findings"].index(f2["B"])
         assert "is an observation" in run("dispose", "%s/%d" % (r2["id"], i_b), "--as", "accepted", "--why", "x", "--by", "lee", "--target", pj.dir)[1]
 
@@ -1349,7 +1354,9 @@ def test_a_typed_observation_across_reviews_keeps_identity_disposition_and_histo
         f4 = by_task(r4)
         assert dwitbuk.layer(f4["A"]) == dwitbuk.layer(f4["B"]) == "objection", f4
         assert f4["A"]["disposition"] == answer and "disposition" not in f4["B"], f4
-        assert "2 objection(s) (non-claim 2; 1 of them carried, already in the count)" in out4, out4
+        # 2.4.0 (W2-2): B is a charge again, new against r3 (an observation there); C's carry stood open in r3
+        assert "1 new objection(s) (non-claim 1)" in out4 and \
+            "1 standing, unchanged since %s (non-claim 1; 1 of them carried, already in the count)" % r3["id"] in out4, out4
         code, followed = run("follow", "--target", pj.dir)   # B, counted as unchanged in r3, is owed a disposal again
         assert code == 1 and "limit B  [task B]" in followed and "limit A" not in followed and "undisposed findings: 2" in followed, followed
 
@@ -1366,10 +1373,12 @@ def test_review_and_the_session_start_line_count_each_open_charge_once_by_the_ki
     with Project() as pj:
         pj.reporter([{"kind": "left-open", "where": "run-1/T", "text": "left open"}, {"kind": "stale", "where": "R-1", "text": "stale"}])
         assert run("review", "--target", pj.dir)[0] == 0
+        first = pj.latest()["id"]
         import time; time.sleep(1.1)
         pj.reporter([{"kind": "stale", "where": "R-1", "text": "stale"}])
         code, out = run("review", "--target", pj.dir)
-        assert "2 objection(s) (left-open 1, stale 1; 1 of them carried, already in the count)" in out, out
+        # 2.4.0 (W2-2): both charges stood open in the first review, so the last line counts them as standing — the same text
+        assert "2 standing, unchanged since %s (left-open 1, stale 1; 1 of them carried, already in the count)" % first in out.splitlines()[-1], out
         done = subprocess.run([sys.executable, hook], input=json.dumps({"cwd": pj.dir}), capture_output=True, text=True, encoding="utf-8",
                               env={k: v for k, v in os.environ.items() if k != "AGENT_WORKER"})
         ctx = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
@@ -1494,7 +1503,9 @@ def test_a_grouped_non_claim_names_its_tasks_and_runs_and_the_count_is_of_distin
         import time; time.sleep(1.1)
         pj.reporter([{"kind": "stale", "where": "R-1", "text": "stale"}], "chongdae")
         code, out = run("review", "--target", pj.dir)
-        assert "2 objection(s) (non-claim 1, stale 1; 1 of them carried, already in the count)" in out, out
+        # 2.4.0 (W2-2): the stale charge is new; b3f0's carried charge stood open in the review before
+        assert "1 new objection(s) (stale 1)" in out and \
+            "1 standing, unchanged since %s (non-claim 1; 1 of them carried, already in the count)" % r["id"] in out, out
         carry = next(f for f in pj.latest()["findings"] if f["kind"] == "undisposed")
         assert dwitbuk.charge(carry) == ("non-claim", b3f0, "no check decides this task"), carry
     # two copies of one charge are one thing owed
@@ -1545,7 +1556,9 @@ def test_a_grouped_non_claim_names_each_task_beside_its_own_run():
         carry = next(f for f in r["findings"] if f["kind"] == "undisposed")
         assert carry["where"] == b3f0 and carry["text"] == "no check decides this task", carry   # 1.14.0's list struck from the carry
         assert dwitbuk.charge(carry) == dwitbuk.identity(old["findings"][1]), carry
-        assert "2 objection(s) (non-claim 2; 1 of them carried, already in the count)" in out, out
+        # 2.4.0 (W2-2): de3e's charge is new; b3f0's, open in the older review, stands
+        assert "1 new objection(s) (non-claim 1)" in out and \
+            "1 standing, unchanged since %s (non-claim 1; 1 of them carried, already in the count)" % old["id"] in out, out
     # one run alone: its tasks, no run named
     one = {"run-1": [{"text": "T1: x"}, {"text": "T2: x"}]}
     assert dwitbuk.bearing(one["run-1"], one, "run-1") == "  [tasks T1, T2]"
@@ -6378,6 +6391,1184 @@ def test_D6_C7_a_plain_child_with_its_own_catalog_resolves_as_before():
         h.claude_install("probe", "dev", "1.0.0")
         got = h.resolve("probe")
         assert same(got["root"], payload) and got["via"] == "directory-marketplace", got
+
+
+# --- W1: a verify finding is never judged unfounded because a file was not read --------------------------------------------
+# A quote that sits in a large touched plan file was dropped as "nowhere in the request" (the file was skipped for its size)
+# and the reject became an accept with nothing said; an elided backticked quote whose pieces are in one file, in order, was
+# dropped the same way.
+
+W1_SENTENCE = "The archive keeps every tag a person adds and every tag a person removes, in the order they were given."
+W1_FILLER = "Filler paragraph of a long plan, saying nothing any finding quotes; it only makes the file large. "
+
+
+def w1_text(sentence=W1_SENTENCE, size=210 * 1024):
+    """A plan file of about `size` bytes holding `sentence` once, about six tenths of the way in."""
+    lines, total = [], 0
+    while total < size:
+        lines.append(W1_FILLER + str(len(lines)))
+        total += len(lines[-1]) + 1
+    lines.insert(int(len(lines) * 0.6), sentence)
+    return "\n".join(lines) + "\n"
+
+
+def w1_pad(text):
+    """`text` inside a touched file large enough (about 48 KB) that the packet's diff does not show it whole: only reading the
+    file can find what it holds."""
+    return w1_text(text.rstrip("\n"), 48 * 1024)
+
+
+def w1_project(pj, files):
+    """Write `files` (path -> text) into the project and commit them: they are in the tree, in no diff since that commit."""
+    for rel, text in files.items():
+        write(os.path.join(pj.dir, *rel.split("/")), text)
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "w1 files")
+    return git(pj.dir, "rev-parse", "HEAD")
+
+
+def w1_packet(pj, touched, since, **kw):
+    req = verify_req(pj, touched, since, brief="the archive slice", contract={"Q1": "## Q1\n\nthe archive is kept"},
+                     built={"summary": "built", "verified": [], "non-claims": []}, **kw)
+    return dwitbuk.verify_packet(req)
+
+
+def w1_finding(quote, where="a.py", kind="plan-vs-code"):
+    return {"kind": kind, "where": where, "record_quote": quote, "tree_quote": "x = 1", "why": "the tree does not do what the plan says"}
+
+
+def w1_absent(packet, *texts):
+    """A fixture guard: none of `texts` is in the packet's own fields, so only a file can found the quote."""
+    flat = json.dumps(packet, ensure_ascii=False)
+    for t in texts:
+        assert t not in flat, ("fixture: the packet itself holds", t)
+
+
+def test_W1_1_a_quote_in_a_210_kb_touched_plan_file_is_founded_and_a_reject_on_it_stands():
+    """W1-1: a 210 KB plan file the task touched holds the sentence a reject quotes in backticks; the file is read whole, so the
+    finding is founded and the reject stays a reject."""
+    with Project() as pj:
+        since = w1_project(pj, {"plan/BIG.md": w1_text()})
+        assert os.path.getsize(os.path.join(pj.dir, "plan", "BIG.md")) >= 210 * 1024
+        p = w1_packet(pj, ["plan/BIG.md", "a.py"], since)
+        w1_absent(p, W1_SENTENCE)
+        f = w1_finding("`%s`" % W1_SENTENCE)
+        assert dwitbuk.unfounded(f, p) is None, dwitbuk.unfounded(f, p)
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [f], "summary": "s"}, p)
+        assert out["verdict"] == "reject" and out["findings"] == [f] and not out.get("unfounded"), out
+        # a 400 KB file is read whole too: there is no size at which a candidate stops being read
+        since = w1_project(pj, {"plan/HUGE.md": w1_text("The huge plan says this once and only once.", 400 * 1024)})
+        p = w1_packet(pj, ["plan/HUGE.md"], since)
+        assert dwitbuk.unfounded(w1_finding("`The huge plan says this once and only once.`"), p) is None
+
+
+def test_W1_1_a_file_where_names_with_a_heading_or_a_line_number_is_read_whole():
+    """W1-1: a file named only by the finding's `where` — `plan/BIG.md#Some heading`, `Makefile:12`, in backticks or quotes or
+    brackets, among other tokens split on `;` and `,` — is a candidate and read whole; a `where` token naming a file outside
+    the target (by real path) or a directory is not."""
+    outside = tempfile.mkdtemp(prefix="dwitbuk-outside-")
+    try:
+        with Project() as pj:
+            write(os.path.join(outside, "elsewhere.md"), "A sentence that lives only outside the target directory.\n")
+            since = w1_project(pj, {"plan/BIG.md": w1_text(), "Makefile": "all:\n\techo the makefile target builds the archive index\n",
+                                    "docs/notes/readme.txt": "a directory is no file\n"})
+            os.symlink(os.path.join(outside, "elsewhere.md"), os.path.join(pj.dir, "link.md"))
+            p = w1_packet(pj, ["a.py"], since)
+            w1_absent(p, W1_SENTENCE, "the makefile target builds the archive index")
+            big = w1_finding("`%s`" % W1_SENTENCE, where="contract.Q1; plan/BIG.md#Some heading")
+            assert dwitbuk.unfounded(big, p) is None, dwitbuk.unfounded(big, p)
+            make = w1_finding("`the makefile target builds the archive index`", where="`Makefile:12`, contract.Q1")
+            assert dwitbuk.unfounded(make, p) is None, dwitbuk.unfounded(make, p)
+            quoted = w1_finding("`the makefile target builds the archive index`", where="see \"Makefile:2\"; (plan/BIG.md#Archive)")
+            assert dwitbuk.unfounded(quoted, p) is None, dwitbuk.unfounded(quoted, p)
+            escaped = w1_finding("`A sentence that lives only outside the target directory.`", where="link.md:1")
+            assert "nowhere in the request" in (dwitbuk.unfounded(escaped, p) or ""), "a symlink out of the target is no candidate"
+            folder = w1_finding("`a directory is no file`", where="docs/notes#x")
+            assert "nowhere in the request" in (dwitbuk.unfounded(folder, p) or ""), "a directory is no candidate"
+    finally:
+        shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_W1_2_a_quote_not_found_while_a_candidate_cannot_be_read_stands_unchecked():
+    """W1-2: a touched file the process cannot read (permission denied); a finding whose quote is in nothing that could be read
+    is not unfounded — weigh keeps it in `findings` with an `unchecked` string naming the quote, the file and the exception's
+    type, and the reject stays a reject with no "accepted only because" line. A quote found in what could be read is founded
+    as usual, with no `unchecked`."""
+    with Project() as pj:
+        since = w1_project(pj, {"plan/BIG.md": w1_text(), "plan/small.md": "the small plan names the archive index\n"})
+        p = w1_packet(pj, ["plan/BIG.md", "plan/small.md", "a.py"], since)
+        big = os.path.join(pj.dir, "plan", "BIG.md")
+        os.chmod(big, 0)
+        try:
+            try:
+                with open(big, "rb"):
+                    pass
+            except OSError:
+                pass
+            else:
+                raise Skip("this process reads a file with no permissions (root): an unreadable file cannot be made here")
+            f = w1_finding("`%s`" % W1_SENTENCE)
+            assert dwitbuk.unfounded(f, p) is None, dwitbuk.unfounded(f, p)
+            out = dwitbuk.weigh({"verdict": "reject", "findings": [f], "summary": "s"}, p)
+            assert out["verdict"] == "reject" and len(out["findings"]) == 1 and not out.get("unfounded"), out
+            kept = out["findings"][0]
+            assert {k: v for k, v in kept.items() if k != "unchecked"} == f, kept
+            note = kept.get("unchecked")
+            assert isinstance(note, str) and "`%s`" % W1_SENTENCE in note and "plan/BIG.md" in note and "PermissionError" in note, note
+            assert "unweighed" in note, note
+            assert not [n for n in out.get("non-claims") or [] if n.startswith("accepted only because")], out.get("non-claims")
+            found = w1_finding("`the small plan names the archive index`")
+            assert dwitbuk.unfounded(found, p) is None
+            out = dwitbuk.weigh({"verdict": "reject", "findings": [found], "summary": "s"}, p)
+            assert out["findings"] == [found] and "unchecked" not in out["findings"][0], out
+        finally:
+            os.chmod(big, 0o644)
+
+
+def test_W1_3_a_quote_nowhere_while_every_file_was_read_is_unfounded_whatever_the_size():
+    """W1-3: with every candidate read — a 210 KB one among them — a span found nowhere is unfounded with today's reason, a
+    span the large file holds is founded, a quote without backticks is not checked, and a span under 4 characters is skipped."""
+    with Project() as pj:
+        since = w1_project(pj, {"plan/BIG.md": w1_text()})
+        p = w1_packet(pj, ["plan/BIG.md", "a.py"], since)
+        assert dwitbuk.unfounded(w1_finding("`%s`" % W1_SENTENCE), p) is None
+        nowhere = w1_finding("`a sentence written in no file at all`")
+        assert dwitbuk.unfounded(nowhere, p) == "quotes `a sentence written in no file at all`, which is nowhere in the request", dwitbuk.unfounded(nowhere, p)
+        assert dwitbuk.unfounded(w1_finding("a sentence written in no file at all"), p) is None, "no backticks: not checked"
+        assert dwitbuk.unfounded(w1_finding("`zq!`"), p) is None, "under 4 characters: skipped"
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [w1_finding("`%s`" % W1_SENTENCE), nowhere], "summary": "s"}, p)
+        assert out["verdict"] == "reject" and len(out["findings"]) == 1 and len(out["unfounded"]) == 1, out
+
+
+W1_TABLE_LINE = '| tag | tag / reason / add · remove / refusal "pick one" | tag to add / reason / add tag · remove tag |'
+W1_TABLE_QUOTE = "tag | tag / reason / add · remove | ... / add tag · remove tag"
+
+
+def test_W1_4_an_elided_quote_whose_pieces_are_in_one_touched_file_in_order_is_founded():
+    """W1-4, the reproduction: a backticked quote with a `...` elision whose two pieces are in one touched file, in order."""
+    with Project() as pj:
+        since = w1_project(pj, {"plan/TABLE.md": w1_pad("# commands\n\n| a | b | c |\n|---|---|---|\n" + W1_TABLE_LINE)})
+        p = w1_packet(pj, ["plan/TABLE.md", "a.py"], since)
+        w1_absent(p, "add tag · remove tag")
+        f = w1_finding("`%s`" % W1_TABLE_QUOTE)
+        assert dwitbuk.unfounded(f, p) is None, dwitbuk.unfounded(f, p)
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [f], "summary": "s"}, p)
+        assert out["verdict"] == "reject" and out["findings"] == [f], out
+
+
+def test_W1_4_every_elision_marker_splits_the_quote():
+    """W1-4: `…`, `...`, four dots, and either inside `[ ]` or `( )` are elision markers; the pieces are stripped of spaces
+    and of | / , ; : · . - – — at both ends."""
+    text = "The importer reads every row of the sheet, then writes the archive index in one pass.\n"
+    with Project() as pj:
+        since = w1_project(pj, {"docs/importer.md": w1_pad(text)})
+        p = w1_packet(pj, ["docs/importer.md"], since)
+        w1_absent(p, "every row of the sheet")
+        for marker in ("…", "...", "....", "[...]", "(...)", "[…]", "(…)"):
+            f = w1_finding("`The importer reads every row %s writes the archive index in one pass`" % marker)
+            assert dwitbuk.unfounded(f, p) is None, (marker, dwitbuk.unfounded(f, p))
+        f = w1_finding("`reads every row of the sheet, — ... — ; the archive index in one pass.`")
+        assert dwitbuk.unfounded(f, p) is None, ("stripped pieces", dwitbuk.unfounded(f, p))
+
+
+def test_W1_4_pieces_in_two_texts_out_of_order_overlapping_or_missing_do_not_find_the_quote():
+    """W1-4: one text must hold every piece, in order, without overlap. Pieces split across two files, reversed, overlapping
+    in one place, or with one missing: unfounded. One file holding them in order founds the quote (the control)."""
+    with Project() as pj:
+        since = w1_project(pj, {"docs/one.md": w1_pad("the first half of the archive rule is here"),
+                                "docs/two.md": w1_pad("and the second half of the archive rule is there"),
+                                "docs/both.md": w1_pad("abcdefghij klmnop\nthe first half of the archive rule is here, and the second half of the archive rule is there")})
+        p = w1_packet(pj, ["docs/one.md", "docs/two.md", "a.py"], since)
+        w1_absent(p, "first half of the archive", "second half of the archive")
+        split = w1_finding("`the first half of the archive rule … the second half of the archive rule`")
+        assert "nowhere in the request" in (dwitbuk.unfounded(split, p) or ""), "pieces in two files do not find it"
+        both = w1_packet(pj, ["docs/both.md"], since)
+        assert dwitbuk.unfounded(split, both) is None, dwitbuk.unfounded(split, both)
+        reversed_ = w1_finding("`the second half of the archive rule ... the first half of the archive rule`")
+        assert "nowhere in the request" in (dwitbuk.unfounded(reversed_, both) or ""), "out of order"
+        missing = w1_finding("`the first half of the archive rule ... a third half nobody wrote`")
+        assert "nowhere in the request" in (dwitbuk.unfounded(missing, both) or ""), "one piece missing"
+        overlap = w1_finding("`abcdefgh ... efghij`")
+        assert "nowhere in the request" in (dwitbuk.unfounded(overlap, both) or ""), "the pieces overlap in the only place they occur"
+        assert dwitbuk.unfounded(w1_finding("`abcdef ... ghij`"), both) is None, "the same text, without overlap"
+
+
+def test_W1_4_a_quote_whose_every_piece_is_shorter_than_4_characters_is_skipped():
+    """W1-4: an elided quote whose stripped pieces are all under 4 characters quotes nothing checkable: skipped like a short
+    span, whatever the request holds; one checkable piece makes it checked."""
+    with Project() as pj:
+        p = w1_packet(pj, ["a.py"], pj.base)
+        for quote in ("`ab … cd`", "`xy | ... | zw`", "`q. [...] r.`", "`abc (…) d —`"):
+            assert dwitbuk.unfounded(w1_finding(quote), p) is None, (quote, dwitbuk.unfounded(w1_finding(quote), p))
+        assert "nowhere in the request" in (dwitbuk.unfounded(w1_finding("`ab … a long piece found nowhere`"), p) or ""), "one checkable piece is checked"
+
+
+def test_W1_4_pieces_in_one_field_of_the_packet_are_found_and_pieces_across_two_fields_are_not():
+    """W1-4: one string leaf of the packet's own fields is one text: the builder's summary holding both pieces founds the quote;
+    one piece in the brief and the other in the summary does not."""
+    with Project() as pj:
+        req = verify_req(pj, ["a.py"], pj.base, brief="the brief speaks of the nightly rebuild job",
+                         built={"summary": "the cache warms itself at start, and the nightly rebuild runs at three", "verified": [], "non-claims": []})
+        p = dwitbuk.verify_packet(req)
+        one = w1_finding("`the cache warms itself … the nightly rebuild runs at three`", where="built.summary")
+        assert dwitbuk.unfounded(one, p) is None, dwitbuk.unfounded(one, p)
+        two = w1_finding("`the brief speaks of ... the cache warms itself at start`", where="built.summary")
+        assert "nowhere in the request" in (dwitbuk.unfounded(two, p) or ""), dwitbuk.unfounded(two, p)
+
+
+def test_W1_4_an_elided_quote_only_in_another_hands_field_is_unfounded_with_the_other_hands_reason():
+    """W1-4 with the other-hands rule: an elided quote whose pieces are only in the tests writer's non-claims, while the
+    finding's `where` charges the builder, is unfounded with today's other-hands reason (not "nowhere")."""
+    with Project() as pj:
+        req = verify_req(pj, ["a.py"], pj.base, built={"summary": "the full check passes", "verified": [], "non-claims": ["I did not check the type hints."]},
+                         tests_non_claims={"cache-tests": ["I did not run the whole suite; I ran the revision tests and nothing else."]})
+        p = dwitbuk.verify_packet(req)
+        mis = w1_finding("`built.non-claims` says `I did not run the whole suite ... the revision tests and nothing else`",
+                         where="built.non-claims", kind="claim-unverified")
+        reason = dwitbuk.unfounded(mis, p) or ""
+        assert "only in tests_non_claims" in reason and "nowhere" not in reason, reason
+        theirs = dict(mis, where="tests_non_claims.cache-tests[0]")
+        assert dwitbuk.unfounded(theirs, p) is None, dwitbuk.unfounded(theirs, p)
+
+
+def test_W1_4_an_elided_quote_of_the_contract_sentence_keeps_a_claim_unverified_finding():
+    """W1-4 with the `claim-unverified` rule: a finding about a check chongdae saw pass stands when it quotes the contract
+    sentence the check is said not to decide — elided, the quote still counts as quoting it."""
+    with Project() as pj:
+        req = verify_req(pj, ["a.py"], pj.base, contract={"Q1": "## Q1\n\nThe snapshot key carries the deployed version and the build date."},
+                         checks=[["python3", "tests/run.py", "--all"]], built={"summary": "s", "verified": [{"check": "python3 tests/run.py --all", "exit": 0}], "non-claims": []},
+                         checked=[{"command": "python3 tests/run.py --all", "exit": 0, "tail": ["OK"], "changed_since": []}])
+        p = dwitbuk.verify_packet(req)
+        ran = {"kind": "claim-unverified", "where": "built.verified[0]", "record_quote": "`python3 tests/run.py --all` exit 0", "tree_quote": "tests/run.py", "why": "w"}
+        assert "saw exit 0" in (dwitbuk.unfounded(ran, p) or ""), "the control: chongdae saw it pass"
+        decides = dict(ran, record_quote="`python3 tests/run.py --all` is cited for `The snapshot key … the build date.`")
+        assert dwitbuk.unfounded(decides, p) is None, dwitbuk.unfounded(decides, p)
+
+
+W1_DROPPED = "accepted only because the eyes' reject rested on finding(s) dropped as unfounded: "
+
+
+def test_W1_5_a_reject_weigh_counts_as_accept_says_so_in_non_claims_naming_each_dropped_finding():
+    """W1-5: weigh's accept made of a reject whose every finding was unfounded keeps its summary and appends one non-claims line
+    naming each dropped finding by kind and where — after the eyes' own non-claims, or in a list created for it."""
+    with Project() as pj:
+        p = w1_packet(pj, ["a.py"], pj.base)
+        a = w1_finding("`a sentence written in no file at all`", where="plan/PLAN.md#Q7", kind="plan-vs-code")
+        b = w1_finding("`another sentence nobody wrote`", where="built.verified[0]", kind="claim-unverified")
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [a, b], "summary": "s", "non-claims": ["the eyes did not run the suite"]}, p)
+        assert out["verdict"] == "accept" and out["findings"] == [] and out["summary"].startswith("rejected only on unfounded finding(s)"), out
+        assert "counted as accept" in out["summary"], out["summary"]
+        nc = out.get("non-claims")
+        assert isinstance(nc, list) and len(nc) == 2 and nc[0] == "the eyes did not run the suite", nc
+        assert nc[1].startswith(W1_DROPPED) and all(x in nc[1] for x in ("plan-vs-code", "plan/PLAN.md#Q7", "claim-unverified", "built.verified[0]")), nc
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [a], "summary": "s"}, p)
+        assert len(out.get("non-claims") or []) == 1 and out["non-claims"][0].startswith(W1_DROPPED) and "plan/PLAN.md#Q7" in out["non-claims"][0], out
+        # a reject that keeps a founded finding: no such line
+        founded = w1_finding("`the archive is kept`", where="contract.Q1")
+        out = dwitbuk.weigh({"verdict": "reject", "findings": [founded, a], "summary": "s"}, p)
+        assert out["verdict"] == "reject" and not [n for n in out.get("non-claims") or [] if n.startswith("accepted only because")], out
+
+
+def w1_no_must_open(pj):
+    """A verify request with no must_open: only a small new file and a deleted file touched."""
+    write(os.path.join(pj.dir, "d.py"), "d = 1\n")
+    git(pj.dir, "add", "-A"); git(pj.dir, "commit", "-qm", "base d")
+    since = git(pj.dir, "rev-parse", "HEAD")
+    os.unlink(os.path.join(pj.dir, "d.py"))
+    write(os.path.join(pj.dir, "n.py"), "n = 'small and new'\n")
+    req = verify_req(pj, ["n.py", "d.py"], since, contract={"Q-n": "## Q-n\n\nn is new"}, tests=["t.py"], built={"summary": "built", "verified": [], "non-claims": []})
+    assert "must_open" not in dwitbuk.verify_packet(req)
+    return req
+
+
+def test_W1_5_the_worker_saves_a_reject_with_no_grounded_finding_as_an_accept_that_says_so():
+    """W1-5 in eyes_worker main: a reject with no finding, or with findings that all lacked their quote fields, saved as an
+    accept, carries exactly one non-claims line starting "accepted only because the eyes' reject " that says it had no grounded
+    finding and how many were dropped for missing quotes. A reject on unfounded findings, with every must_open file opened,
+    is saved as `verdict: accept` with weigh's line."""
+    with Project() as pj:
+        req = w1_no_must_open(pj)
+        got = v1_answer(pj, req, [v1_said('{"verdict":"reject","findings":[]}')], "reject", [])
+        lines = [n for n in got.get("non-claims") or [] if n.startswith("accepted only because the eyes' reject ")]
+        assert got.get("verdict") == "accept" and len(lines) == 1, got
+        assert "grounded" in lines[0] and re.search(r"\b0\b", lines[0]), lines
+        bare = [{"kind": "plan-vs-code", "where": "n.py", "why": "no quotes given"}, {"kind": "anomaly", "where": "d.py", "why": "none either"}]
+        got = v1_answer(pj, req, [v1_said('{"verdict":"reject","findings":[]}')], "reject", bare)
+        lines = [n for n in got.get("non-claims") or [] if n.startswith("accepted only because the eyes' reject ")]
+        assert got.get("verdict") == "accept" and len(lines) == 1 and "grounded" in lines[0] and re.search(r"\b2\b", lines[0]), got
+    with Project() as pj:
+        req = v1_project(pj)
+        nowhere = {"kind": "claim-unverified", "where": "built.verified[0]", "record_quote": "`I ran nothing at all`", "tree_quote": "keep = True", "why": "says so"}
+        opened = [v1_read("mod_a.py"), v1_read("mod_b.py"), v1_read("mod_c.py"), v1_said()]
+        got = v1_accept(v1_answer(pj, req, opened, "reject", [nowhere], summary="s"))
+        lines = [n for n in got.get("non-claims") or [] if n.startswith("accepted only because the eyes' reject ")]
+        assert len(lines) == 1 and lines[0].startswith(W1_DROPPED) and "claim-unverified" in lines[0] and "built.verified[0]" in lines[0], got
+
+
+# --- W2: standing objections are shown once; the session-start line is said in full once per session ----------------------
+
+W_ENGINES = {p.replace(os.sep, "/") for p in (os.path.abspath(dwitbuk.__file__), os.path.realpath(dwitbuk.__file__))}
+
+
+def w2_report(pj, charges):
+    pj.reporter([{"kind": "stale", "where": "R-" + c, "text": "charge " + c} for c in charges])
+
+
+def w2_ranges(idx):
+    idx = sorted(set(idx))
+    out, i = [], 0
+    while i < len(idx):
+        j = i
+        while j + 1 < len(idx) and idx[j + 1] == idx[j] + 1:
+            j += 1
+        out.append("%d-%d" % (idx[i], idx[j]) if j > i else "%d" % idx[i])
+        i = j + 1
+    return ", ".join(out)
+
+
+def w2_open(r):
+    return [(i, f) for i, f in enumerate(r["findings"]) if dwitbuk.layer(f) == "objection" and not f.get("disposition")]
+
+
+def w2_standing_lines(rid, prev, standing_idx, standing, engine):
+    first = "standing, unchanged since %s: %d (%s) — shown before, not listed again: findings %s of %s" % (
+        prev, len({dwitbuk.charge(f) for f in standing}), dwitbuk.count_text(standing), w2_ranges(standing_idx), rid)
+    second = ('  a person disposes each: python3 "%s" dispose %s/<n> --as accepted|dismissed --why "<their words>" --by <name> --target .  '
+              '(`python3 "%s" follow --target .` lists them whole)' % (engine, rid, engine))
+    return first, second
+
+
+def w2_last_line(r, prev, new, standing, observations):
+    rid = r["id"]
+    return ("%s: %d new objection(s) (%s), %d observation(s) since %s; %d standing, unchanged since %s (%s) — `follow` lists them; "
+            "a person disposes each: `dispose %s/<n> --as accepted|dismissed --why ... --by NAME`" % (
+                rid, len({dwitbuk.charge(f) for f in new}), dwitbuk.count_text(new), observations, r["since"],
+                len({dwitbuk.charge(f) for f in standing}), prev, dwitbuk.count_text(standing), rid))
+
+
+def test_W2_1_a_standing_objection_is_not_listed_again_and_two_lines_name_its_findings_and_the_command():
+    """W2-1: the second review holds five objections the first already held open (four reported again, one carried) and two
+    new ones: the new are printed whole as today, the standing get no line of their own, and two lines say how many stand,
+    their indices as ranges, and the disposal command with the engine's absolute path — after the new objections, before
+    the carried line. The third review (the second call) finds all seven standing."""
+    import time
+    with Project() as pj:
+        w2_report(pj, ["s1", "s2", "s3", "x", "s4"])
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        assert code == 0 and "standing" not in out, out   # no previous review: everything is new
+        time.sleep(1.1)
+        w2_report(pj, ["s1", "s2", "s3", "n1", "s4", "n2"])
+        code, out = run("review", "--target", pj.dir)
+        r = pj.latest()
+        prev_open = {dwitbuk.charge(f) for _, f in w2_open(first)}
+        opened = w2_open(r)
+        standing = [(i, f) for i, f in opened if dwitbuk.charge(f) in prev_open]
+        idx = [i for i, _ in standing]
+        assert idx == [0, 1, 2, 4, 6] and len(opened) == 7, ("fixture", opened)
+        lines = out.splitlines()
+        for c in ("s1", "s2", "s3", "s4", "x"):
+            assert "charge %s" % c not in out, (c, out)
+        assert any("charge n1" in l and "R-n1" in l for l in lines) and any("charge n2" in l for l in lines), out
+        assert any(l.startswith("carried from earlier reviews, each once:") for l in lines), out
+        hits = [e for e in W_ENGINES if set(w2_standing_lines(r["id"], first["id"], idx, [f for _, f in standing], e)) <= set(lines)]
+        assert hits, out
+        one, two = w2_standing_lines(r["id"], first["id"], idx, [f for _, f in standing], hits[0])
+        assert one.endswith("findings 0-2, 4, 6 of %s" % r["id"]) and lines.index(two) == lines.index(one) + 1, out
+        carried = next(k for k, l in enumerate(lines) if l.startswith("carried from earlier reviews, each once:"))
+        assert max(k for k, l in enumerate(lines) if "charge n1" in l or "charge n2" in l) < lines.index(one) < carried, out
+        # the second call: what was new is standing now; nothing is printed whole
+        time.sleep(1.1)
+        code, out = run("review", "--target", pj.dir)
+        r3 = pj.latest()
+        assert "charge n1" not in out and "charge s1" not in out, out
+        idx3 = [i for i, _ in w2_open(r3)]
+        want = w2_standing_lines(r3["id"], r["id"], idx3, [f for _, f in w2_open(r3)], hits[0])
+        assert want[0] in out.splitlines() and want[1] in out.splitlines() and want[0].startswith("standing, unchanged since %s: 7 (" % r["id"]), out
+
+
+def test_W2_1_a_charge_disposed_in_the_previous_review_is_not_counted_standing():
+    """W2-1: a charge disposed in the previous review is not open in the next; the standing count is of what stays open."""
+    import time
+    with Project() as pj:
+        w2_report(pj, ["a1", "a2", "a3"])
+        run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        i = next(i for i, f in enumerate(first["findings"]) if f["where"] == "R-a2")
+        assert run("dispose", "%s/%d" % (first["id"], i), "--as", "accepted", "--why", "known", "--by", "kim", "--target", pj.dir)[0] == 0
+        time.sleep(1.1)
+        code, out = run("review", "--target", pj.dir)
+        assert any(l.startswith("standing, unchanged since %s: 2 (stale 2) — shown before" % first["id"]) for l in out.splitlines()), out
+        assert "charge a1" not in out and "charge a3" not in out, out
+
+
+def test_W2_2_the_last_line_says_new_and_standing_apart_and_is_todays_with_nothing_standing():
+    """W2-2: the first review's last line is today's; the second's, with standing objections, counts the new and the standing
+    apart and names `follow` and the disposal form; with no new objection the new count is `none`."""
+    import time
+    with Project() as pj:
+        pj.reporter([{"kind": "stale", "where": "R-k1", "text": "charge k1"}, {"kind": "stale", "where": "R-k2", "text": "charge k2"},
+                     {"kind": "delegated", "where": "R-o", "text": "an observation"}])
+        code, out = run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        assert out.splitlines()[-1] == "%s: 2 objection(s) (stale 2), 1 observation(s) since %s" % (first["id"], first["since"]), out
+        time.sleep(1.1)
+        pj.reporter([{"kind": "stale", "where": "R-k1", "text": "charge k1"}, {"kind": "left-open", "where": "run-1/T", "text": "charge new"}])
+        code, out = run("review", "--target", pj.dir)
+        r = pj.latest()
+        opened = w2_open(r)
+        prev = {dwitbuk.charge(f) for _, f in w2_open(first)}
+        new = [f for _, f in opened if dwitbuk.charge(f) not in prev]
+        standing = [f for _, f in opened if dwitbuk.charge(f) in prev]
+        assert len(new) == 1 and len(standing) == 2, ("fixture", opened)
+        obs = sum(1 for f in r["findings"] if dwitbuk.layer(f) == "observation")
+        assert out.splitlines()[-1] == w2_last_line(r, first["id"], new, standing, obs), out
+        assert out.splitlines()[-1].startswith("%s: 1 new objection(s) (left-open 1), " % r["id"]), out
+        time.sleep(1.1)
+        code, out = run("review", "--target", pj.dir)
+        r3 = pj.latest()
+        standing = [f for _, f in w2_open(r3)]
+        obs = sum(1 for f in r3["findings"] if dwitbuk.layer(f) == "observation")
+        assert out.splitlines()[-1] == w2_last_line(r3, r["id"], [], standing, obs), out
+        assert out.splitlines()[-1].startswith("%s: 0 new objection(s) (none), " % r3["id"]), out
+
+
+def w2_broken(pj, name):
+    """A reporter the lock declares that prints no dwitbuk/findings@1."""
+    write(os.path.join(pj.dir, name + ".py"), "print('not json')\n")
+    lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json"))
+    lock.setdefault("reporters", {})[name] = [sys.executable, os.path.join(pj.dir, name + ".py")]
+    write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+
+
+def test_W2_3_a_carried_reporter_failure_is_said_beside_the_reporters_new_answer():
+    """W2-3: a reporter that failed and answers again: its carried `reporter-failed` charge gets `heard-in` (the first review it
+    answered in, kept on the next), review and follow say it is not a current failure, the charge stays open and one disposal
+    answers it. A reporter that did not answer gets no `heard-in`."""
+    import time
+    with Project() as pj:
+        pj.reporter([{"kind": "stale", "where": "R-1", "text": "kept"}])
+        w2_broken(pj, "b1"); w2_broken(pj, "b2")
+        run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        failed = {f["where"]: f for f in first["findings"] if f["kind"] == "reporter-failed"}
+        assert set(failed) == {"b1", "b2"}, ("fixture", first["findings"])
+        pj.reporter([], "b1")   # b1 answers now (an empty dwitbuk/findings@1)
+        lock = dwitbuk.load(os.path.join(pj.dir, "hunsu.lock.json")); lock["reporters"].pop("b2"); write(os.path.join(pj.dir, "hunsu.lock.json"), lock)
+        time.sleep(1.1)
+        code, out = run("review", "--target", pj.dir)
+        r2 = pj.latest()
+        carries = {f["where"]: (i, f) for i, f in enumerate(r2["findings"]) if f["kind"] == "undisposed" and f["carries"][0] == "reporter-failed"}
+        assert set(carries) == {"b1", "b2"}, r2["findings"]
+        i1, c1 = carries["b1"]
+        assert c1.get("heard-in") == r2["id"] and "heard-in" not in carries["b2"][1], carries
+        assert dwitbuk.charge(c1) == dwitbuk.identity(failed["b1"]) and "disposition" not in c1, c1
+        said = "  reporter b1 has answered since %s: the failure charged at %s/%d is not current; it stays open until a person disposes it" % (r2["id"], r2["id"], i1)
+        assert said in out.splitlines() and "reporter b2 has answered" not in out, out
+        code, out = run("follow", "--target", pj.dir)
+        assert code == 1 and "        reporter b1 has answered since %s: not a current failure; a person disposes it" % r2["id"] in out.splitlines(), out
+        assert out.splitlines()[-1] == "undisposed findings: 3", out
+        time.sleep(1.1)
+        code, out = run("review", "--target", pj.dir)
+        r3 = pj.latest()
+        carries = {f["where"]: (i, f) for i, f in enumerate(r3["findings"]) if f["kind"] == "undisposed" and f["carries"][0] == "reporter-failed"}
+        i1, c1 = carries["b1"]
+        assert c1.get("heard-in") == r2["id"] and "heard-in" not in carries["b2"][1] and "disposition" not in c1, carries
+        assert "  reporter b1 has answered since %s: the failure charged at %s/%d is not current; it stays open until a person disposes it" % (r2["id"], r3["id"], i1) in out.splitlines(), out
+        assert run("dispose", "%s/%d" % (r3["id"], i1), "--as", "dismissed", "--why", "it answers again", "--by", "kim", "--target", pj.dir)[0] == 0
+        assert run("follow", "--target", pj.dir)[1].splitlines()[-1] == "undisposed findings: 2"
+
+
+W_HOOK = os.path.join(PLUGIN, "hooks", "session_start.py")
+W_HOOK_ENGINES = {p.replace(os.sep, "/") for p in (os.path.abspath(os.path.join(PLUGIN, "dwitbuk.py")), os.path.realpath(os.path.join(PLUGIN, "dwitbuk.py")))}
+W2_STATE = os.path.join(".dwitbuk", "session-start.json")
+
+
+def w2_hook(cwd, payload=None, **env):
+    """The SessionStart hook as a host runs it: the JSON payload on stdin; AGENT_WORKER and HUNSU_SURVEY only when given."""
+    child = {k: v for k, v in os.environ.items() if k not in ("AGENT_WORKER", "HUNSU_SURVEY")}
+    child.update(env)
+    done = subprocess.run([sys.executable, W_HOOK], input=json.dumps(dict({"cwd": cwd}, **(payload or {}))), capture_output=True,
+                          text=True, encoding="utf-8", env=child)
+    ctx = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"] if done.stdout.strip() else ""
+    return done.returncode, ctx
+
+
+def w2_full(rid, n, count, engine):
+    return ('dwitbuk: %d undisposed objection(s) in %s (%s) — `python3 "%s" follow --target .` lists them; a person disposes each: '
+            '`python3 "%s" dispose %s/<n> --as accepted|dismissed --why "<their words>" --by <name> --target .`; an agent never disposes one on its own.'
+            % (n, rid, count, engine, engine, rid))
+
+
+def w2_short(rid, engine):
+    return ("dwitbuk: %s's undisposed objection(s) are as this session was told — unchanged; `python3 \"%s\" follow --target .` lists them, "
+            "and a person disposes each." % (rid, engine))
+
+
+def w2_state(pj):
+    _, items = dwitbuk.open_charges(pj.dir)
+    opened = [f for _, f in items]
+    return pj.latest()["id"], len(opened), dwitbuk.count_text(opened), sorted(list(dwitbuk.charge(f)) for f in opened)
+
+
+def w2_is_full(pj, ctx):
+    rid, n, count, _ = w2_state(pj)
+    return any(w2_full(rid, n, count, e) in ctx.splitlines() for e in W_HOOK_ENGINES)
+
+
+def w2_is_short(pj, ctx):
+    rid = pj.latest()["id"]
+    return any(w2_short(rid, e) in ctx.splitlines() for e in W_HOOK_ENGINES) and not re.search(r"\d+ undisposed|\d+ objection", ctx)
+
+
+def w2_digests(charges):
+    import hashlib
+    return {hashlib.sha256(t.encode("utf-8")).hexdigest() for t in
+            (json.dumps(charges), json.dumps(charges, ensure_ascii=False), json.dumps(charges, separators=(",", ":")),
+             json.dumps(charges, ensure_ascii=False, separators=(",", ":")))}
+
+
+def w2_tree(root):
+    out = {}
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        for f in files:
+            p = os.path.join(dirpath, f)
+            with open(p, "rb") as fh:
+                out[os.path.relpath(p, root).replace(os.sep, "/")] = fh.read()
+    return out
+
+
+def w2_hook_project(pj):
+    pj.reporter([{"kind": "outside-run", "where": "b.py", "files": ["b.py"], "text": "changed"},
+                 {"kind": "left-open", "where": "run-1/T", "text": "left open when the run closed"},
+                 {"kind": "delegated", "where": "run-1/T", "text": "gate passed by delegation: ok"}])
+    assert run("review", "--target", pj.dir)[0] == 0
+
+
+def test_W2_4_without_a_session_id_the_full_line_is_said_every_time_and_nothing_is_written():
+    """W2-4: a payload with no `session_id`, or an empty one: the FULL line — count, the follow and dispose commands with the
+    engine's absolute path, an agent never disposes one — every time, and no state file."""
+    with Project() as pj:
+        w2_hook_project(pj)
+        for payload in ({}, {"session_id": ""}, {}, {"session_id": "", "source": "resume"}):
+            code, ctx = w2_hook(pj.dir, payload)
+            assert code == 0 and w2_is_full(pj, ctx), (payload, ctx)
+        assert not os.path.exists(os.path.join(pj.dir, W2_STATE)), "nothing written"
+
+
+def test_W2_4_a_session_is_told_the_full_line_once_and_the_short_line_on_every_later_start():
+    """W2-4: one session: FULL on startup, then SHORT on resume, compact and clear while nothing changed; the state file holds
+    the review and the digest of the open charges for it. Another session is told FULL once. The hook writes nothing but
+    its state file."""
+    with Project() as pj:
+        w2_hook_project(pj)
+        before = w2_tree(pj.dir)
+        code, ctx = w2_hook(pj.dir, {"session_id": "sess-one", "source": "startup"})
+        assert code == 0 and w2_is_full(pj, ctx), ctx
+        rid, _, count, charges = w2_state(pj)
+        state = json.load(open(os.path.join(pj.dir, W2_STATE), encoding="utf-8"))
+        assert list(state) == ["sessions"] and list(state["sessions"]) == ["sess-one"], state
+        told = state["sessions"]["sess-one"]
+        assert told.get("review") == rid and told.get("open") in w2_digests(charges), (told, charges)
+        for source in ("resume", "compact", "clear", "resume"):
+            code, ctx = w2_hook(pj.dir, {"session_id": "sess-one", "source": source})
+            assert code == 0 and w2_is_short(pj, ctx) and count not in ctx, (source, ctx)
+        code, ctx = w2_hook(pj.dir, {"session_id": "sess-two", "source": "startup"})
+        assert code == 0 and w2_is_full(pj, ctx), ctx
+        code, ctx = w2_hook(pj.dir, {"session_id": "sess-two", "source": "resume"})
+        assert code == 0 and w2_is_short(pj, ctx), ctx
+        after = w2_tree(pj.dir)
+        assert {k: v for k, v in after.items() if k != W2_STATE.replace(os.sep, "/")} == before, set(after) ^ set(before)
+
+
+def test_W2_4_a_disposal_or_a_new_review_makes_the_next_start_of_the_same_session_full_again():
+    """W2-4: a change of the open set (a disposal) or of the latest review (a new review) is told in full at the next start of
+    the same session, then short again."""
+    import time
+    with Project() as pj:
+        w2_hook_project(pj)
+        s = {"session_id": "sess-one", "source": "resume"}
+        assert w2_is_full(pj, w2_hook(pj.dir, s)[1])
+        assert w2_is_short(pj, w2_hook(pj.dir, s)[1])
+        r = pj.latest()
+        i = w2_open(r)[0][0]
+        assert run("dispose", "%s/%d" % (r["id"], i), "--as", "accepted", "--why", "yes", "--by", "kim", "--target", pj.dir)[0] == 0
+        code, ctx = w2_hook(pj.dir, s)
+        assert code == 0 and w2_is_full(pj, ctx) and "1 undisposed objection(s)" in ctx, ctx
+        assert w2_is_short(pj, w2_hook(pj.dir, s)[1])
+        time.sleep(1.1)
+        assert run("review", "--target", pj.dir)[0] == 0
+        assert pj.latest()["id"] != r["id"]
+        code, ctx = w2_hook(pj.dir, s)
+        assert code == 0 and w2_is_full(pj, ctx) and pj.latest()["id"] in ctx, ctx
+        assert w2_is_short(pj, w2_hook(pj.dir, s)[1])
+
+
+def test_W2_4_at_most_64_sessions_are_kept_and_the_oldest_is_dropped():
+    """W2-4: the 65th session drops the oldest; that session, starting again, is told the FULL line."""
+    with Project() as pj:
+        w2_hook_project(pj)
+        for n in range(65):
+            code, ctx = w2_hook(pj.dir, {"session_id": "sess-%02d" % n})
+            assert code == 0 and w2_is_full(pj, ctx), (n, ctx)
+        kept = json.load(open(os.path.join(pj.dir, W2_STATE), encoding="utf-8"))["sessions"]
+        assert len(kept) == 64 and "sess-00" not in kept and "sess-64" in kept and "sess-01" in kept, sorted(kept)
+        assert w2_is_short(pj, w2_hook(pj.dir, {"session_id": "sess-64"})[1])
+        assert w2_is_full(pj, w2_hook(pj.dir, {"session_id": "sess-00"})[1])
+
+
+def test_W2_4_a_state_file_that_cannot_be_read_or_written_never_fails_the_hook():
+    """W2-4: the state path is a directory (neither read nor written), or holds what is not JSON, or JSON of the wrong shape:
+    the FULL line, exit 0."""
+    with Project() as pj:
+        w2_hook_project(pj)
+        made(os.path.join(pj.dir, W2_STATE))
+        for _ in range(2):
+            code, ctx = w2_hook(pj.dir, {"session_id": "sess-one"})
+            assert code == 0 and w2_is_full(pj, ctx), ctx
+        os.rmdir(os.path.join(pj.dir, W2_STATE))
+        for junk in ("not json {", "[1, 2, 3]", '{"sessions": "no object"}', '{"sessions": {"sess-one": 7}}'):
+            write(os.path.join(pj.dir, W2_STATE), junk)
+            code, ctx = w2_hook(pj.dir, {"session_id": "sess-one"})
+            assert code == 0 and w2_is_full(pj, ctx), (junk, ctx)
+
+
+def test_W2_4_the_silent_cases_stay_silent_and_the_standing_text_says_once_per_session():
+    """W2-4: with a session id, no reviews, nothing open and a worker session are silent and write nothing; hunsu's probe gets
+    the standing text — a template with no id, count or path saying the full line is said once per session, later starts get
+    a short line without the count, a person disposes each and an agent never disposes one — and writes nothing."""
+    s = {"session_id": "sess-one"}
+    with Project() as pj:
+        assert w2_hook(pj.dir, s) == (0, ""), "no reviews: silent"
+        w2_hook_project(pj)
+        assert w2_hook(pj.dir, s, AGENT_WORKER="1") == (0, ""), "a worker session: silent"
+        assert not os.path.exists(os.path.join(pj.dir, W2_STATE)), "a worker session writes nothing"
+        r = pj.latest()
+        for i, _ in w2_open(r):
+            assert run("dispose", "%s/%d" % (r["id"], i), "--as", "accepted", "--why", "yes", "--by", "kim", "--target", pj.dir)[0] == 0
+        assert w2_hook(pj.dir, s) == (0, ""), "nothing open: silent"
+        assert not os.path.exists(os.path.join(pj.dir, W2_STATE)), "silence writes nothing"
+    empty = tempfile.mkdtemp(prefix="dwitbuk-survey-")
+    try:
+        code, ctx = w2_hook(empty, s, HUNSU_SURVEY="1")
+        assert code == 0 and ctx == session_start.STANDING, ctx
+        low = ctx.lower()
+        assert "once per session" in low and "short" in low and "count" in low and "person disposes" in low and "never disposes" in low, ctx
+        assert "follow" in ctx and "dispose" in ctx and "nothing" in low, ctx
+        assert not re.search(r"review-\d|\d+ undisposed|" + re.escape(HERE), ctx), ctx
+        assert w2_hook(empty, s, HUNSU_SURVEY="1", AGENT_WORKER="1") == (0, "")
+        assert os.listdir(empty) == [], "nothing written"
+    finally:
+        shutil.rmtree(empty, ignore_errors=True)
+
+
+# --- W3: an agent never disposes a finding and never records a delegation no person gave -----------------------------------
+
+def w3_run(*argv):
+    """run, with what the engine writes to stderr kept beside stdout."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = dwitbuk.main(list(argv))
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 1
+            if not isinstance(e.code, int):
+                err.write(str(e.code) + "\n")
+    return code, out.getvalue() + err.getvalue()
+
+
+def w3_project(pj):
+    pj.reporter([{"kind": "unattributed", "where": "run-1/S1", "text": "no touched"}, {"kind": "stale", "where": "R-1", "text": "stale"},
+                 {"kind": "delegated", "where": "run-1/S1", "text": "gate passed by delegation: away"}])
+    run("review", "--since", pj.base, "--target", pj.dir)
+    return pj.latest()
+
+
+def w3_bytes(pj):
+    folder = os.path.join(pj.dir, "reviews")
+    return {n: open(os.path.join(folder, n), "rb").read() for n in sorted(os.listdir(folder))}
+
+
+def test_W3_1_a_delegated_disposal_without_by_is_refused_and_writes_nothing():
+    """W3-1: an agent's own disposal — `--delegated WHY` with no `--by` — is refused: non-zero, a message naming `--by` and saying
+    an agent never records a delegation no person gave, the review unchanged. With `--by NAME` it is recorded as today."""
+    with Project() as pj:
+        r = w3_project(pj)
+        before = w3_bytes(pj)
+        code, out = w3_run("dispose", "%s/0" % r["id"], "--as", "dismissed", "--delegated", "the agent judged it noise", "--target", pj.dir)
+        assert code != 0 and "--by" in out and "never record" in out and "delegation" in out, (code, out)
+        assert w3_bytes(pj) == before, "a refused disposal writes nothing"
+        code, out = w3_run("dispose", "%s/0" % r["id"], "--as", "dismissed", "--delegated", "the agent judged it noise", "--approved-in", "source:at-1", "--target", pj.dir)
+        assert code != 0 and "--by" in out and w3_bytes(pj) == before, (code, out)
+        code, out = w3_run("dispose", "%s/0" % r["id"], "--as", "accepted", "--delegated", "the session read it", "--by", "lee", "--approved-in", "source:at-65", "--target", pj.dir)
+        d = pj.latest()["findings"][0]["disposition"]
+        assert code == 0 and d["by"] is None and d["delegated-by"] == "lee" and d["approved-in"] == "source:at-65", d
+        assert "(delegated by lee; approved in source:at-65)" in out, out
+
+
+def test_W3_2_a_disposal_with_why_and_no_by_is_refused_and_the_other_refusals_stand():
+    """W3-2: `--why WHY` with no `--by` is refused: non-zero, `--by` named, nothing written. `--why WHY --by NAME` is recorded;
+    an observation, both or neither of --why/--delegated, a bad --approved-in and a missing finding are refused as today."""
+    with Project() as pj:
+        r = w3_project(pj)
+        before = w3_bytes(pj)
+        code, out = w3_run("dispose", "%s/1" % r["id"], "--as", "dismissed", "--why", "looks fine", "--target", pj.dir)
+        assert code != 0 and "--by" in out, (code, out)
+        assert w3_bytes(pj) == before, "a refused disposal writes nothing"
+        obs = next(i for i, f in enumerate(r["findings"]) if f["kind"] == "delegated")
+        for argv in (("%s/%d" % (r["id"], obs), "--as", "accepted", "--why", "x", "--by", "kim"),
+                     ("%s/1" % r["id"], "--as", "accepted", "--by", "kim"),
+                     ("%s/1" % r["id"], "--as", "accepted", "--why", "x", "--delegated", "y", "--by", "kim"),
+                     ("%s/1" % r["id"], "--as", "accepted", "--delegated", "x", "--by", "kim", "--approved-in", "yes"),
+                     ("%s/99" % r["id"], "--as", "accepted", "--why", "x", "--by", "kim")):
+            assert w3_run("dispose", *argv, "--target", pj.dir)[0] != 0, argv
+        assert w3_bytes(pj) == before
+        code, out = w3_run("dispose", "%s/1" % r["id"], "--as", "dismissed", "--why", "looks fine", "--by", "kim", "--target", pj.dir)
+        d = pj.latest()["findings"][1]["disposition"]
+        assert code == 0 and d["by"] == "kim" and d["why"] == "looks fine", d
+
+
+def test_W3_3_the_review_skill_says_an_agent_never_disposes_a_finding_on_its_own():
+    """W3-3: the review skill no longer tells an agent it may dispose a finding itself, and says it never disposes one on its
+    own judgment and never records a delegation the person did not give."""
+    text = open(os.path.join(PLUGIN, "skills", "review", "SKILL.md"), encoding="utf-8").read()
+    flat = " ".join(text.split()).lower()
+    assert "dispose it yourself" not in flat, "the old permission is gone"
+    # the skill speaks to the agent, so "you never dispose a finding on your own judgment" says it as well as "an agent ... its own"
+    assert re.search(r"never dispose[sd]? (?:a|any) finding on (?:its|your|their) own judge?ment", flat), "says an agent never disposes a finding on its own judgment"
+    assert re.search(r"never records? a delegation", flat), "says an agent never records a delegation the person did not give"
+
+
+def test_W3_3_the_dispose_command_names_by_for_both_forms():
+    """W3-3: dispose.md's argument-hint requires `--by NAME` beside `--why` and beside `--delegated`."""
+    text = open(os.path.join(PLUGIN, "commands", "dispose.md"), encoding="utf-8").read()
+    hint = next(l for l in text.splitlines() if l.startswith("argument-hint:"))
+    assert hint == "argument-hint: <review>/<n> --as accepted|dismissed (--why WHY --by NAME | --delegated WHY --by NAME) [--approved-in SOURCE:ID] [--quote QUOTE]", hint
+
+
+def test_W3_3_the_engines_dispose_usage_line_names_by_for_both_forms():
+    """W3-3: the engine's module docstring gives `dispose` as `(--why WHY --by NAME | --delegated WHY --by NAME)`."""
+    usage = [l for l in (dwitbuk.__doc__ or "").splitlines() if l.strip().startswith("dispose ")]
+    assert len(usage) == 1 and "(--why WHY --by NAME | --delegated WHY --by NAME)" in usage[0], usage
+
+
+
+# --- W3-4: every text dispose prints or offers for its arguments gives a disposal with --by --------------------------------
+
+W3_OFFER_WITHOUT_BY = re.compile(r"--(?:why|delegated) WHY(?! --by\b)")
+
+
+def w3_help():
+    """`dispose --help` as printed (exit 0), wide enough that argparse folds no description."""
+    old = os.environ.get("COLUMNS")
+    os.environ["COLUMNS"] = "1000"
+    try:
+        code, out = w3_run("dispose", "--help")
+    finally:
+        if old is None:
+            os.environ.pop("COLUMNS", None)
+        else:
+            os.environ["COLUMNS"] = old
+    assert code == 0, (code, out)
+    return out
+
+
+def w3_help_parts(text):
+    """(usage, {long option: its description}) from argparse help: an entry starts at a line indented two spaces then '-';
+    the description is what follows the invocation (after two or more spaces) and the more-indented lines under it."""
+    lines = text.splitlines()
+    usage, i = [], 0
+    while i < len(lines) and lines[i].strip():
+        usage.append(lines[i]); i += 1
+    entries, cur = {}, None
+    for line in lines[i:]:
+        if re.match(r"^  -", line):
+            head, _, rest = line.strip().partition("  ")
+            names = re.findall(r"--[\w-]+", head)
+            cur = [rest.strip()]
+            for n in names:
+                entries[n] = cur
+        elif cur is not None and line.startswith("   ") and line.strip():
+            cur.append(line.strip())
+        else:
+            cur = None
+    return " ".join(" ".join(usage).split()), {n: " ".join(" ".join(v).split()) for n, v in entries.items()}
+
+
+def w3_refusals(pj, r):
+    """every refusal dispose gives for its arguments, as (argv, code, text)."""
+    i = r["id"]
+    obs = next(k for k, f in enumerate(r["findings"]) if f["kind"] == "delegated")
+    out = []
+    for argv in (("%s/1" % i, "--as", "accepted"),
+                 ("%s/1" % i, "--as", "accepted", "--by", "kim"),
+                 ("%s/1" % i, "--as", "accepted", "--why", "x", "--delegated", "y"),
+                 ("%s/1" % i, "--as", "accepted", "--why", "x", "--delegated", "y", "--by", "kim"),
+                 ("%s/1" % i, "--as", "dismissed", "--delegated", "x"),
+                 ("%s/1" % i, "--as", "dismissed", "--delegated", "x", "--approved-in", "source:at-1"),
+                 ("%s/1" % i, "--as", "dismissed", "--why", "x"),
+                 ("%s/%d" % (i, obs), "--as", "accepted", "--why", "x", "--by", "kim"),
+                 ("%s/1" % i, "--as", "accepted", "--delegated", "x", "--by", "kim", "--approved-in", "yes"),
+                 ("%s/99" % i, "--as", "accepted", "--why", "x", "--by", "kim"),
+                 ("%s/1" % i,),
+                 ("%s/1" % i, "--as", "maybe", "--why", "x", "--by", "kim")):
+        code, text = w3_run("dispose", *argv, "--target", pj.dir)
+        out.append((argv, code, text))
+    return out
+
+
+def test_W3_4_the_refusal_for_neither_or_both_names_the_two_forms_with_by():
+    """W3-4: neither or both of --why/--delegated is refused with a message naming `--why WHY --by NAME` and
+    `--delegated WHY --by NAME`, never `--delegated WHY` without `--by`; nothing is written."""
+    with Project() as pj:
+        r = w3_project(pj)
+        before = w3_bytes(pj)
+        i = r["id"]
+        for argv in (("%s/1" % i, "--as", "accepted"),
+                     ("%s/1" % i, "--as", "accepted", "--by", "kim"),
+                     ("%s/1" % i, "--as", "dismissed", "--why", "x", "--delegated", "y"),
+                     ("%s/1" % i, "--as", "dismissed", "--why", "x", "--delegated", "y", "--by", "kim")):
+            code, out = w3_run("dispose", *argv, "--target", pj.dir)
+            assert code != 0, (argv, code, out)
+            assert "--why WHY --by NAME" in out and "--delegated WHY --by NAME" in out, (argv, out)
+            assert not W3_OFFER_WITHOUT_BY.search(out), (argv, out)
+        assert w3_bytes(pj) == before, "a refused disposal writes nothing"
+
+
+def test_W3_4_the_help_for_delegated_says_a_persons_hand_off_and_that_by_is_required():
+    """W3-4: `--delegated`'s help says it records a person's hand-off and that `--by NAME` (who handed it off) is required."""
+    _, opts = w3_help_parts(w3_help())
+    text = opts.get("--delegated", "")
+    flat = text.lower()
+    assert text, opts
+    assert "person" in flat and re.search(r"hand(?:ed)?[- ]?off", flat), text
+    assert "--by NAME" in text and "required" in flat, text
+    assert not W3_OFFER_WITHOUT_BY.search(text), text
+
+
+def test_W3_4_the_help_for_why_says_by_is_required_with_it():
+    """W3-4: `--why`'s help says `--by NAME` (whose words they are) is required with it."""
+    _, opts = w3_help_parts(w3_help())
+    text = opts.get("--why", "")
+    assert text, opts
+    assert "--by NAME" in text and "required" in text.lower(), text
+    assert not W3_OFFER_WITHOUT_BY.search(text), text
+
+
+def test_W3_4_the_help_for_by_says_it_is_required_with_either():
+    """W3-4: `--by`'s help says it is required with either --why or --delegated."""
+    _, opts = w3_help_parts(w3_help())
+    text = opts.get("--by", "")
+    assert text, opts
+    assert "required" in text.lower() and "--why" in text and "--delegated" in text, text
+    assert not W3_OFFER_WITHOUT_BY.search(text), text
+
+
+def test_W3_4_no_text_dispose_prints_or_its_help_shows_offers_a_form_without_by():
+    """W3-4: no refusal dispose prints (argparse's own included) and neither the usage nor any option description in its --help
+    offers `--delegated WHY` or `--why WHY` without `--by`."""
+    usage, opts = w3_help_parts(w3_help())
+    assert usage.startswith("usage:"), usage
+    assert not W3_OFFER_WITHOUT_BY.search(usage), usage
+    for name, text in opts.items():
+        assert not W3_OFFER_WITHOUT_BY.search(text), (name, text)
+    with Project() as pj:
+        r = w3_project(pj)
+        before = w3_bytes(pj)
+        for argv, code, text in w3_refusals(pj, r):
+            assert code != 0, (argv, code, text)
+            assert not W3_OFFER_WITHOUT_BY.search(text), (argv, text)
+        assert w3_bytes(pj) == before, "a refused disposal writes nothing"
+
+
+# --- W4: an observation counts as unchanged only when the previous review stood on it ----------------------------------------
+
+def w4_key(f):
+    import hashlib
+    return hashlib.sha256(json.dumps(list(dwitbuk.identity(f)), ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+
+
+def w4_unchanged(r):
+    return [f for f in r["findings"] if f["kind"] == "unchanged"]
+
+
+def w4_count(u):
+    return int(re.match(r"(\d+) observation", u["text"]).group(1))
+
+
+def test_W4_1_observation_key_is_the_first_12_hex_of_the_sha256_of_the_identity():
+    """W4-1: `observation_key(f)` is the first 12 hex characters of the sha256 of the identity's JSON (ensure_ascii off, UTF-8)."""
+    assert callable(getattr(dwitbuk, "observation_key", None)), "dwitbuk.observation_key is missing"
+    for f in ({"kind": "delegated", "where": "R-1 a realizes c", "text": "re-confirmed by delegation: plan-07"},
+              {"kind": "delegated", "where": "R-2 문서", "text": "위임으로 재확인 — “quoted”", "layer": "observation"},
+              {"kind": "fyi", "where": "", "text": ""}):
+        got = dwitbuk.observation_key(f)
+        assert got == w4_key(f) and re.fullmatch(r"[0-9a-f]{12}", got), (f, got)
+
+
+def test_W4_1_each_unchanged_line_holds_the_sorted_keys_of_what_it_counts():
+    """W4-1: the `unchanged` line review writes carries `held`: the sorted keys of the observations it counts, as many as its text says."""
+    import time
+    with Project() as pj:
+        obs = [{"kind": "delegated", "where": "R-%d a realizes c" % n, "text": "re-confirmed by delegation: %d" % n} for n in (3, 1, 2)]
+        pj.reporter(obs + [{"kind": "left-open", "where": "run-1/T", "text": "left open"}])
+        run("review", "--since", pj.base, "--target", pj.dir)
+        time.sleep(1.1)
+        run("review", "--target", pj.dir)
+        u = w4_unchanged(pj.latest())
+        assert len(u) == 1 and w4_count(u[0]) == 3, u
+        assert u[0].get("held") == sorted(w4_key(f) for f in obs), u[0]
+
+
+def test_W4_2_an_observation_the_previous_review_did_not_stand_on_is_written_in_full():
+    """W4-2, the reproduction: an observation in review 1, absent from review 2, reported again in review 3 is written in full
+    in review 3; only what review 2 stood on is counted."""
+    import time
+    with Project() as pj:
+        x = {"kind": "delegated", "where": "R-x a realizes c", "text": "re-confirmed by delegation: x"}
+        y = {"kind": "delegated", "where": "R-y b realizes c", "text": "re-confirmed by delegation: y"}
+        z = {"kind": "delegated", "where": "R-z c realizes c", "text": "re-confirmed by delegation: z"}
+        pj.reporter([x, z]); run("review", "--since", pj.base, "--target", pj.dir)
+        time.sleep(1.1); pj.reporter([y, z]); run("review", "--target", pj.dir)
+        time.sleep(1.1); pj.reporter([x, y, z]); run("review", "--target", pj.dir)
+        r3 = pj.latest()
+        full = {f["where"] for f in r3["findings"] if f["kind"] == "delegated"}
+        assert full == {"R-x a realizes c"}, ("x is written in full, y and z counted", r3["findings"])
+        u = w4_unchanged(r3)
+        assert len(u) == 1 and w4_count(u[0]) == 2 and u[0].get("held") == sorted([w4_key(y), w4_key(z)]), u
+
+
+def test_W4_2_a_previous_unchanged_line_without_held_keeps_todays_rule():
+    """W4-2: a previous review's `unchanged` line written before `held` existed counts, by today's rule, every observation its
+    `seen-in` chain holds; the new line carries `held`."""
+    with Project() as pj:
+        a = {"kind": "delegated", "where": "R-a old realizes c", "text": "re-confirmed by delegation: a", "layer": "observation"}
+        rids = ["review-20261001-000001-0a0a", "review-20261001-000002-0b0b"]
+        write(os.path.join(pj.dir, "reviews", rids[0] + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rids[0], "since": pj.base, "head": pj.base, "findings": [a]})
+        write(os.path.join(pj.dir, "reviews", rids[1] + ".json"), {"artifact-type": "dwitbuk/review@1", "id": rids[1], "since": pj.base, "head": pj.base, "findings": [
+            {"kind": "unchanged", "layer": "observation", "where": rids[0], "seen-in": [rids[0]],
+             "text": "1 observation(s) written in full in 1 earlier review(s) and unchanged since (delegated 1)"}]})
+        pj.reporter([{k: a[k] for k in ("kind", "where", "text")}])
+        assert run("review", "--target", pj.dir)[0] == 0
+        r = pj.latest()
+        assert not [f for f in r["findings"] if f["kind"] == "delegated"], r["findings"]
+        u = w4_unchanged(r)
+        assert len(u) == 1 and w4_count(u[0]) == 1 and u[0].get("held") == [w4_key(a)], u
+
+
+def test_W4_3_eyes_consume_gives_the_unchanged_line_of_its_new_review_held():
+    """W4-3: `eyes consume` writing a new eyes review for a closed review carries the open set and an `unchanged` line with `held`
+    over the observations the latest review stands on."""
+    with Project() as pj:
+        closed = d4_first_review(pj)
+        d4_close(pj, "run-20261106-000001-c105", closed["id"])
+        folder = os.path.join(pj.dir, ".dwitbuk", "packet")
+        eyes_answer(pj, folder, "w4-eyes")
+        code, out = run("eyes", "consume", "--dir", folder, "--target", pj.dir)
+        assert code == 0, out
+        new = pj.latest()
+        assert new["id"] != closed["id"], "fixture: a new eyes review"
+        stood = [f for f in closed["findings"] if dwitbuk.layer(f) == "observation"]
+        u = w4_unchanged(new)
+        assert len(u) == 1 and u[0].get("held") == sorted(w4_key(f) for f in stood) and w4_count(u[0]) == len(stood), u
+
+
+def test_W4_4_an_observation_reported_in_every_review_is_counted_from_the_next_review_on():
+    """W4-4: reported in every review, an observation is counted in one `unchanged` line from the review after the one that wrote
+    it, with today's `seen-in`; a changed text is written in full; objections are carried as today."""
+    import time
+    with Project() as pj:
+        o = {"kind": "delegated", "where": "R-1 a realizes c", "text": "re-confirmed by delegation: plan-07"}
+        charge = {"kind": "left-open", "where": "run-1/T", "text": "left open"}
+        pj.reporter([o, charge]); run("review", "--since", pj.base, "--target", pj.dir)
+        first = pj.latest()
+        for _ in range(2):
+            time.sleep(1.1); run("review", "--target", pj.dir)
+            r = pj.latest()
+            u = w4_unchanged(r)
+            assert len(u) == 1 and u[0]["seen-in"] == [first["id"]] and u[0].get("held") == [w4_key(o)] and "delegated" not in kinds(r), r["findings"]
+            assert next(f for f in r["findings"] if f["kind"] == "left-open")["first-seen"] == first["id"]
+        pj.reporter([dict(o, text="re-confirmed by delegation: plan-09"), charge])
+        time.sleep(1.1); run("review", "--target", pj.dir)
+        r = pj.latest()
+        assert kinds(r).get("delegated") == 1 and not w4_unchanged(r), r["findings"]
+
+
+
+@contextlib.contextmanager
+def w4_alarm(seconds):
+    """Guard a block with signal.alarm on POSIX (a call that outlives it fails as an AssertionError rather than hanging the suite);
+    Skip where signal.alarm does not exist."""
+    import signal
+    if not hasattr(signal, "alarm") or not hasattr(signal, "SIGALRM"):
+        raise Skip("signal.alarm does not exist on this host")
+    def ring(*_):
+        raise AssertionError("still running after %d s of wall time" % seconds)
+    old = signal.signal(signal.SIGALRM, ring)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
+
+def w4_chain(pj, n):
+    """n reviews written directly: each with two `delegated` observations of its own written in full, and from the second on one
+    `unchanged` line whose `seen-in` lists every earlier review id; every other line carries `held` (the keys of everything it
+    counts), the rest none, as reviews written before 2.4.0 are. Returns the review ids and the observations, per review."""
+    rids, own = [], []
+    for k in range(n):
+        rid = "review-20261001-%06d-%04x" % (k + 1, k + 1)
+        mine = [{"kind": "delegated", "where": "R-%d-%d a realizes c" % (k, j), "layer": "observation",
+                 "text": "re-confirmed by delegation: review %d, judgment %d" % (k, j)} for j in range(2)]
+        findings = [dict(f) for f in mine]
+        if k:
+            earlier = [f for fs in own for f in fs]
+            u = {"kind": "unchanged", "layer": "observation", "where": rids[0], "seen-in": list(rids),
+                 "text": "%d observation(s) written in full in %d earlier review(s) and unchanged since (delegated %d)" % (len(earlier), len(rids), len(earlier))}
+            if k % 2:
+                u["held"] = sorted(w4_key(f) for f in earlier)
+            findings.append(u)
+        write(os.path.join(pj.dir, "reviews", rid + ".json"),
+              {"artifact-type": "dwitbuk/review@1", "id": rid, "since": pj.base, "head": pj.base, "findings": findings})
+        rids.append(rid)
+        own.append(mine)
+    return rids, own
+
+
+def test_W4_5_reading_the_chain_is_linear_in_the_reviews_not_in_the_paths_through_it():
+    """W4-5: thirty reviews, each counting every earlier review's observations in one `unchanged` line whose `seen-in` lists every
+    earlier review (half with `held`, half without): `carried_observations` returns within 2 s and holds every observation the
+    latest review stands on; `review` on the project then finishes within 5 s and writes one `unchanged` line."""
+    import time
+    with Project() as pj:
+        rids, own = w4_chain(pj, 30)
+        everything = {w4_key(f) for fs in own for f in fs}
+        assert len(everything) == 60, "fixture: sixty distinct observations"
+        with w4_alarm(20):
+            t0 = time.monotonic()
+            held = dwitbuk.carried_observations(dwitbuk.reviews(pj.dir))
+            elapsed = time.monotonic() - t0
+        assert elapsed < 2.0, "carried_observations took %.1f s over 30 reviews" % elapsed
+        got = {w4_key(f) for f, _ in held.values()}
+        assert got == everything and len(held) == 60, (len(held), sorted(everything - got)[:5])
+        assert {rid for _, rid in held.values()} <= set(rids), held
+        pj.reporter([{k: f[k] for k in ("kind", "where", "text")} for f in (own[0][0], own[14][1], own[29][0], own[29][1])])
+        with w4_alarm(20):
+            t0 = time.monotonic()
+            code, out = run("review", "--target", pj.dir)
+            elapsed = time.monotonic() - t0
+        assert elapsed < 5.0, "review took %.1f s over 30 reviews" % elapsed
+        assert code == 0, out
+        r = pj.latest()
+        assert r["id"] not in rids, "a new review is written"
+        assert len(w4_unchanged(r)) == 1, r["findings"]
+
+# --- W5: the eyes are given the review skill's absolute path ------------------------------------------------------------------
+
+def w5_skill(worker_file):
+    d = os.path.dirname(os.path.abspath(worker_file))
+    return {p for base in (d, os.path.realpath(d)) for p in (os.path.join(base, "skills", "review", "SKILL.md"),
+                                                             os.path.join(base, "skills", "review", "SKILL.md").replace(os.sep, "/"))}
+
+
+def w5_names_skill(prompt, worker_file):
+    """The prompt names the skill's absolute path in one sentence that calls it dwitbuk's review skill and the packet's
+    `instructions` this request's whole procedure."""
+    hits = [p for p in w5_skill(worker_file) if p in prompt]
+    assert hits, ("no absolute path of the review skill", prompt[:600])
+    path = hits[0]
+    i = prompt.index(path)
+    start = max(prompt.rfind(". ", 0, i), prompt.rfind("\n", 0, i)) + 1
+    ends = [e for e in (prompt.find(". ", i + len(path)), prompt.find("\n", i + len(path)), prompt.find("{", i + len(path))) if e >= 0]
+    sentence = prompt[start:min(ends) if ends else len(prompt)]
+    assert "dwitbuk" in sentence and "review skill" in sentence and "instructions" in sentence and "procedure" in sentence, sentence
+
+
+def w5_capture(argv, host):
+    """eyes_worker.main with its host call replaced: the prompt the host would be given."""
+    seen = []
+    def fake(prompt, *a, **k):
+        seen.append(prompt)
+        raise SystemExit("w5: the host call is captured, not made")
+    name = "run_codex" if host == "codex" else "run_claude"
+    old, old_argv = getattr(w, name), sys.argv
+    setattr(w, name, fake)
+    sys.argv = ["eyes_worker.py"] + list(argv) + (["--host", "codex"] if host == "codex" else [])
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                w.main()
+            except SystemExit:
+                pass
+    finally:
+        setattr(w, name, old)
+        sys.argv = old_argv
+    assert len(seen) == 1, ("the host was called %d time(s)" % len(seen))
+    return seen[0]
+
+
+def w5_requests(pj):
+    """A verify request file and a late-eyes request file for the project; the late-eyes packet's fingerprint."""
+    write(os.path.join(pj.dir, "a.py"), "x = 2\n")
+    reqf = os.path.join(pj.dir, "local", "req.json")
+    write(reqf, verify_req(pj, ["a.py"], pj.base, contract={"Q1": "## Q1\n\nx is two"}, built={"summary": "built", "verified": [], "non-claims": []}))
+    folder = os.path.join(pj.dir, ".dwitbuk", "w5")
+    packet = late_packet(pj, folder)
+    return reqf, os.path.join(folder, "eyes-request.json"), dwitbuk.fingerprint(packet)
+
+
+def test_W5_1_the_prompt_to_claude_names_the_review_skill_for_a_verify_and_a_late_eyes_request():
+    """W5-1: the prompt `claude` is given names the review skill's absolute path in the running worker's directory, for a verify
+    request and a late-eyes request; the late-eyes packet and its fingerprint are as they were."""
+    assert os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(w.__file__)), "skills", "review", "SKILL.md")), "fixture: the skill ships"
+    with Project() as pj:
+        reqf, eyesf, fp = w5_requests(pj)
+        # the late-eyes request first: a verify run may write its response into the tree the late-eyes packet is bound to
+        raw = open(eyesf, encoding="utf-8").read()
+        prompt = w5_capture(["--request", eyesf, "--response", os.path.join(os.path.dirname(eyesf), "eyes-response.json")], "claude")
+        w5_names_skill(prompt, w.__file__)
+        w5_names_skill(w5_capture(["--request", reqf, "--response", os.path.join(pj.dir, "local", "resp.json")], "claude"), w.__file__)
+        assert open(eyesf, encoding="utf-8").read() == raw and dwitbuk.fingerprint(dwitbuk.load(eyesf)) == fp and "SKILL.md" not in raw, "the packet is unchanged"
+
+
+def test_W5_1_the_prompt_to_codex_names_the_review_skill_for_a_verify_and_a_late_eyes_request():
+    """W5-1: the same for `codex`."""
+    with Project() as pj:
+        reqf, eyesf, fp = w5_requests(pj)
+        # the late-eyes request first: a verify run may write its response into the tree the late-eyes packet is bound to
+        w5_names_skill(w5_capture(["--request", eyesf, "--response", os.path.join(os.path.dirname(eyesf), "eyes-response.json")], "codex"), w.__file__)
+        w5_names_skill(w5_capture(["--request", reqf, "--response", os.path.join(pj.dir, "local", "resp.json")], "codex"), w.__file__)
+        assert dwitbuk.fingerprint(dwitbuk.load(eyesf)) == fp
+
+
+def test_W5_1_prompt_only_names_the_review_skill_of_the_copy_that_runs_and_none_when_it_is_absent():
+    """W5-1: `--prompt-only` names the skill path of the installed copy that runs (not the checkout's), for both kinds of
+    request; a copy without the skill file names no path."""
+    if os.name == "nt":
+        raise Skip("the copy is run as a POSIX subprocess here")
+    base = tempfile.mkdtemp(prefix="dwitbuk-w5-")
+    try:
+        copy = copy_payload(os.path.join(base, "installed"))
+        bare = copy_payload(os.path.join(base, "bare"))
+        os.unlink(os.path.join(bare, "skills", "review", "SKILL.md"))
+        with Project() as pj:
+            reqf, eyesf, _ = w5_requests(pj)
+            env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+            for req in (reqf, eyesf):
+                for root, has in ((copy, True), (bare, False)):
+                    worker = os.path.join(root, "eyes_worker.py")
+                    done = subprocess.run([sys.executable, "-B", worker, "--prompt-only", "--request", req, "--response", os.path.join(base, "unused.json")],
+                                          cwd=pj.dir, capture_output=True, text=True, encoding="utf-8", env=env)
+                    assert done.returncode == 0, (done.stdout, done.stderr)
+                    if has:
+                        w5_names_skill(done.stdout, worker)
+                        assert not any(p in done.stdout for p in w5_skill(w.__file__)), "the running copy's path, not the checkout's"
+                    else:
+                        assert "SKILL.md" not in done.stdout, done.stdout[:600]
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
 
 
 if __name__ == "__main__":
